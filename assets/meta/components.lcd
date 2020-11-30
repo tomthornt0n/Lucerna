@@ -1,0 +1,8 @@
+@Component
+struct component_physics
+{
+    float minimum[2];
+    float maximum[2];
+    float velocity[2];
+}
+
