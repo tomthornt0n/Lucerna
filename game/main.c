@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 30 Nov 2020
+  Updated : 07 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -20,145 +20,454 @@
 #include "asset_manager.c"
 #include "math.c"
 
-MemoryArena global_permanent_memory;
+#define GRAVITY 4.0f
+
+MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 
 Font *global_ui_font;
 
-#include "renderer.c"
-#include "gui.c"
-
-Texture global_test_texture;
-Texture global_father_texture;
-Texture global_particle_texture;
-
-AudioSource global_test_source;
-AudioSource global_test_source_2;
-
-#define PARTICLE_LIFETIME 200
-typedef struct
+internal B32
+rectangles_are_intersecting(Rectangle a,
+                            Rectangle b)
 {
-    F32 x, y;
-    F32 x_vel, y_vel;
-    U32 life;
-} Particle;
-
-#define PARTICLE_COUNT 200
-typedef struct
-{
-    Particle particle_pool[PARTICLE_COUNT];
-    Texture texture;
-    F32 r, g, b;
-} ParticleSystem;
-
-void
-create_particle(Particle *particle,
-                F32 x,
-                F32 y)
-{
-    particle->life = 0;
-    particle->x = x;
-    particle->y = y;
-
-    particle->x_vel = (F32)((rand() % 10) - 5) / 4.0f;
-    particle->y_vel = (F32)((rand() % 10) - 5) / 4.0f;
+    if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
+    if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
+    return true;
 }
 
-void
-initialise_particle_system(ParticleSystem *system,
-                           F32 x, F32 y,
-                           Colour colour,
-                           Texture texture)
+internal B32
+point_is_in_region(F32 x, F32 y,
+                   Rectangle region)
 {
-    system->r = colour.r;
-    system->g = colour.g;
-    system->b = colour.b;
-    system->texture = texture;
-
-    I32 i;
-    for (i = 0;
-         i < PARTICLE_COUNT;
-         ++i)
+    if (x < region.x              ||
+        y < region.y              ||
+        x > (region.x + region.w) ||
+        y > (region.y + region.h))
     {
-        create_particle(&(system->particle_pool[i]), x, y);
-        system->particle_pool[i].life = rand() % PARTICLE_LIFETIME;
+        return false;
     }
+    return true;
 }
 
-void
-do_particle_system(ParticleSystem *system,
-                   F32 x, F32 y)
-{
-    I32 i;
-    for (i = 0;
-         i < PARTICLE_COUNT;
-         ++i)
-    {
-        Particle *particle = &(system->particle_pool[i]);
+#include "renderer.c"
+#include "dev_ui.c"
 
-        if (particle->life > PARTICLE_LIFETIME)
+enum
+{
+    ENTITY_FLAG_PLAYER_MOVEMENT = 1 << 0,
+    ENTITY_FLAG_RENDER_TEXTURE  = 1 << 1,
+    ENTITY_FLAG_COLOURED        = 1 << 2,
+    ENTITY_FLAG_ANIMATED        = 1 << 3,
+    ENTITY_FLAG_DYNAMIC         = 1 << 4,
+    ENTITY_FLAG_CAMERA_FOLLOW   = 1 << 5,
+};
+
+typedef struct GameEntity GameEntity;
+struct GameEntity
+{
+    GameEntity *next;
+    U64 flags;
+    Rectangle bounds;
+    Texture *texture;
+    Colour colour;
+    F32 speed;
+    F32 x_vel, y_vel;
+    U32 frame, animation_length;
+    U64 animation_speed, animation_clock;
+};
+
+
+#define TILE_SIZE 64
+
+typedef struct
+{
+    Texture *texture;
+    B32 solid;
+} Tile;
+
+typedef struct
+{
+    MemoryArena *arena;
+    U64 entity_count;
+    GameEntity *entities;
+    U32 tilemap_width, tilemap_height;
+    Tile *tilemap;
+} GameMap;
+
+internal GameMap
+create_map(MemoryArena *memory,
+           U32 width, U32 height)
+{
+    GameMap result;
+
+    result.arena = memory;
+    result.entity_count = 0;
+    result.entities = NULL;
+    result.tilemap_width = width;
+    result.tilemap_height = height;
+    result.tilemap = arena_allocate(memory,
+                                    width *
+                                    height *
+                                    sizeof(*result.tilemap));
+
+    return result;
+}
+
+Texture *global_player_left_texture;
+Texture *global_player_right_texture;
+Texture *global_player_up_texture;
+Texture *global_player_down_texture;
+
+internal GameEntity *
+create_player(GameMap *map,
+              F32 x, F32 y)
+{
+    GameEntity *result = arena_allocate(map->arena, sizeof(*result));
+    ++(map->entity_count);
+
+    result->flags = ENTITY_FLAG_PLAYER_MOVEMENT |
+                    ENTITY_FLAG_RENDER_TEXTURE  |
+                    ENTITY_FLAG_DYNAMIC         |
+                    ENTITY_FLAG_ANIMATED        |
+                    ENTITY_FLAG_CAMERA_FOLLOW;
+    result->bounds = RECTANGLE(x, y, TILE_SIZE, TILE_SIZE);
+    result->texture = global_player_down_texture;
+    result->speed = 8.0f;
+    result->animation_speed = 10;
+    result->animation_length = 4;
+
+    result->next = map->entities;
+    map->entities = result;
+
+    return result;
+}
+
+internal GameEntity *
+create_static_object(GameMap *map,
+                     Rectangle rectangle,
+                     Texture *texture)
+{
+    GameEntity *result = arena_allocate(map->arena, sizeof(*result));
+    ++(map->entity_count);
+
+    result->flags = ENTITY_FLAG_RENDER_TEXTURE;
+    result->bounds = rectangle;
+    result->texture = texture;
+
+    result->next = map->entities;
+    map->entities = result;
+
+    return result;
+}
+
+internal void
+process_entities(PlatformState *input,
+                 GameMap *map)
+{
+    GameEntity *entity;
+    for (entity = map->entities;
+         entity;
+         entity = entity->next)
+    {
+        if (entity->flags & ENTITY_FLAG_PLAYER_MOVEMENT)
         {
-            create_particle(&(system->particle_pool[i]),
-                            x, y);
+            B32 moving = false;
+
+            if (input->is_key_pressed[KEY_A])
+            {
+                entity->x_vel = -entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->texture = global_player_left_texture;
+                moving = true;
+            }
+            else if (input->is_key_pressed[KEY_D])
+            {
+                entity->x_vel = entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->texture = global_player_right_texture;
+                moving = true;
+            }
+
+            if (input->is_key_pressed[KEY_W])
+            {
+                entity->y_vel = -entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->texture = global_player_up_texture;
+                moving = true;
+            }
+            else if (input->is_key_pressed[KEY_S])
+            {
+                entity->y_vel = entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->texture = global_player_down_texture;
+                moving = true;
+            }
+
+            if (!moving)
+            {
+                entity->x_vel = 0.0f;
+                entity->y_vel = 0.0f;
+                entity->flags &= ~ENTITY_FLAG_ANIMATED;
+                entity->frame = 0;
+            }
         }
 
-        F32 x = (F32)particle->life / (F32)PARTICLE_LIFETIME;
-        F32 y = 3.0f * exp((-((x - 0.3f) * (x - 0.3f))) / 0.04);
+        if (entity->flags & ENTITY_FLAG_DYNAMIC)
+        {
+            entity->bounds.x += entity->x_vel;
+            entity->bounds.y += entity->y_vel;
+        }
 
-        draw_texture(RECTANGLE(particle->x,
-                               particle->y,
-                               64.0f + 64.0f * y,
-                               64.0f + 64.0f * y),
-                     COLOUR(system->r,
-                            system->g,
-                            system->b,
-                            y / 3.0f),
-                     system->texture);
+        if (entity->flags & ENTITY_FLAG_CAMERA_FOLLOW)
+        {
+            F32 camera_centre_x = global_camera_x +
+                                  global_renderer_window_w / 2;
+            F32 camera_centre_y = global_camera_y +
+                                  global_renderer_window_h / 2;
 
-        particle->x += particle->x_vel;
-        particle->y += particle->y_vel;
+            F32 camera_x_vel = (entity->bounds.x - camera_centre_x) / 2;
+            F32 camera_y_vel = (entity->bounds.y - camera_centre_y) / 2;
 
-        ++particle->life;
+            set_camera_position(global_camera_x + camera_x_vel,
+                                global_camera_y + camera_y_vel);
+        }
+
+        if (entity->flags & ENTITY_FLAG_ANIMATED)
+        {
+            ++entity->animation_clock;
+            if (entity->animation_clock == entity->animation_speed)
+            {
+                entity->frame = (entity->frame + 1) % entity->animation_length;
+                entity->animation_clock = 0;
+            }
+        }
+
+        if (entity->flags & ENTITY_FLAG_RENDER_TEXTURE)
+        {
+            Colour colour;
+            if (entity->flags & ENTITY_FLAG_COLOURED)
+            {
+                colour = entity->colour;
+            }
+            else
+            {
+                colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
+            }
+
+            world_draw_texture(entity->bounds,
+                               colour,
+                               entity->texture[entity->frame]);
+        }
     }
 }
 
-ParticleSystem global_smoke_particles;
+internal Tile *
+get_tile_at_position(GameMap map,
+                     F32 x, F32 y)
+{
+    I32 tile_x = x / TILE_SIZE;
+    I32 tile_y = y / TILE_SIZE;
+    I32 index;
+
+    if (tile_x > map.tilemap_width  ||
+        tile_x < 0                  ||
+        tile_y > map.tilemap_height ||
+        tile_y < 0)
+    {
+        return NULL;
+    }
+
+    index = tile_y * map.tilemap_width + tile_x;
+    return map.tilemap + (index);
+}
+
+internal Tile *
+get_tile_under_cursor(PlatformState *input,
+                      GameMap map)
+{
+    return get_tile_at_position(map,
+                                input->mouse_x + global_camera_x,
+                                input->mouse_y + global_camera_y);
+}
+internal void
+render_tiles(GameMap map,
+             Rectangle viewport,
+             B32 editor_mode)
+{
+    I32 x, y;
+
+    I32 min_x = viewport.x / TILE_SIZE - 2;
+    I32 min_y = viewport.y / TILE_SIZE - 2;
+    I32 max_x = (viewport.x + viewport.w) / TILE_SIZE + 2;
+    I32 max_y = (viewport.y + viewport.h) / TILE_SIZE + 2;
+
+    for (x = min_x;
+         x < max_x;
+         ++x)
+    {
+        if (x > map.tilemap_width) { continue; }
+
+        for (y = min_y;
+             y < max_y;
+             ++y)
+        {
+            if (y > map.tilemap_width) { continue; }
+
+            Tile tile = map.tilemap[y * map.tilemap_width + x];
+            
+            if (!tile.texture) { continue; }
+
+            Colour colour;
+            if (editor_mode &&
+                tile.solid)
+            {
+                colour = COLOUR(1.0f, 0.5f, 0.5f, 1.0f);
+            }
+            else
+            {
+                colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
+            }
+
+            world_draw_texture(RECTANGLE((F32)x * TILE_SIZE,
+                                         (F32)y * TILE_SIZE,
+                                         (F32)TILE_SIZE,
+                                         (F32)TILE_SIZE),
+                                colour,
+                                *(tile.texture));
+        }
+    }
+}
+
+internal GameMap global_map;
+internal Texture *global_tile_textures;
 
 void
 game_init(OpenGLFunctions *gl)
 {
-    initialise_arena_with_new_memory(&global_permanent_memory, ONE_GB);
-    initialise_arena_with_new_memory(&global_frame_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_static_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_frame_memory, 500 * ONE_MB);
     initialise_arena_with_new_memory(&global_asset_memory, ONE_GB);
 
     initialise_renderer(gl);
 
-    global_test_texture = load_texture(gl, TEXTURE_PATH("bg.png"));
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 18);
 
-    global_father_texture = load_texture(gl, TEXTURE_PATH("father.png"));
+    Texture spritesheet = load_texture(gl, TEXTURE_PATH("spritesheet.png"));
 
-    global_particle_texture = load_texture(gl, TEXTURE_PATH("particle.png"));
+    global_player_down_texture = slice_animation(spritesheet, 48.0f, 0.0f, 16.0f, 16.0f, 4, 1);
+    global_player_left_texture = slice_animation(spritesheet, 48.0f, 16.0f, 16.0f, 16.0f, 4, 1);
+    global_player_right_texture = slice_animation(spritesheet, 48.0f, 32.0f, 16.0f, 16.0f, 4, 1);
+    global_player_up_texture = slice_animation(spritesheet, 48.0f, 48.0f, 16.0f, 16.0f, 4, 1);
 
-    initialise_ui();
+    global_tile_textures = slice_animation(spritesheet, 0.0f, 0.0f, 16.0f, 16.0f, 16, 16);
 
-    global_test_source = load_wav(SOUND_PATH("untitled.wav"));
-    global_test_source_2 = load_wav(SOUND_PATH("testSound.wav"));
-    set_audio_source_looping(&global_test_source_2, true);
+    global_map = create_map(&global_static_memory, 100, 100);
+    create_player(&global_map, 0.0f, 0.0f);
+}
 
-    initialise_particle_system(&global_smoke_particles,
-                               0.0f, 0.0f,
-                               COLOUR(0.463f, 0.906f, 0.596f, 1.0f),
-                               global_particle_texture);
+internal I32
+do_tile_selector(PlatformState *input)
+{
+    static U32 selected_tile_index = 0;
+    static F32 x = 16.0f, y = 128.0f;
+    static B32 dragging = false;
+    B32 mouse_over_tile_selector = false;
+    F32 scale = 16.0f;
+    I32 width = 16;
+    F32 title_bar_height = 24;
+
+    Rectangle title_bar = RECTANGLE(x,
+                                    y - title_bar_height,
+                                    width * scale,
+                                    title_bar_height);
+
+    Rectangle bg = RECTANGLE(x, y,
+                             scale * width,
+                             scale * width);
+
+
+    if (point_is_in_region(input->mouse_x,
+                           input->mouse_y,
+                           title_bar) &&
+        input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+    {
+        dragging = true;
+    }
+    if (dragging)
+    {
+        mouse_over_tile_selector = true;
+        x = input->mouse_x - 128.0f;
+        y = input->mouse_y + title_bar_height / 2;
+        if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        {
+            dragging = false;
+        }
+    }
+
+    blur_screen_region(RECTANGLE(title_bar.x,
+                                 title_bar.y,
+                                 bg.w,
+                                 title_bar.h + bg.h),
+                       5);
+
+    ui_fill_rectangle(title_bar, COLOUR(0.0f, 0.0f, 0.0f, 0.8f));
+    ui_draw_text(global_ui_font,
+                 x + 8.0f,
+                 y - title_bar_height / 3,
+                 0,
+                 COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                 "select tile");
+
+    ui_fill_rectangle(bg, COLOUR(0.0f, 0.0f, 0.0f, 0.5f));
+
+    I32 i;
+    for (i = 0;
+         i < 16 * 16;
+         ++i)
+    {
+        Colour colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
+        Rectangle rectangle = RECTANGLE(x +
+                                        (i % width) * 
+                                        scale,
+                                        y +
+                                        (i / width) * 
+                                        scale,
+                                        scale,
+                                        scale);
+
+        if (point_is_in_region(input->mouse_x, input->mouse_y, rectangle))
+        {
+            mouse_over_tile_selector = true;
+            colour = COLOUR(1.0f, 0.5f, 0.5f, 1.0f);
+            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+            {
+                selected_tile_index = i;
+            }
+        }
+
+        ui_draw_texture(rectangle,
+                        colour,
+                        global_tile_textures[i]);
+
+        if (i == selected_tile_index)
+        {
+            ui_stroke_rectangle(rectangle, colour, 1);
+        }
+    }
+
+    if (mouse_over_tile_selector) { return -1; }
+    else { return selected_tile_index; }
 }
 
 void
 game_update_and_render(OpenGLFunctions *gl,
-                       PlatformState *input)
+                       PlatformState *input,
+                       U64 timestep_in_ns)
 {
     static U32 previous_width = 0, previous_height = 0;
-    static F32 camera_x = 0.0f, camera_y = 0.0f;
-    static F32 rect_x = 0.0f, rect_y = 0.0f;
+    static B32 editor_mode = false;
+    static U32 editor_mode_toggle_cooldown_timer = 500;
 
     if (input->window_width != previous_width ||
         input->window_height != previous_height)
@@ -168,137 +477,71 @@ game_update_and_render(OpenGLFunctions *gl,
                                  input->window_height);
     }
 
-    if (input->is_key_pressed[KEY_A])
-    {
-        camera_x -= 8.0f;
-        set_camera_position(camera_x, camera_y);
-    }
-    else if (input->is_key_pressed[KEY_D])
-    {
-        camera_x += 8.0f;
-        set_camera_position(camera_x, camera_y);
-    }
+    render_tiles(global_map,
+                 RECTANGLE(global_camera_x, global_camera_y,
+                           input->window_width,
+                           input->window_height),
+                 editor_mode);
 
-    if (input->is_key_pressed[KEY_W])
+    process_entities(input, &global_map);
+
+    ++editor_mode_toggle_cooldown_timer;
+    if (input->is_key_pressed[KEY_E] &&
+        editor_mode_toggle_cooldown_timer > 15)
     {
-        camera_y -= 8.0f;
-        set_camera_position(camera_x, camera_y);
-    }
-    else if (input->is_key_pressed[KEY_S])
-    {
-        camera_y += 8.0f;
-        set_camera_position(camera_x, camera_y);
+        editor_mode_toggle_cooldown_timer = 0;
+        editor_mode = !editor_mode;
     }
 
-    if (input->is_key_pressed[KEY_LEFT])
+    if (editor_mode)
     {
-        rect_x -= 8.0f;
-    }
-    else if (input->is_key_pressed[KEY_RIGHT])
-    {
-        rect_x += 8.0f;
-    }
+        I32 selected_tile_index = 0;
+        F64 fps = (F64)1e9 / (F64)timestep_in_ns;
+        I8 frame_time_string[64] = {0};
 
-    if (input->is_key_pressed[KEY_UP])
-    {
-        rect_y -= 8.0f;
-    }
-    else if (input->is_key_pressed[KEY_DOWN])
-    {
-        rect_y += 8.0f;
-    }
+        snprintf(frame_time_string,
+                 64,
+                 "frametime : ~%lu nanoseconds\n"
+                 "fps       : ~%f",
+                 timestep_in_ns,
+                 fps);
 
-    ui_prepare();
+        ui_draw_text(global_ui_font, 64.0f, 64.0f, 0, COLOUR(0.2f, 0.3f, 1.0f, 1.0f), frame_time_string);
 
-    F32 bg_size = (F32)(input->window_width > input->window_height ?
-                        input->window_width :
-                        input->window_height);
+        /* selected_tile_index = do_tile_selector(input); */
+        begin_window("tile selector", RECTANGLE(32.0f, 32.0f, 256.0f, 256.0f));
+        end_window();
 
-    draw_texture(RECTANGLE(camera_x, camera_y, bg_size, bg_size),
-                 COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                 global_test_texture);
-
-
-    I32 grid_size = 100;
-    F32 colour_step = 1.0f / (F32)grid_size;
-    I32 x, y;
-    for (x = 0;
-         x < grid_size;
-         ++x)
-    {
-        for (y = 0;
-             y < grid_size;
-             ++y)
+        Tile *tile_under_cursor;
+        if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
+            selected_tile_index != -1)
         {
-            fill_rectangle(RECTANGLE(x * 34, y * 34, 32, 32),
-                           COLOUR(x * colour_step,
-                                  y * colour_step,
-                                  1.0f,
-                                  1.0f));
+            world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
+                                             ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
+                                             TILE_SIZE,
+                                             TILE_SIZE),
+                                   COLOUR(0.0f, 0.0f, 0.0f, 0.5f),
+                                   2);
+
+            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+            {
+                tile_under_cursor->texture = global_tile_textures + selected_tile_index;
+            }
         }
     }
 
-    draw_text(global_ui_font,
-              -256.0f,
-              -256.0f,
-              0,
-              COLOUR(0.0f, 0.0f, 1.0f, 1.0f),
-              "this is some text\nin the world!");
-
-
-    static B32 dad = false, sound = false, smoke = false;
-
-    if (do_toggle_button(input, "show menu", 96.0f, 64.0f, 0, "menu"))
-    {
-        dad = do_button(input, "dad", 96.0f, 96.0f, 0, "dad");
-        sound = do_toggle_button(input, "sound", 96.0f, 128.0f, 0, "sound");
-        smoke = do_toggle_button(input, "smoke", 96.0f, 160.0f, 0, "smoke");
-    }
-
-    if (smoke)
-    {
-        do_particle_system(&global_smoke_particles, rect_x, rect_y);
-    }
-
-    if (dad)
-    {
-        draw_texture(RECTANGLE(rect_x,
-                               rect_y,
-                               128.0f,
-                               128.0f),
-                     COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                     global_father_texture);
-    }
-
-    if (sound)
-    {
-        play_audio_source(&global_test_source);
-    }
-    else
-    {
-        stop_audio_source(&global_test_source);
-    }
-
-    if (input->is_key_pressed[KEY_SPACE])
-    {
-        play_audio_source(&global_test_source_2);
-    }
-    else if (input->is_key_pressed[KEY_RETURN])
-    {
-        pause_audio_source(&global_test_source_2);
-    }
-
-    ui_finish(input);
+    finish_ui(input);
     process_render_queue(gl);
 
     previous_width = input->window_width;
     previous_height = input->window_height;
+
 }
 
 void
 game_cleanup(OpenGLFunctions *gl)
 {
-    free(global_permanent_memory.buffer);
+    free(global_static_memory.buffer);
     free(global_frame_memory.buffer);
     free(global_asset_memory.buffer);
 }

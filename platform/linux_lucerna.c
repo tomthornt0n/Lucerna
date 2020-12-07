@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 28 Nov 2020
+  Updated : 05 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -30,6 +30,8 @@
 #include <alsa/asoundlib.h>
 
 #define GAME_LIBRARY_PATH "./liblucerna.so"
+
+#include "../game/arena.c"
 
 typedef void ( *PFNGLXDESTROYCONTEXTPROC) (Display *dpy, GLXContext ctx);
 typedef const char *( *PFNGLXQUERYEXTENSIONSSTRINGPROC) (Display *dpy, int screen);
@@ -208,24 +210,33 @@ linux_set_vsync(Display *display,
                 I32 screen_id,
                 GLXDrawable drawable,
                 B32 enabled)
+/* NOTE(tbt): doesn't seem to work */
+/* NOTE(tbt): idk why */
 {
     if (linux_is_opengl_extension_present(display,
                                           screen_id,
                                           "GLX_EXT_swap_control"))
     {
         glX.SwapIntervalEXT(display, drawable, enabled);
-    }
-    else if (linux_is_opengl_extension_present(display,
-                                               screen_id,
-                                               "GLX_MESA_swap_control"))
-    {
-        glX.SwapIntervalMESA(enabled);
+        fprintf(stderr, "GLX_EXT_swap_control\n");
     }
     else if (linux_is_opengl_extension_present(display,
                                                screen_id,
                                                "GLX_SGI_swap_control"))
     {
         glX.SwapIntervalSGI(enabled);
+        fprintf(stderr, "GLX_SGI_swap_control\n");
+    }
+    else if (linux_is_opengl_extension_present(display,
+                                               screen_id,
+                                               "GLX_MESA_swap_control"))
+    {
+        glX.SwapIntervalMESA(enabled);
+        fprintf(stderr, "GLX_MESA_swap_control\n");
+    }
+    else
+    {
+        fprintf(stderr, "could not set vsync\n");
     }
 }
 
@@ -308,6 +319,36 @@ linux_audio_thread_main(void *arg)
     return NULL;
 }
 
+struct PlatformTimer
+{
+    struct timespec start_time;
+};
+
+PlatformTimer *
+platform_start_timer(MemoryArena *arena)
+{
+    PlatformTimer *result = arena_allocate(arena, sizeof(*result));
+
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &(result->start_time));
+
+    return result;
+}
+
+U64
+platform_end_timer(PlatformTimer *timer)
+{
+    struct timespec end_time;
+
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+    U64 difference_in_nanoseconds = ((end_time.tv_sec -
+                                      timer->start_time.tv_sec) *
+                                     1e9l) +
+                                    (end_time.tv_nsec -
+                                     timer->start_time.tv_nsec);
+
+    return difference_in_nanoseconds;
+}
+
 Display *global_display;
 GLXDrawable global_drawable;
 I32 global_default_screen_id;
@@ -329,6 +370,9 @@ main(int argc,
      char **argv)
 {
     I32 i;
+
+    struct timespec start_time, end_time;
+    U64 ts = 0;
 
     PlatformState input;
     OpenGLFunctions gl;
@@ -535,6 +579,8 @@ main(int argc,
     free(window_close_reply);
     free(framebuffer_configs);
 
+    platform_set_vsync(true);
+
     game_library = dlopen(GAME_LIBRARY_PATH, RTLD_NOW | RTLD_GLOBAL);
     assert("could not open game library." && game_library);
 
@@ -562,6 +608,8 @@ main(int argc,
     while (global_running)
     {
         xcb_generic_event_t *event;
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 
         linux_update_event_queue(global_connection, &event_queue);
         event = event_queue.current;
@@ -680,7 +728,14 @@ main(int argc,
         }
 
         glX.SwapBuffers(global_display, global_drawable);
-        game_update_and_render(&gl, &input);
+        game_update_and_render(&gl, &input, ts);
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+        ts = ((end_time.tv_sec -
+               start_time.tv_sec) *
+              1e9l) +
+             (end_time.tv_nsec -
+              start_time.tv_nsec);
     }
 
     game_cleanup(&gl);

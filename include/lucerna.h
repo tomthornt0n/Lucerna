@@ -234,14 +234,20 @@ typedef struct
     PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
 
+typedef struct MemoryArena MemoryArena;
+
+typedef struct PlatformTimer PlatformTimer;
+
 typedef void ( *GameInit) (OpenGLFunctions *gl);
-typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input);
+typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, U64 timestep_in_ns);
 typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);
 typedef void ( *GameCleanup) (OpenGLFunctions *OpeNGLFunctions);
 
 void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
 void platform_set_vsync(B32 enabled);
+PlatformTimer *platform_start_timer(MemoryArena *arena);
+U64 platform_end_timer(PlatformTimer *timer);
 
 #endif
 

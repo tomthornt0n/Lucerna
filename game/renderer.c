@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 30 Nov 2020
+  Updated : 07 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -285,9 +285,13 @@ internal void
 bind_projection_matrix(OpenGLFunctions *gl,
                        I32 matrix_id)
 {
-    if (global_currently_bound_projection_matrix == matrix_id) { return; }
+    /* NOTE(tbt): only binding if it has changed seems to cause problems */
+    /* TODO(tbt): debug why */
 
+#if 0
+    if (global_currently_bound_projection_matrix == matrix_id) { return; }
     global_currently_bound_projection_matrix = matrix_id;
+#endif
 
     switch(matrix_id)
     {
@@ -376,10 +380,14 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
+#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, UI_PROJECTION_MATRIX)
+#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, WORLD_PROJECTION_MATRIX)
 internal void
 draw_texture(Rectangle rectangle,
              Colour colour,
-             Texture texture)
+             Texture texture,
+             U32 sort,
+             I32 projection_matrix_handle)
 {
     RenderMessage message = {0};
 
@@ -387,49 +395,35 @@ draw_texture(Rectangle rectangle,
     message.rectangle = rectangle;
     message.colour = colour;
     message.texture = texture;
+    message.projection_matrix = projection_matrix_handle;
+    message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
 }
 
-internal void
-ui_draw_texture(Rectangle rectangle,
-                Colour colour,
-                Texture texture)
-{
-    RenderMessage message = {0};
-
-    message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
-    message.rectangle = rectangle;
-    message.colour = colour;
-    message.texture = texture;
-    message.projection_matrix = UI_PROJECTION_MATRIX;
-
-    enqueue_render_message(&global_render_queue, message);
-}
-
-
+#define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 5, UI_PROJECTION_MATRIX)
+#define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 2, WORLD_PROJECTION_MATRIX)
 internal void
 fill_rectangle(Rectangle rectangle,
-               Colour colour)
+               Colour colour,
+               U32 sort,
+               I32 projection_matrix_handle)
 {
     draw_texture(rectangle,
                  colour,
-                 global_flat_colour_texture);
+                 global_flat_colour_texture,
+                 sort,
+                 projection_matrix_handle);
 }
 
-internal void
-ui_fill_rectangle(Rectangle rectangle,
-                  Colour colour)
-{
-    ui_draw_texture(rectangle,
-                    colour,
-                    global_flat_colour_texture);
-}
-
+#define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, UI_PROJECTION_MATRIX)
+#define world_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 2, WORLD_PROJECTION_MATRIX)
 internal void
 stroke_rectangle(Rectangle rectangle,
                  Colour colour,
-                 F32 stroke_width)
+                 F32 stroke_width,
+                 U32 sort,
+                 I32 projection_matrix_handle)
 {
     RenderMessage message = {0};
 
@@ -438,33 +432,22 @@ stroke_rectangle(Rectangle rectangle,
     message.colour = colour;
     message.data = arena_allocate(&global_frame_memory, sizeof(F32));
     *((F32 *)message.data) = stroke_width;
+    message.sort = sort;
+    message.projection_matrix = projection_matrix_handle;
 
     enqueue_render_message(&global_render_queue, message);
 }
 
-internal void
-ui_stroke_rectangle(Rectangle rectangle,
-                    Colour colour,
-                    F32 stroke_width)
-{
-    RenderMessage message = {0};
-
-    message.type = RENDER_MESSAGE_STROKE_RECTANGLE;
-    message.rectangle = rectangle;
-    message.colour = colour;
-    message.data = arena_allocate(&global_frame_memory, sizeof(F32));
-    *((F32 *)message.data) = stroke_width;
-    message.projection_matrix = UI_PROJECTION_MATRIX;
-
-    enqueue_render_message(&global_render_queue, message);
-}
-
+#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 5, UI_PROJECTION_MATRIX) 
+#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 2, WORLD_PROJECTION_MATRIX) 
 internal void
 draw_text(Font *font,
           F32 x, F32 y,
           U32 wrap_width,
           Colour colour,
-          I8 *string)
+          I8 *string,
+          U32 sort,
+          I32 projection_matrix_handle)
 {
     RenderMessage message = {0};
 
@@ -476,39 +459,21 @@ draw_text(Font *font,
     message.rectangle.w = wrap_width;
     message.data = arena_allocate(&global_frame_memory, strlen(string) + 1);
     memcpy(message.data, string, strlen(string));
+    message.sort = sort;
+    message.projection_matrix = projection_matrix_handle;
 
     enqueue_render_message(&global_render_queue, message);
 }
 
 internal void
-ui_draw_text(Font *font,
-             F32 x, F32 y,
-             I32 wrap_width,
-             Colour colour,
-             I8 *string)
-{
-    RenderMessage message = {0};
-
-    message.type = RENDER_MESSAGE_DRAW_TEXT;
-    message.font = font;
-    message.colour = colour;
-    message.rectangle.x = x;
-    message.rectangle.y = y;
-    message.rectangle.w = wrap_width;
-    message.data = arena_allocate(&global_frame_memory, strlen(string) + 1);
-    memcpy(message.data, string, strlen(string));
-    message.projection_matrix = UI_PROJECTION_MATRIX;
-
-    enqueue_render_message(&global_render_queue, message);
-}
-
-internal void
-blur_screen_region(Rectangle region)
+blur_screen_region(Rectangle region,
+                   U32 sort)
 {
     RenderMessage message = {0};
 
     message.type = RENDER_MESSAGE_BLUR_SCREEN_REGION;
     message.rectangle = region;
+    message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
 }
@@ -569,7 +534,7 @@ set_camera_position(F32 x,
 {
     global_camera_x = x;
     global_camera_y = y;
-    
+
     generate_orthographic_projection_matrix(global_projection_matrix,
                                             x, x + global_renderer_window_w,
                                             y, y + global_renderer_window_h);
@@ -671,10 +636,76 @@ generate_quad(Rectangle rectangle,
     return result;
 }
 
+internal RenderMessage *
+render_queue_sorted_merge(RenderMessage *a, RenderMessage *b)
+{
+    RenderMessage *result;
+
+    if (!a) { return b; }
+    if (!b) { return a; }
+
+    if (a->sort <= b->sort)
+    {
+        result = a;
+        result->next = render_queue_sorted_merge(a->next, b);
+    }
+    else
+    {
+        result = b;
+        result->next = render_queue_sorted_merge(a, b->next);
+    }
+
+    return result;
+}
+
+internal void
+render_queue_split(RenderMessage *source,
+                   RenderMessage **a,
+                   RenderMessage **b)
+{
+    RenderMessage *fast, *slow;
+
+    slow = source;
+    fast = source->next;
+
+    while (fast)
+    {
+        fast = fast->next;
+        if (fast)
+        {
+            slow = slow->next;
+            fast = fast->next;
+        }
+    }
+
+    *a = source;
+    *b = slow->next;
+    slow->next = NULL;
+}
+
+internal void
+render_queue_merge_sort(RenderMessage **head_reference)
+{
+    RenderMessage *head = *head_reference;
+    RenderMessage *a, *b;
+
+    if (!head || !(head->next)) { return; }
+
+    render_queue_split(head, &a, &b);
+
+    render_queue_merge_sort(&a);
+    render_queue_merge_sort(&b);
+
+    *head_reference = render_queue_sorted_merge(a, b);
+}
+
 internal void
 sort_render_queue(RenderQueue *queue)
 {
-    /* TODO(tbt): sorting */
+    render_queue_merge_sort(&(queue->start));
+    /* NOTE(tbt): does not update the end pointer of the queue */
+    /* NOTE(tbt): fine for now because only sorted at the end of every frame*/
+    queue->end = NULL;
 }
 
 internal void
@@ -797,7 +828,6 @@ process_render_queue(OpenGLFunctions *gl)
                 F32 y = message.rectangle.y;
                 U32 wrap_width = message.rectangle.w;
 
-        
                 if (message.font->texture.id != batch.texture ||
                     batch.shader != global_text_shader        ||
                     batch.quad_count >= BATCH_SIZE            ||

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 28 Nov 2020
+  Updated : 06 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -52,13 +52,15 @@ free_for_stb(void *p)
 #define SHADER_INFO_LOG_MAX_LEN 128
 
 typedef U32 TextureID;
-typedef struct
+
+typedef struct Texture Texture;
+struct Texture
 {
     TextureID id;
     I32 width, height;
     F32 min_x, min_y;
     F32 max_x, max_y;
-} Texture;
+};
 
 typedef U32 ShaderID;
 
@@ -109,6 +111,8 @@ load_shader(OpenGLFunctions *gl,
 
     vertex_source = read_entire_file(&global_asset_memory, vertex_path);
     fragment_source = read_entire_file(&global_asset_memory, fragment_path);
+    assert(vertex_source);
+    assert(fragment_source);
 
     program = gl->CreateProgram();
     
@@ -193,12 +197,14 @@ internal Texture
 load_texture(OpenGLFunctions *gl,
              I8 *path)
 {
-    Texture result;
+    Texture result = {0};
     U8 *pixels;
 
     temporary_memory_begin(&global_asset_memory);
 
     pixels = stbi_load(path, &result.width, &result.height, NULL, 4);
+
+    assert(pixels);
 
     result.min_x = 0.0f;
     result.min_y = 0.0f;
@@ -208,8 +214,8 @@ load_texture(OpenGLFunctions *gl,
     gl->GenTextures(1, &result.id);
     gl->BindTexture(GL_TEXTURE_2D, result.id);
 
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
@@ -233,7 +239,6 @@ create_sub_texture(Texture texture,
                    F32 x, F32 y,
                    F32 w, F32 h)
 {
-
     texture.min_x = x / texture.width;
     texture.min_y = y / texture.height;
 
@@ -241,6 +246,39 @@ create_sub_texture(Texture texture,
     texture.max_y = (y + h) / texture.height;
 
     return texture;
+}
+
+internal Texture *
+slice_animation(Texture texture,
+                F32 x, F32 y,
+                F32 w, F32 h,
+                U32 horizontal_count,
+                U32 vertical_count)
+{
+    I32 x_index, y_index;
+    I32 index = 0;
+
+    Texture *result = arena_allocate(&global_asset_memory,
+                                     horizontal_count *
+                                     vertical_count *
+                                     sizeof(*result));
+
+    for (y_index = 0;
+         y_index < vertical_count;
+         ++y_index)
+    {
+        for (x_index = 0;
+             x_index < horizontal_count;
+             ++x_index)
+        {
+            result[index++] = create_sub_texture(texture,
+                                                 x + x_index * w,
+                                                 y + y_index * h,
+                                                 w, h);
+        }
+    }
+
+    return result;
 }
 
 internal Font *
@@ -256,6 +294,8 @@ load_font(OpenGLFunctions *gl,
     temporary_memory_begin(&global_asset_memory);
 
     file_buffer = read_entire_file(&global_asset_memory, path);
+    assert(file_buffer);
+
     stbtt_BakeFontBitmap(file_buffer, 0, size, pixels, 1024, 1024, 32, 96, result->char_data);
 
     result->texture.width = 1024;

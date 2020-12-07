@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 26 Nov 2020
+  Updated : 07 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -17,7 +17,31 @@
 
 #define DEFAULT_ALIGNMENT (2 * sizeof(void *))
 
-typedef struct
+
+#ifdef LUCERNA_DEBUG
+
+#define LAST_ALLOCATION_FILE_STRING_SIZE 64
+I8 global_last_allocation_file[LAST_ALLOCATION_FILE_STRING_SIZE];
+I32 global_last_allocation_line;
+
+#define arena_allocate(_arena, _size) \
+    _arena_allocate((_arena), (_size)); \
+    strncpy(global_last_allocation_file, __FILE__, LAST_ALLOCATION_FILE_STRING_SIZE); \
+    global_last_allocation_line = __LINE__
+
+#define arena_allocate_aligned(_arena, _size, _alignment) \
+    _arena_allocate_aligned((_arena), (_size), (_alignment)); \
+    strncpy(global_last_allocation_file, __FILE__, LAST_ALLOCATION_FILE_STRING_SIZE); \
+    global_last_allocation_line = __LINE__
+
+#else
+
+#define arena_allocate(_arena, _size) _arena_allocate((_arena), (_size))
+#define arena_allocate_aligned(_arena, _size, _alignment) _arena_allocate_aligned((_arena), (_size), (_alignment))
+
+#endif
+
+struct MemoryArena
 {
     U8 *buffer;
     U64 buffer_size;
@@ -26,9 +50,9 @@ typedef struct
     U64 saved_offset;
 
 #ifdef LUCERNA_DEBUG
-    char name[ARENA_NAME_MAX];
+    I8 name[ARENA_NAME_MAX];
 #endif
-} MemoryArena;
+};
 
 internal void
 initialise_memory_arena(MemoryArena *arena,
@@ -68,9 +92,9 @@ align_forward(uintptr_t pointer, U64 align)
 }
 
 internal void *
-arena_allocate_aligned(MemoryArena *arena,
-                       U64 size,
-                       U64 alignment)
+_arena_allocate_aligned(MemoryArena *arena,
+                        U64 size,
+                        U64 alignment)
 {
     uintptr_t current_pointer = (uintptr_t)arena->buffer +
                                 (uintptr_t)arena->current_offset;
@@ -83,16 +107,6 @@ arena_allocate_aligned(MemoryArena *arena,
         void *result = arena->buffer + offset;
         arena->current_offset = offset + size;
 
-#ifdef LUCERNA_DEBUG
-        /*
-        fprintf(stderr,
-                "arena %s: used %u of %u\n",
-                arena->name,
-                arena->current_offset,
-                arena->buffer_size);
-                */
-#endif
-
         memset(result, 0, size);
 
         return result;
@@ -101,8 +115,11 @@ arena_allocate_aligned(MemoryArena *arena,
     {
 #ifdef LUCERNA_DEBUG
         fprintf(stderr,
-                "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n",
-                arena->name);
+                "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
+                "last allocation was at line %d of file %s\n",
+                arena->name,
+                global_last_allocation_line,
+                global_last_allocation_file);
 #else
         fprintf(stderr, "\x1b[31mOUT OF MEMORY!\x1b[0m\n");
 #endif
@@ -111,10 +128,10 @@ arena_allocate_aligned(MemoryArena *arena,
 }
 
 internal void *
-arena_allocate(MemoryArena *arena,
-               U64 size)
+_arena_allocate(MemoryArena *arena,
+                U64 size)
 {
-    return arena_allocate_aligned(arena, size, DEFAULT_ALIGNMENT);
+    return _arena_allocate_aligned(arena, size, DEFAULT_ALIGNMENT);
 }
 
 internal void

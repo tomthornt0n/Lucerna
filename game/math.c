@@ -2,7 +2,7 @@
   Lucerna
   
   Author  : Tom Thornton
-  Updated : 26 Nov 2020
+  Updated : 05 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -175,8 +175,8 @@ multiply_matrix4f(F32 *result,
     const __m128 matrix2Column3 = _mm_load_ps(&(matrix1[8]));
     const __m128 matrix2Column4 = _mm_load_ps(&(matrix1[12]));
 
-    F32 *leftRowPointer = &matrix2[0];
-    F32 *resultRowPointer = &result[0];
+    F32 *leftRowPointer = matrix2;
+    F32 *resultRowPointer = result;
 
     int i;
     for (i = 0;
@@ -198,7 +198,6 @@ multiply_matrix4f(F32 *result,
     }
 }
 
-
 internal void
 generate_orthographic_projection_matrix(F32 *matrix,
                                         F32 left,
@@ -215,35 +214,6 @@ generate_orthographic_projection_matrix(F32 *matrix,
     matrix[14] = 0.0f;
     matrix[15] = 1.0f;
 }
-
-internal void
-generate_translation_matrix(F32 *matrix,
-                            F32 x,
-                            F32 y)
-{
-    memset(matrix, 0, 16 * sizeof(F32));
-
-    matrix[0]  = 1.0f;
-    matrix[5]  = 1.0f;
-    matrix[10] = 1.0f;
-    matrix[12] = x;
-    matrix[13] = y;
-    matrix[15] = 1.0f;
-}
-
-internal void
-generate_scale_matrix(F32 *matrix,
-                      F32 x,
-                      F32 y)
-{
-    memset(matrix, 0, 16 * sizeof(F32));
-
-    matrix[0]  = x;
-    matrix[5]  = y;
-    matrix[10] = 1.0f;
-    matrix[15] = 1.0f;
-}
-
 
 /*
 MIT License
