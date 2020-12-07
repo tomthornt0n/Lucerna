@@ -512,6 +512,9 @@ game_update_and_render(OpenGLFunctions *gl,
         begin_window("tile selector", RECTANGLE(32.0f, 32.0f, 256.0f, 256.0f));
         end_window();
 
+        begin_window("window 2", RECTANGLE(512.0f, 32.0f, 256.0f, 256.0f));
+        end_window();
+
         Tile *tile_under_cursor;
         if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
             selected_tile_index != -1)

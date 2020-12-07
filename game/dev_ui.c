@@ -11,15 +11,19 @@ struct WidgetState
 {
 
     I8 *key;
+    U32 ID;
     WidgetState *next;
 
     F32 x, y;
+    I32 sort;
     B32 toggled;
     B32 dragging;
     I32 value_i;
     F32 value_f;
     I8 *label;
 };
+
+WidgetState *global_hot_widget, *global_active_widget;
 
 #define UI_HASH_TABLE_SIZE (4096)
 
@@ -162,6 +166,7 @@ begin_window(I8 *name,
     node->window.height = bounds.h;
 
     node->type = UI_NODE_TYPE_WINDOW;
+
     if (!state->label)
     {
         state->label = arena_allocate(&global_static_memory, strlen(name) + 1);
@@ -175,6 +180,28 @@ end_window(void)
     global_current_ui_root = &global_ui_root;
 }
 
+internal B32
+do_toggle_button(I8 *name)
+{
+    WidgetState *state;
+    UINode *node;
+
+    node = arena_allocate(&global_frame_memory,
+                          sizeof(*node));
+
+    node->next_sibling = global_current_ui_root->first_child;
+    global_current_ui_root->first_child = node;
+    global_current_ui_root = node;
+
+    if (!(state = widget_state_from_string(name)))
+    {
+        state = new_widget_state_from_string(&global_static_memory, name);
+    }
+    node->state = state;
+
+    node->type = UI_NODE_TYPE_TOGGLE;
+}
+
 #define PADDING 8
 #define TITLE_BAR_HEIGHT 24
 #define BG_COL_1 COLOUR(0.0f, 0.0f, 0.0f, 0.5f)
@@ -186,6 +213,7 @@ process_ui_node(PlatformState *input,
                 UINode *node)
 {
     UINode *child = node->first_child;
+
     while (child)
     {
         process_ui_node(input, child);
@@ -212,10 +240,21 @@ process_ui_node(PlatformState *input,
 
             if (point_is_in_region(input->mouse_x,
                                    input->mouse_y,
+                                   bg))
+            {
+                global_hot_widget = node->state;
+            }
+
+            if (point_is_in_region(input->mouse_x,
+                                   input->mouse_y,
                                    title_bar) &&
                 input->is_mouse_button_pressed[MOUSE_BUTTON_1])
             {
-                node->state->dragging = true;
+                if (!global_active_widget)
+                {
+                    node->state->dragging = true;
+                    global_active_widget = node->state;
+                }
             }
             if (node->state->dragging)
             {
@@ -227,15 +266,26 @@ process_ui_node(PlatformState *input,
                 }
             }
 
-            blur_screen_region(bg, 5);
-            ui_fill_rectangle(bg, BG_COL_1);
-            ui_fill_rectangle(title_bar, BG_COL_2);
-            ui_draw_text(global_ui_font,
-                         title_bar.x + PADDING,
-                         title_bar.y + TITLE_BAR_HEIGHT - PADDING,
-                         node->window.width,
-                         FG_COL_1,
-                         node->state->label);
+            if (global_active_widget == node->state)
+            {
+                node->state->sort = 6;
+            }
+            else if (global_active_widget)
+            {
+                node->state->sort = 5;
+            }
+
+            blur_screen_region(bg, node->state->sort);
+            fill_rectangle(bg, BG_COL_1, node->state->sort, UI_PROJECTION_MATRIX);
+            fill_rectangle(title_bar, BG_COL_2, node->state->sort, UI_PROJECTION_MATRIX);
+            draw_text(global_ui_font,
+                      title_bar.x + PADDING,
+                      title_bar.y + TITLE_BAR_HEIGHT - PADDING,
+                      node->window.width,
+                      FG_COL_1,
+                      node->state->label,
+                      node->state->sort,
+                      UI_PROJECTION_MATRIX);
 
             break;
         }
@@ -248,10 +298,21 @@ process_ui_node(PlatformState *input,
 }
 
 internal void
+prepare_ui(void)
+{
+    global_hot_widget = NULL;
+}
+
+internal void
 finish_ui(PlatformState *input)
 {
     process_ui_node(input, &global_ui_root);
     memset(&global_ui_root, 0, sizeof(global_ui_root));
+
+    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+    {
+        global_active_widget = NULL;
+    }
 }
 
 /*
