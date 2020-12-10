@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 07 Dec 2020
+  Updated : 10 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -469,6 +469,8 @@ game_update_and_render(OpenGLFunctions *gl,
     static B32 editor_mode = false;
     static U32 editor_mode_toggle_cooldown_timer = 500;
 
+    prepare_ui();
+
     if (input->window_width != previous_width ||
         input->window_height != previous_height)
     {
@@ -509,15 +511,29 @@ game_update_and_render(OpenGLFunctions *gl,
         ui_draw_text(global_ui_font, 64.0f, 64.0f, 0, COLOUR(0.2f, 0.3f, 1.0f, 1.0f), frame_time_string);
 
         /* selected_tile_index = do_tile_selector(input); */
-        begin_window("tile selector", RECTANGLE(32.0f, 32.0f, 256.0f, 256.0f));
+        begin_window(input, "level editor", 512.0f, 32.0f, 256.0f);
+            B32 tile_selector = do_toggle_button(input, "edit tiles", 128);
+            do_button(input, "this is not a toggle", 128);
         end_window();
 
-        begin_window("window 2", RECTANGLE(512.0f, 32.0f, 256.0f, 256.0f));
-        end_window();
+        if (tile_selector)
+        {
+            begin_window(input, "tile selector", 32.0f, 32.0f, 121.0f);
+                do_toggle_button(input, "1", 16);
+                do_toggle_button(input, "2", 16);
+                do_toggle_button(input, "3", 16);
+                do_toggle_button(input, "4", 16);
+                do_toggle_button(input, "5", 16);
+                do_toggle_button(input, "6", 16);
+                do_toggle_button(input, "7", 16);
+                do_toggle_button(input, "8", 16);
+                do_toggle_button(input, "9", 16);
+            end_window();
+        }
+
 
         Tile *tile_under_cursor;
-        if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
-            selected_tile_index != -1)
+        if ((tile_under_cursor = get_tile_under_cursor(input, global_map)))
         {
             world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
                                              ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
