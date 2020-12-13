@@ -27,6 +27,48 @@ typedef double         F64;
 
 typedef unsigned int   B32;
 
+internal F64
+min_f(F64 a,
+      F64 b)
+{
+    return a < b ? a : b;
+}
+
+internal F64
+max_f(F64 a,
+      F64 b)
+{
+    return a > b ? a : b;
+}
+
+internal I64
+min_i(I64 a,
+      I64 b)
+{
+    return a < b ? a : b;
+}
+
+internal I64
+max_i(I64 a,
+      I64 b)
+{
+    return a > b ? a : b;
+}
+
+internal U64
+min_u(U64 a,
+      U64 b)
+{
+    return a < b ? a : b;
+}
+
+internal U64
+max_u(U64 a,
+      U64 b)
+{
+    return a > b ? a : b;
+}
+
 #define RECTANGLE(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
 typedef struct
 {

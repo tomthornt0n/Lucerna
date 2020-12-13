@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 10 Dec 2020
+  Updated : 13 Dec 2020
   License : MIT, at end of file
   Notes   : this is full of terrible bugs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -58,7 +58,7 @@ get_text_bounds(Font *font,
                 max_y = q.y1;
             }
 
-            if (wrap_width)
+            if (wrap_width && isspace(*string))
             {
                 if (x + (q.x1 - q.x0) * 2 >
                     line_start + wrap_width)
@@ -89,12 +89,10 @@ struct WidgetState
     U32 ID;
     WidgetState *next;
 
-    Rectangle interactable, bg; /* NOTE(tbt): the region which is interactable,
-                                              e.g. the title bar of a window or
-                                              the thumb of a slider, and the
-                                              overall space of the widget
-                                */
-    F32 x, y;
+    Rectangle bounds; /* NOTE(tbt): the total area on the screen taken up by the widget */
+    Rectangle interactable; /* NOTE(tbt): the area that can be interacted with to make the widget active */
+    Rectangle bg; /* NOTE(tbt): an area that is rendered but not able to be interacted with */
+    F32 drag_x, drag_y;
     F32 max_width;
     I32 sort;
     B32 toggled;
@@ -181,12 +179,13 @@ enum
     UI_NODE_TYPE_NONE,
     UI_NODE_TYPE_WINDOW,
     UI_NODE_TYPE_BUTTON,
+    UI_NODE_TYPE_DROPDOWN,
 };
 
 typedef struct UINode UINode;
 struct UINode
 {
-    UINode *first_child, *next_sibling;
+    UINode *parent, *first_child, *next_sibling;
     I32 type;
     WidgetState *state;
 };
@@ -195,7 +194,7 @@ WidgetState *global_hot_widget, *global_active_widget;
 
 internal UINode global_ui_root = {0};
 /* NOTE(tbt): the parent of new nodes */
-internal UINode *global_current_ui_root = &global_ui_root;
+internal UINode *global_current_ui_parent = &global_ui_root;
 
 internal void
 begin_window(PlatformState *input,
@@ -205,60 +204,71 @@ begin_window(PlatformState *input,
 {
     WidgetState *state;
     UINode *node;
-
-    assert(global_current_ui_root == &global_ui_root);
+    static WidgetState *last_active_window = NULL;
 
     node = arena_allocate(&global_frame_memory,
                           sizeof(*node));
 
-    node->next_sibling = global_current_ui_root->first_child;
-    global_current_ui_root->first_child = node;
-    global_current_ui_root = node;
+    node->next_sibling = global_current_ui_parent->first_child;
+    global_current_ui_parent->first_child = node;
+    node->parent = global_current_ui_parent;
+    global_current_ui_parent= node;
 
     if (!(state = widget_state_from_string(name)))
     {
         state = new_widget_state_from_string(&global_static_memory, name);
-        state->x = initial_x;
-        state->y = initial_y;
+        state->drag_x = initial_x;
+        state->drag_y = initial_y;
         state->label = arena_allocate(&global_static_memory, strlen(name) + 1);
         strcpy(state->label, name);
     }
     node->state = state;
 
     state->max_width = max_w;
+    if (last_active_window == state)
+    {
+        state->sort = 8;
+    }
+    else
+    {
+        state->sort = 6;
+    }
 
     node->type = UI_NODE_TYPE_WINDOW;
 
     if (point_is_in_region(input->mouse_x,
                            input->mouse_y,
-                           state->interactable) &&
+                           state->bounds) &&
         !global_hot_widget)
     {
         global_hot_widget = state;
 
-        if (input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               state->interactable)        &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
             !global_active_widget)
         {
-            state->sort = 7;
             state->dragging = true;
             global_active_widget = state;
+            last_active_window = state;
         }
     }
 
     if (state->dragging)
     {
         F32 new_x = input->mouse_x - state->interactable.w / 2;
-        F32 new_y = input->mouse_y - TITLE_BAR_HEIGHT / 2;
+        F32 new_y = input->mouse_y - state->interactable.h / 2;
         if (new_x > 0 &&
             new_x + state->bg.w < input->window_width)
         {
-            state->x = new_x;
+            state->drag_x = new_x;
         }
         if (new_y > 0 &&
             new_y + state->bg.h + state->interactable.h <
             input->window_height)
         {
-            state->y = new_y;
+            state->drag_y = new_y;
         }
 
         if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1])
@@ -271,8 +281,11 @@ begin_window(PlatformState *input,
 internal void
 end_window(void)
 {
-    global_current_ui_root = &global_ui_root;
+    assert(global_current_ui_parent->type = UI_NODE_TYPE_WINDOW);
+    global_current_ui_parent = global_current_ui_parent->parent;
 }
+
+#define do_window(_input, _name, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, end_window()))
 
 internal B32
 do_toggle_button(PlatformState *input,
@@ -285,8 +298,9 @@ do_toggle_button(PlatformState *input,
     node = arena_allocate(&global_frame_memory,
                           sizeof(*node));
 
-    node->next_sibling = global_current_ui_root->first_child;
-    global_current_ui_root->first_child = node;
+    node->next_sibling = global_current_ui_parent->first_child;
+    global_current_ui_parent->first_child = node;
+    node->parent = global_current_ui_parent;
 
     if (!(state = widget_state_from_string(name)))
     {
@@ -307,17 +321,17 @@ do_toggle_button(PlatformState *input,
 
     if (point_is_in_region(input->mouse_x,
                            input->mouse_y,
-                           state->interactable))
+                           state->bg) &&
+        !global_active_widget)
     {
-        if (!global_hot_widget)
-        {
-            global_hot_widget = state;
+        global_hot_widget = state;
 
-            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
-                !global_active_widget)
-            {
-                global_active_widget = state;
-            }
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               state->interactable)        &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        {
+            global_active_widget = state;
         }
     }
 
@@ -335,8 +349,9 @@ do_button(PlatformState *input,
     node = arena_allocate(&global_frame_memory,
                           sizeof(*node));
 
-    node->next_sibling = global_current_ui_root->first_child;
-    global_current_ui_root->first_child = node;
+    node->next_sibling = global_current_ui_parent->first_child;
+    global_current_ui_parent->first_child = node;
+    node->parent = global_current_ui_parent;
 
     if (!(state = widget_state_from_string(name)))
     {
@@ -348,37 +363,96 @@ do_button(PlatformState *input,
 
     node->type = UI_NODE_TYPE_BUTTON;
     state->max_width = width;
-    state->toggled = false;
 
     if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
         global_active_widget == state)
     {
         state->toggled = true;
     }
+    else
+    {
+        state->toggled = false;
+    }
 
     if (point_is_in_region(input->mouse_x,
                            input->mouse_y,
-                           state->interactable))
+                           state->bg) &&
+        !global_active_widget)
     {
-        if (!global_hot_widget ||
-            global_hot_widget->sort < state->sort)
-        {
-            global_hot_widget = state;
+        global_hot_widget = state;
 
-            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
-                !global_active_widget)
-            {
-                global_active_widget = state;
-            }
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               state->interactable)        &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        {
+            global_active_widget = state;
         }
     }
 
     return state->toggled;
 }
 
-/* NOTE(tbt): this function is especially bad */
-/* TODO(tbt): improve it */
-internal Rectangle
+internal void
+begin_dropdown(PlatformState *input,
+               I8 *name,
+               F32 width)
+{
+    WidgetState *state;
+    UINode *node;
+
+    node = arena_allocate(&global_frame_memory,
+                          sizeof(*node));
+
+    node->next_sibling = global_current_ui_parent->first_child;
+    global_current_ui_parent->first_child = node;
+    node->parent = global_current_ui_parent;
+    global_current_ui_parent = node;
+
+    if (!(state = widget_state_from_string(name)))
+    {
+        state = new_widget_state_from_string(&global_static_memory, name);
+        state->label = arena_allocate(&global_static_memory, strlen(name) + 1);
+        strcpy(state->label, name);
+    }
+    node->state = state;
+
+    node->type = UI_NODE_TYPE_DROPDOWN;
+    state->max_width = width;
+
+    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1] &&
+        global_active_widget == state)
+    {
+        state->toggled = !state->toggled;
+    }
+
+    if (point_is_in_region(input->mouse_x,
+                           input->mouse_y,
+                           state->bounds) &&
+        !global_active_widget)
+    {
+        global_hot_widget = state;
+
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               state->interactable)        &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        {
+            global_active_widget = state;
+        }
+    }
+}
+
+internal void
+end_dropdown(void)
+{
+    assert(global_current_ui_parent->type = UI_NODE_TYPE_DROPDOWN);
+    global_current_ui_parent = global_current_ui_parent->parent;
+}
+
+#define do_dropdown(_input, _name, _width) for (I32 i = (begin_dropdown((_input), (_name), (_width)), 0); !i; (++i, end_dropdown()))
+
+internal void
 layout_and_render_ui_node(PlatformState *input,
                           UINode *node,
                           F32 x, F32 y)
@@ -387,181 +461,283 @@ layout_and_render_ui_node(PlatformState *input,
     {
         case UI_NODE_TYPE_WINDOW:
         {
-            node->state->bg = RECTANGLE(node->state->x,
-                                        node->state->y + TITLE_BAR_HEIGHT,
-                                        0.0f, 0.0f);
+            Rectangle title_bounds =
+                get_text_bounds(global_ui_font,
+                                0, 0,
+                                node->state->max_width,
+                                node->state->label);
 
-            node->state->interactable = RECTANGLE(node->state->x,
-                                                  node->state->y,
-                                                  0.0f,
-                                                  TITLE_BAR_HEIGHT);
+            F32 title_bar_height = max_f(TITLE_BAR_HEIGHT, title_bounds.h + PADDING);
 
-            if (global_active_widget &&
-                global_active_widget != node->state)
-            {
-                node->state->sort = 5;
-            }
+            node->state->bounds = RECTANGLE(node->state->drag_x,
+                                            node->state->drag_y,
+                                            title_bounds.w + PADDING * 2,
+                                            0.0f);
+
+            node->state->bg = RECTANGLE(node->state->drag_x,
+                                        node->state->drag_y + title_bar_height,
+                                        title_bounds.w + PADDING * 2,
+                                        0.0f);
+
+            node->state->interactable = RECTANGLE(node->state->drag_x,
+                                                  node->state->drag_y,
+                                                  title_bounds.w + PADDING * 2,
+                                                  title_bar_height);
 
             UINode *child = node->first_child;
-            F32 current_x = node->state->bg.x;
-            F32 current_y = node->state->bg.y;
-            F32 max_w = 0.0f;
-            F32 max_h = 0.0f;
-            F32 total_h;
+            /* NOTE(tbt): keep track of where to place the next child */
+            F32 current_x = node->state->bg.x + PADDING;
+            F32 current_y = node->state->bg.y + PADDING;
+            F32 max_h = 0.0f; /* NOTE(tbt): the height of the tallest widget in the current row */
 
             while (child)
             {
-                F32 child_width = 0.0f;
-
-                if (child->state)
+                if (current_x + child->state->bounds.w + PADDING >
+                    node->state->drag_x + node->state->max_width)
                 {
-                    child->state->sort = node->state->sort + 1;
-                    child_width = child->state->bg.w;
-                }
-
-                if (current_x + child_width + PADDING >
-                    node->state->x + node->state->max_width)
-                {
-                    current_x = node->state->bg.x;
+                    current_x = node->state->bg.x + PADDING;
                     current_y += max_h + PADDING;
                     max_h = 0.0f;
                 }
 
-                Rectangle child_bounds =
-                    layout_and_render_ui_node(input,
-                                              child,
-                                              current_x,
-                                              current_y);
+                layout_and_render_ui_node(input,
+                                          child,
+                                          current_x,
+                                          current_y);
 
-                current_x += child_bounds.w + PADDING;
-
-                if (child_bounds.h > max_h)
+                if (child->type != UI_NODE_TYPE_WINDOW)
                 {
-                    max_h = child_bounds.h;
+                    child->state->sort = node->state->sort + 1;
+
+                    current_x += child->state->bounds.w + PADDING;
+
+                    if (child->state->bounds.h > max_h)
+                    {
+                        max_h = child->state->bounds.h;
+                    }
                 }
-                if (current_x - node->state->x > max_w)
+
+                if (current_x - node->state->bounds.x >
+                    node->state->bounds.w)
                 {
-                    max_w = current_x - node->state->x;
+                    node->state->interactable.w =
+                        current_x - node->state->interactable.x;
+
+                    node->state->bounds.w =
+                        current_x - node->state->bounds.x;
+
+                    node->state->bg.w =
+                        current_x - node->state->bg.x;
+                }
+
+                if ((current_y + max_h) - node->state->bg.y >
+                    node->state->bg.h)
+                {
+                    node->state->bounds.h =
+                        (current_y + max_h) - node->state->bounds.y +
+                        2 * PADDING;
+
+                    node->state->bg.h =
+                        (current_y + max_h) - node->state->bg.y +
+                        2 * PADDING;
                 }
 
                 child = child->next_sibling;
             }
 
-            total_h = current_y - node->state->y + max_h;
-
-            node->state->bg.w = max_w + PADDING;
-            node->state->bg.h = total_h;
-            node->state->interactable.w = max_w + PADDING;
-
-            F32 min_w = get_text_bounds(global_ui_font,
-                                        node->state->interactable.x + PADDING,
-                                        node->state->interactable.y +
-                                        TITLE_BAR_HEIGHT -
-                                        PADDING,
-                                        node->state->max_width,
-                                        node->state->label).w;
-
-            if (node->state->bg.w < min_w ||
-                node->state->interactable.w < min_w)
-            {
-                node->state->interactable.w = min_w + PADDING * 2;
-                node->state->bg.w = min_w + PADDING * 2;
-                fprintf(stderr, "bellow min w\n");
-            }
-
-            Rectangle bounds = RECTANGLE(node->state->interactable.x,
-                                         node->state->interactable.y,
-                                         node->state->interactable.w,
-                                         node->state->interactable.h +
-                                         node->state->bg.h);
-
-            blur_screen_region(bounds, node->state->sort);
+            blur_screen_region(node->state->bounds, node->state->sort);
 
             fill_rectangle(node->state->bg,
                            BG_COL_1,
                            node->state->sort,
-                           UI_PROJECTION_MATRIX);
+                           global_ui_projection_matrix);
 
             fill_rectangle(node->state->interactable,
                            BG_COL_2,
                            node->state->sort,
-                           UI_PROJECTION_MATRIX);
+                           global_ui_projection_matrix);
 
             draw_text(global_ui_font,
                       node->state->interactable.x + PADDING,
-                      node->state->interactable.y + TITLE_BAR_HEIGHT - PADDING,
-                      node->state->bg.w,
+                      node->state->interactable.y +
+                      TITLE_BAR_HEIGHT - PADDING,
+                      node->state->max_width,
                       FG_COL_1,
                       node->state->label,
                       node->state->sort,
-                      UI_PROJECTION_MATRIX);
+                      global_ui_projection_matrix);
 
-
-            return bounds;
+            break;
         }
         case UI_NODE_TYPE_BUTTON:
         {
             Colour fg_col = FG_COL_1;
-            F32 y_shift;
 
-            node->state->interactable = get_text_bounds(global_ui_font,
-                                                        x + PADDING, y,
-                                                        node->state->max_width,
-                                                        node->state->label);
-            y_shift = (node->state->interactable.y +
-                       node->state->interactable.h) -
-                      y - node->state->interactable.h - 
-                      PADDING;
+            Rectangle label_bounds = get_text_bounds(global_ui_font,
+                                                     x, y + global_ui_font->size,
+                                                     node->state->max_width,
+                                                     node->state->label);
 
-            node->state->interactable.y -= y_shift;
-            node->state->interactable.w += PADDING * 2;
-            node->state->interactable.h += PADDING * 2;
 
-            node->state->bg = node->state->interactable;
+            node->state->bounds = RECTANGLE(label_bounds.x,
+                                            label_bounds.y,
+                                            label_bounds.w + 2 * PADDING,
+                                            label_bounds.h + 2 * PADDING);
+            node->state->bg = node->state->bounds;
+            node->state->interactable = node->state->bounds;
+
+            if (global_hot_widget == node->state)
+            {
+                fill_rectangle(node->state->bounds,
+                               BG_COL_1,
+                               node->state->sort,
+                               global_ui_projection_matrix);
+
+                stroke_rectangle(node->state->bounds,
+                                 FG_COL_1,
+                                 1,
+                                 node->state->sort,
+                                 global_ui_projection_matrix);
+
+                draw_text(global_ui_font,
+                          x + PADDING, y + global_ui_font->size + PADDING,
+                          node->state->max_width,
+                          FG_COL_1,
+                          node->state->label,
+                          node->state->sort,
+                          global_ui_projection_matrix);
+            }
+            else
+            {
+                if (node->state->toggled)
+                {
+                    fill_rectangle(node->state->bounds,
+                                   FG_COL_1,
+                                   node->state->sort,
+                                   global_ui_projection_matrix);
+
+                    stroke_rectangle(node->state->bounds,
+                                     BG_COL_1,
+                                     1,
+                                     node->state->sort,
+                                     global_ui_projection_matrix);
+
+                    draw_text(global_ui_font,
+                              x + PADDING, y + global_ui_font->size + PADDING,
+                              node->state->max_width,
+                              BG_COL_1,
+                              node->state->label,
+                              node->state->sort,
+                              global_ui_projection_matrix);
+                }
+                else
+                {
+                    stroke_rectangle(node->state->bounds,
+                                     FG_COL_1,
+                                     1,
+                                     node->state->sort,
+                                     global_ui_projection_matrix);
+
+                    draw_text(global_ui_font,
+                              x + PADDING, y + global_ui_font->size + PADDING,
+                              node->state->max_width,
+                              FG_COL_1,
+                              node->state->label,
+                              node->state->sort,
+                              global_ui_projection_matrix);
+                }
+            }
+
+            break;
+        }
+        case UI_NODE_TYPE_DROPDOWN:
+        {
+            Rectangle label_bounds = get_text_bounds(global_ui_font,
+                                                     x, y + global_ui_font->size,
+                                                     node->state->max_width,
+                                                     node->state->label);
+
+
+            node->state->bounds = RECTANGLE(label_bounds.x,
+                                            label_bounds.y,
+                                            label_bounds.w + 2 * PADDING,
+                                            label_bounds.h + 2 * PADDING);
+            node->state->bg = node->state->bounds;
+            node->state->interactable = node->state->bounds;
 
             if (node->state->toggled)
             {
-                fg_col = BG_COL_1;
-            }
+                node->state->bg.y += node->state->interactable.h;
+                node->state->bg.h += 0.0f;
 
-            if (global_active_widget == node->state)
-            {
-                fill_rectangle(node->state->interactable,
-                               BG_COL_2,
-                               node->state->sort,
-                               UI_PROJECTION_MATRIX);
-            }
-            else if (global_hot_widget == node->state)
-            {
-                fill_rectangle(node->state->interactable,
+                UINode *child = node->first_child;
+                /* NOTE(tbt): keep track of where to place the next child */
+                F32 current_y = node->state->bg.y + PADDING;
+
+                while (child)
+                {
+                    if (child->type == UI_NODE_TYPE_WINDOW) { continue; }
+
+                    child->state->sort = node->state->sort + 1;
+
+                    layout_and_render_ui_node(input,
+                                              child,
+                                              node->state->bg.x + PADDING,
+                                              current_y);
+
+                    node->state->bg.h += child->state->bounds.h + PADDING;
+                    current_y += child->state->bounds.h + PADDING;
+
+                    if (child->state->toggled)
+                    {
+                        node->state->toggled = false;
+                    }
+
+                    child = child->next_sibling;
+                }
+
+                blur_screen_region(node->state->bg,
+                                   node->state->sort);
+                fill_rectangle(node->state->bg,
                                BG_COL_1,
                                node->state->sort,
-                               UI_PROJECTION_MATRIX);
-            }
-            else if (node->state->toggled)
-            {
-                fill_rectangle(node->state->interactable,
-                               FG_COL_1,
-                               node->state->sort,
-                               UI_PROJECTION_MATRIX);
+                               global_ui_projection_matrix);
+
+                if (!point_is_in_region(input->mouse_x,
+                                        input->mouse_y,
+                                        node->state->bg) &&
+                    !point_is_in_region(input->mouse_x,
+                                        input->mouse_y,
+                                        node->state->bounds))
+                {
+                    node->state->toggled = false;
+                }
+
             }
 
-            stroke_rectangle(node->state->interactable,
-                             fg_col,
+            if (global_hot_widget == node->state)
+            {
+                fill_rectangle(node->state->bounds,
+                               BG_COL_1,
+                               node->state->sort,
+                               global_ui_projection_matrix);
+            }
+
+            stroke_rectangle(node->state->bounds,
+                             FG_COL_1,
                              1,
                              node->state->sort,
-                             UI_PROJECTION_MATRIX);
+                             global_ui_projection_matrix);
 
             draw_text(global_ui_font,
-                      x + PADDING * 2,
-                      y - y_shift + PADDING,
+                      x + PADDING, y + global_ui_font->size + PADDING,
                       node->state->max_width,
-                      fg_col,
+                      FG_COL_1,
                       node->state->label,
                       node->state->sort,
-                      UI_PROJECTION_MATRIX);
+                      global_ui_projection_matrix);
 
-            return node->state->interactable;
+            break;
         }
         default:
         {
@@ -572,8 +748,6 @@ layout_and_render_ui_node(PlatformState *input,
                 layout_and_render_ui_node(input, child, x, y);
                 child = child->next_sibling;
             }
-
-            return RECTANGLE(0.0f, 0.0f, 0.0f, 0.0f);
         }
     }
 }
@@ -589,6 +763,7 @@ finish_ui(PlatformState *input)
 {
     layout_and_render_ui_node(input, &global_ui_root, 0, 0);
     memset(&global_ui_root, 0, sizeof(global_ui_root));
+    global_ui_root.parent = &global_ui_root;
 
     if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1])
     {

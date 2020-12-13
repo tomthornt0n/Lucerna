@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 07 Dec 2020
+  Updated : 12 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -17,27 +17,15 @@
 
 #define DEFAULT_ALIGNMENT (2 * sizeof(void *))
 
-
 #ifdef LUCERNA_DEBUG
 
-#define LAST_ALLOCATION_FILE_STRING_SIZE 64
-I8 global_last_allocation_file[LAST_ALLOCATION_FILE_STRING_SIZE];
-I32 global_last_allocation_line;
-
-#define arena_allocate(_arena, _size) \
-    _arena_allocate((_arena), (_size)); \
-    strncpy(global_last_allocation_file, __FILE__, LAST_ALLOCATION_FILE_STRING_SIZE); \
-    global_last_allocation_line = __LINE__
-
-#define arena_allocate_aligned(_arena, _size, _alignment) \
-    _arena_allocate_aligned((_arena), (_size), (_alignment)); \
-    strncpy(global_last_allocation_file, __FILE__, LAST_ALLOCATION_FILE_STRING_SIZE); \
-    global_last_allocation_line = __LINE__
+#define arena_allocate(_arena, _size) _arena_allocate((_arena), (_size), DEFAULT_ALIGNMENT, __FILE__, __LINE__)
+#define arena_allocate_aligned(_arena, _size, _alignment) _arena_allocate((_arena), (_size), (_alignment), __FILE__, __LINE__); \
 
 #else
 
-#define arena_allocate(_arena, _size) _arena_allocate((_arena), (_size))
-#define arena_allocate_aligned(_arena, _size, _alignment) _arena_allocate_aligned((_arena), (_size), (_alignment))
+#define arena_allocate(_arena, _size) _arena_allocate((_arena), (_size), DEFAULT_ALIGNMENT, NULL, 0)
+#define arena_allocate_aligned(_arena, _size, _alignment) _arena_allocate((_arena), (_size), (_alignment), NULL, 0)
 
 #endif
 
@@ -92,9 +80,11 @@ align_forward(uintptr_t pointer, U64 align)
 }
 
 internal void *
-_arena_allocate_aligned(MemoryArena *arena,
-                        U64 size,
-                        U64 alignment)
+_arena_allocate(MemoryArena *arena,
+                U64 size,
+                U64 alignment,
+                I8 *file,
+                I32 line)
 {
     uintptr_t current_pointer = (uintptr_t)arena->buffer +
                                 (uintptr_t)arena->current_offset;
@@ -118,20 +108,13 @@ _arena_allocate_aligned(MemoryArena *arena,
                 "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
                 "last allocation was at line %d of file %s\n",
                 arena->name,
-                global_last_allocation_line,
-                global_last_allocation_file);
+                line,
+                file);
 #else
         fprintf(stderr, "\x1b[31mOUT OF MEMORY!\x1b[0m\n");
 #endif
         exit(-1);
     }
-}
-
-internal void *
-_arena_allocate(MemoryArena *arena,
-                U64 size)
-{
-    return _arena_allocate_aligned(arena, size, DEFAULT_ALIGNMENT);
 }
 
 internal void

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 07 Dec 2020
+  Updated : 13 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -31,12 +31,6 @@ typedef struct
 
 enum
 {
-    WORLD_PROJECTION_MATRIX,
-    UI_PROJECTION_MATRIX,
-};
-
-enum
-{
     RENDER_MESSAGE_DRAW_RECTANGLE,
     RENDER_MESSAGE_STROKE_RECTANGLE,
     RENDER_MESSAGE_DRAW_TEXT,
@@ -53,7 +47,7 @@ struct RenderMessage
     Texture texture;
     Colour colour;
     Rectangle rectangle;
-    I32 projection_matrix;
+    F32 *projection_matrix;
     void *data;
 };
 
@@ -83,7 +77,6 @@ internal Texture global_flat_colour_texture;
 
 internal ShaderID global_currently_bound_shader = 0;
 internal TextureID global_currently_bound_texture = 0;
-internal I32 global_currently_bound_projection_matrix = -1;
 
 internal U32 global_renderer_window_w = 0;
 internal U32 global_renderer_window_h = 0;
@@ -282,68 +275,22 @@ initialise_renderer(OpenGLFunctions *gl)
 }
 
 internal void
-bind_projection_matrix(OpenGLFunctions *gl,
-                       I32 matrix_id)
+upload_projection_matrix(OpenGLFunctions *gl,
+                         F32 *matrix)
 {
-    /* NOTE(tbt): only binding if it has changed seems to cause problems */
-    /* TODO(tbt): debug why */
-
-#if 0
-    if (global_currently_bound_projection_matrix == matrix_id) { return; }
-    global_currently_bound_projection_matrix = matrix_id;
-#endif
-
-    switch(matrix_id)
-    {
-        case UI_PROJECTION_MATRIX:
-        {
             gl->UseProgram(global_default_shader);
             gl->UniformMatrix4fv(global_default_shader_projection_matrix_location,
                                  1,
                                  GL_FALSE,
-                                 global_ui_projection_matrix);
+                                 matrix);
 
             gl->UseProgram(global_text_shader);
             gl->UniformMatrix4fv(global_text_shader_projection_matrix_location,
                                  1,
                                  GL_FALSE,
-                                 global_ui_projection_matrix);
-
-            gl->UseProgram(global_blur_shader);
-            gl->UniformMatrix4fv(global_blur_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 global_ui_projection_matrix);
+                                 matrix);
 
             gl->UseProgram(global_currently_bound_shader);
-
-            break;
-        }
-        case WORLD_PROJECTION_MATRIX:
-        {
-            gl->UseProgram(global_default_shader);
-            gl->UniformMatrix4fv(global_default_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 global_projection_matrix);
-
-            gl->UseProgram(global_text_shader);
-            gl->UniformMatrix4fv(global_text_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 global_projection_matrix);
-
-            gl->UseProgram(global_blur_shader);
-            gl->UniformMatrix4fv(global_blur_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 global_projection_matrix);
-
-            gl->UseProgram(global_currently_bound_shader);
-
-            break;
-        }
-    }
 }
 
 internal void
@@ -380,14 +327,14 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
-#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, UI_PROJECTION_MATRIX)
-#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, WORLD_PROJECTION_MATRIX)
+#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
+#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, global_projection_matrix)
 internal void
 draw_texture(Rectangle rectangle,
              Colour colour,
              Texture texture,
              U32 sort,
-             I32 projection_matrix_handle)
+             F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
@@ -395,35 +342,35 @@ draw_texture(Rectangle rectangle,
     message.rectangle = rectangle;
     message.colour = colour;
     message.texture = texture;
-    message.projection_matrix = projection_matrix_handle;
+    message.projection_matrix = projection_matrix;
     message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 5, UI_PROJECTION_MATRIX)
-#define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 2, WORLD_PROJECTION_MATRIX)
+#define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 5, global_ui_projection_matrix)
+#define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 2, global_projection_matrix)
 internal void
 fill_rectangle(Rectangle rectangle,
                Colour colour,
                U32 sort,
-               I32 projection_matrix_handle)
+               F32 *projection_matrix)
 {
     draw_texture(rectangle,
                  colour,
                  global_flat_colour_texture,
                  sort,
-                 projection_matrix_handle);
+                 projection_matrix);
 }
 
-#define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, UI_PROJECTION_MATRIX)
-#define world_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 2, WORLD_PROJECTION_MATRIX)
+#define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, global_ui_projection_matrix)
+#define world_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 2, global_projection_matrix)
 internal void
 stroke_rectangle(Rectangle rectangle,
                  Colour colour,
                  F32 stroke_width,
                  U32 sort,
-                 I32 projection_matrix_handle)
+                 F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
@@ -433,13 +380,13 @@ stroke_rectangle(Rectangle rectangle,
     message.data = arena_allocate(&global_frame_memory, sizeof(F32));
     *((F32 *)message.data) = stroke_width;
     message.sort = sort;
-    message.projection_matrix = projection_matrix_handle;
+    message.projection_matrix = projection_matrix;
 
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 5, UI_PROJECTION_MATRIX) 
-#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 2, WORLD_PROJECTION_MATRIX) 
+#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 5, global_ui_projection_matrix) 
+#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 2, global_projection_matrix) 
 internal void
 draw_text(Font *font,
           F32 x, F32 y,
@@ -447,7 +394,7 @@ draw_text(Font *font,
           Colour colour,
           I8 *string,
           U32 sort,
-          I32 projection_matrix_handle)
+          F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
@@ -460,7 +407,7 @@ draw_text(Font *font,
     message.data = arena_allocate(&global_frame_memory, strlen(string) + 1);
     memcpy(message.data, string, strlen(string));
     message.sort = sort;
-    message.projection_matrix = projection_matrix_handle;
+    message.projection_matrix = projection_matrix;
 
     enqueue_render_message(&global_render_queue, message);
 }
@@ -526,6 +473,14 @@ set_renderer_window_size(OpenGLFunctions *gl,
     generate_orthographic_projection_matrix(global_ui_projection_matrix,
                                             0, width,
                                             0, height);
+
+    gl->UseProgram(global_blur_shader);
+    gl->UniformMatrix4fv(global_blur_shader_projection_matrix_location,
+                         1,
+                         GL_FALSE,
+                         global_ui_projection_matrix);
+
+    gl->UseProgram(global_currently_bound_shader);
 }
 
 internal void
@@ -587,7 +542,10 @@ flush_batch(OpenGLFunctions *gl,
                      GL_UNSIGNED_INT,
                      NULL);
 
-    memset(batch, 0, sizeof(*batch));
+    batch->quad_count = 0;
+    batch->texture = 0;
+    batch->shader = 0;
+    batch->in_use = false;
 }
 
 Quad
@@ -714,7 +672,10 @@ process_render_queue(OpenGLFunctions *gl)
     RenderMessage message;
 
     RenderBatch batch;
-    memset(&batch, 0, sizeof(batch));
+    batch.quad_count = 0;
+    batch.texture = 0;
+    batch.shader = 0;
+    batch.in_use = false;
 
     print_opengl_errors(gl);
 
@@ -739,7 +700,7 @@ process_render_queue(OpenGLFunctions *gl)
                     batch.texture = message.texture.id;
                 }
 
-                bind_projection_matrix(gl, message.projection_matrix);
+                upload_projection_matrix(gl, message.projection_matrix);
         
                 batch.in_use = true;
         
@@ -766,7 +727,7 @@ process_render_queue(OpenGLFunctions *gl)
                     batch.texture = global_flat_colour_texture.id;
                 }
         
-                bind_projection_matrix(gl, message.projection_matrix);
+                upload_projection_matrix(gl, message.projection_matrix);
 
                 batch.in_use = true;
 
@@ -841,7 +802,7 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.in_use = true;
 
-                bind_projection_matrix(gl, message.projection_matrix);
+                upload_projection_matrix(gl, message.projection_matrix);
         
                 while (*string)
                 {
@@ -879,7 +840,7 @@ process_render_queue(OpenGLFunctions *gl)
                                           message.colour,
                                           texture);
         
-                        if (wrap_width)
+                        if (wrap_width && isspace(*string))
                         {
                             if (x + rectangle.w * 2 >
                                 line_start + wrap_width)
@@ -905,7 +866,7 @@ process_render_queue(OpenGLFunctions *gl)
 
                 flush_batch(gl, &batch);
 
-                bind_projection_matrix(gl, UI_PROJECTION_MATRIX);
+                upload_projection_matrix(gl, global_ui_projection_matrix);
 
                 /* NOTE(tbt): blit screen to framebuffer */
                 gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);

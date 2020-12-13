@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 10 Dec 2020
+  Updated : 13 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <math.h>
 #include <immintrin.h>
+#include <ctype.h>
 
 #include "lucerna.h"
 
@@ -346,8 +347,8 @@ void
 game_init(OpenGLFunctions *gl)
 {
     initialise_arena_with_new_memory(&global_static_memory, ONE_MB);
-    initialise_arena_with_new_memory(&global_frame_memory, 500 * ONE_MB);
-    initialise_arena_with_new_memory(&global_asset_memory, ONE_GB);
+    initialise_arena_with_new_memory(&global_frame_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_asset_memory, 500 * ONE_MB);
 
     initialise_renderer(gl);
 
@@ -497,7 +498,7 @@ game_update_and_render(OpenGLFunctions *gl,
 
     if (editor_mode)
     {
-        I32 selected_tile_index = 0;
+        static I32 selected_tile_index = 0;
         F64 fps = (F64)1e9 / (F64)timestep_in_ns;
         I8 frame_time_string[64] = {0};
 
@@ -510,27 +511,31 @@ game_update_and_render(OpenGLFunctions *gl,
 
         ui_draw_text(global_ui_font, 64.0f, 64.0f, 0, COLOUR(0.2f, 0.3f, 1.0f, 1.0f), frame_time_string);
 
-        /* selected_tile_index = do_tile_selector(input); */
-        begin_window(input, "level editor", 512.0f, 32.0f, 256.0f);
-            B32 tile_selector = do_toggle_button(input, "edit tiles", 128);
-            do_button(input, "this is not a toggle", 128);
-        end_window();
-
-        if (tile_selector)
+        do_window(input, "level editor", 512.0f, 32.0f, 256.0f)
         {
-            begin_window(input, "tile selector", 32.0f, 32.0f, 121.0f);
-                do_toggle_button(input, "1", 16);
-                do_toggle_button(input, "2", 16);
-                do_toggle_button(input, "3", 16);
-                do_toggle_button(input, "4", 16);
-                do_toggle_button(input, "5", 16);
-                do_toggle_button(input, "6", 16);
-                do_toggle_button(input, "7", 16);
-                do_toggle_button(input, "8", 16);
-                do_toggle_button(input, "9", 16);
-            end_window();
-        }
+            if (do_toggle_button(input, "this is a really actually very super long button", 256.0f))
+            {
+                do_window(input, "tile selector", 32.0f, 32.0f, 200.0f)
+                {
+                    do_dropdown(input, "choose tile", 150.0f)
+                    {
+                        if (do_button(input, "1", 16)) { selected_tile_index = 1; }
+                        if (do_button(input, "2", 16)) { selected_tile_index = 2; }
+                        if (do_button(input, "3", 16)) { selected_tile_index = 3; }
+                        if (do_button(input, "4", 16)) { selected_tile_index = 4; }
+                        if (do_button(input, "5", 16)) { selected_tile_index = 5; }
+                        if (do_button(input, "6", 16)) { selected_tile_index = 6; }
+                        if (do_button(input, "7", 16)) { selected_tile_index = 7; }
+                        if (do_button(input, "8", 16)) { selected_tile_index = 8; }
+                        if (do_button(input, "9", 16)) { selected_tile_index = 9; }
+                    }
 
+                    if (do_button(input, "this is another button", 100.0f)) { fprintf(stderr, "another button\n"); }
+                }
+            }
+
+            if (do_button(input, "this is not a toggle", 128)) { fprintf(stderr, "hello, world!\n"); }
+        }
 
         Tile *tile_under_cursor;
         if ((tile_under_cursor = get_tile_under_cursor(input, global_map)))
