@@ -41,6 +41,13 @@ max_f(F64 a,
     return a > b ? a : b;
 }
 
+internal F64
+clamp_f(F64 n,
+        F64 min, F64 max)
+{
+    return max_f(min, min_f(n, max));
+}
+
 internal I64
 min_i(I64 a,
       I64 b)
@@ -55,6 +62,13 @@ max_i(I64 a,
     return a > b ? a : b;
 }
 
+internal I64
+clamp_i(I64 n,
+        I64 min, I64 max)
+{
+    return max_f(min, min_f(n, max));
+}
+
 internal U64
 min_u(U64 a,
       U64 b)
@@ -67,6 +81,13 @@ max_u(U64 a,
       U64 b)
 {
     return a > b ? a : b;
+}
+
+internal U64
+clamp_u(U64 n,
+        U64 min, U64 max)
+{
+    return max_f(min, min_f(n, max));
 }
 
 #define RECTANGLE(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
@@ -208,25 +229,29 @@ typedef struct
 #define KEY_RIGHT_ALT           230
 #define KEY_RIGHT_SUPER         231
 
-#define MOUSE_BUTTON_1          0
-#define MOUSE_BUTTON_2          1
-#define MOUSE_BUTTON_3          2
+#define MOUSE_BUTTON_LEFT       0
+#define MOUSE_BUTTON_MIDDLE     1
+#define MOUSE_BUTTON_RIGHT      2
 #define MOUSE_BUTTON_4          3
 #define MOUSE_BUTTON_5          4
 #define MOUSE_BUTTON_6          5
 #define MOUSE_BUTTON_7          6
 #define MOUSE_BUTTON_8          7
-#define MOUSE_BUTTON_LEFT       MOUSE_BUTTON_1
-#define MOUSE_BUTTON_MIDDLE     MOUSE_BUTTON_2
-#define MOUSE_BUTTON_RIGHT      MOUSE_BUTTON_3
-#define MOUSE_SCROLL_UP         MOUSE_BUTTON_5
-#define MOUSE_SCROLL_DOWN       MOUSE_BUTTON_6
+
+typedef struct KeyTyped KeyTyped;
+struct KeyTyped
+{
+    KeyTyped *next;
+    I8 key;
+};
 
 typedef struct
 {
     B32 is_key_pressed[256];
+    KeyTyped *keys_typed;
     B32 is_mouse_button_pressed[8];
     I16 mouse_x, mouse_y;
+    I32 mouse_scroll;
     U32 window_width, window_height;
 } PlatformState;
 
@@ -266,6 +291,7 @@ typedef struct
     PFNGLGETSHADERINFOLOGPROC        GetShaderInfoLog;
     PFNGLGETSHADERIVPROC             GetShaderiv;
     PFNGLLINKPROGRAMPROC             LinkProgram;
+    PFNGLSCISSORPROC                 Scissor;
     PFNGLSHADERSOURCEPROC            ShaderSource;
     PFNGLTEXIMAGE2DPROC              TexImage2D;
     PFNGLTEXPARAMETERIPROC           TexParameteri;

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 05 Dec 2020
+  Updated : 16 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -182,6 +182,7 @@ linux_load_all_opengl_functions(OpenGLFunctions *result)
     result->GetShaderInfoLog        = (PFNGLGETSHADERINFOLOGPROC       )linux_load_opengl_function("glGetShaderInfoLog");
     result->GetShaderiv             = (PFNGLGETSHADERIVPROC            )linux_load_opengl_function("glGetShaderiv");
     result->LinkProgram             = (PFNGLLINKPROGRAMPROC            )linux_load_opengl_function("glLinkProgram");
+    result->Scissor                 = (PFNGLSCISSORPROC                )linux_load_opengl_function("glScissor");
     result->ShaderSource            = (PFNGLSHADERSOURCEPROC           )linux_load_opengl_function("glShaderSource");
     result->TexImage2D              = (PFNGLTEXIMAGE2DPROC             )linux_load_opengl_function("glTexImage2D");
     result->TexParameteri           = (PFNGLTEXPARAMETERIPROC          )linux_load_opengl_function("glTexParameteri");
@@ -373,6 +374,9 @@ main(int argc,
 
     struct timespec start_time, end_time;
     U64 ts = 0;
+
+    MemoryArena keys_typed_arena;
+    initialise_arena_with_new_memory(&keys_typed_arena, ONE_MB);
 
     PlatformState input;
     OpenGLFunctions gl;
@@ -609,6 +613,9 @@ main(int argc,
     {
         xcb_generic_event_t *event;
 
+        input.mouse_scroll = 0;
+        input.keys_typed = NULL;
+
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 
         linux_update_event_queue(global_connection, &event_queue);
@@ -630,6 +637,28 @@ main(int argc,
 
                     input.is_key_pressed[key] = true;
 
+                    /* NOTE(tbt): use XLookupString from xlib to get unicode
+                                  character from key event
+                    */
+                    XKeyEvent x_key_event;
+                    x_key_event.display = global_display;
+                    x_key_event.keycode = press->detail;
+                    x_key_event.state = press->state;
+
+                    I8 buffer[16];
+                    if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
+                    {
+                        KeyTyped *key_typed;
+                        key_typed = arena_allocate(&keys_typed_arena,
+                                                   sizeof(*key_typed));
+                        /* NOTE(tbt): only want ASCII for now, so only take
+                                      first byte.
+                        */
+                        key_typed->key = buffer[0];
+                        key_typed->next = input.keys_typed;
+                        input.keys_typed = key_typed;
+                    }
+
                     break;
                 }
                 case XCB_KEY_RELEASE:
@@ -645,6 +674,28 @@ main(int argc,
                         next->time == release->time &&
                         next->detail == release->detail)
                     {
+                        /* NOTE(tbt): register repeat events as 'typed' but not
+                                      'pressed'
+                        */
+                        XKeyEvent x_key_event;
+                        x_key_event.display = global_display;
+                        x_key_event.keycode = release->detail;
+                        x_key_event.state = release->state;
+
+                        I8 buffer[16];
+                        if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
+                        {
+                            KeyTyped *key_typed;
+                            key_typed = arena_allocate(&keys_typed_arena,
+                                                       sizeof(*key_typed));
+                            /* NOTE(tbt): only want ASCII for now, so only take
+                                          first byte.
+                            */
+                            key_typed->key = buffer[0];
+                            key_typed->next = input.keys_typed;
+                            input.keys_typed = key_typed;
+                        }
+
                         /* NOTE(tbt): eat repeat events */
                         linux_update_event_queue(global_connection, &event_queue);
                         break;
@@ -662,7 +713,19 @@ main(int argc,
                     U8 code;
 
                     code = ((xcb_button_press_event_t *)event)->detail - 1;
-                    input.is_mouse_button_pressed[code] = true;
+
+                    if (code == 3)
+                    {
+                        ++input.mouse_scroll;
+                    }
+                    else if (code == 4)
+                    {
+                        --input.mouse_scroll;
+                    }
+                    else
+                    {
+                        input.is_mouse_button_pressed[code] = true;
+                    }
 
                     break;
                 }
@@ -729,6 +792,8 @@ main(int argc,
 
         glX.SwapBuffers(global_display, global_drawable);
         game_update_and_render(&gl, &input, ts);
+
+        arena_free_all(&keys_typed_arena);
 
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
         ts = ((end_time.tv_sec -

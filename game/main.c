@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 13 Dec 2020
+  Updated : 17 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -391,7 +391,7 @@ do_tile_selector(PlatformState *input)
     if (point_is_in_region(input->mouse_x,
                            input->mouse_y,
                            title_bar) &&
-        input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
     {
         dragging = true;
     }
@@ -400,7 +400,7 @@ do_tile_selector(PlatformState *input)
         mouse_over_tile_selector = true;
         x = input->mouse_x - 128.0f;
         y = input->mouse_y + title_bar_height / 2;
-        if (!input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+        if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
         {
             dragging = false;
         }
@@ -441,7 +441,7 @@ do_tile_selector(PlatformState *input)
         {
             mouse_over_tile_selector = true;
             colour = COLOUR(1.0f, 0.5f, 0.5f, 1.0f);
-            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+            if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
             {
                 selected_tile_index = i;
             }
@@ -511,34 +511,118 @@ game_update_and_render(OpenGLFunctions *gl,
 
         ui_draw_text(global_ui_font, 64.0f, 64.0f, 0, COLOUR(0.2f, 0.3f, 1.0f, 1.0f), frame_time_string);
 
-        do_window(input, "level editor", 512.0f, 32.0f, 256.0f)
+        do_window(input, "level editor", 512.0f, 32.0f, 600.0f)
         {
-            if (do_toggle_button(input, "this is a really actually very super long button", 256.0f))
+            do_scroll_panel(input, "test scroll", 600.0f, 100.0f)
             {
-                do_window(input, "tile selector", 32.0f, 32.0f, 200.0f)
-                {
-                    do_dropdown(input, "choose tile", 150.0f)
-                    {
-                        if (do_button(input, "1", 16)) { selected_tile_index = 1; }
-                        if (do_button(input, "2", 16)) { selected_tile_index = 2; }
-                        if (do_button(input, "3", 16)) { selected_tile_index = 3; }
-                        if (do_button(input, "4", 16)) { selected_tile_index = 4; }
-                        if (do_button(input, "5", 16)) { selected_tile_index = 5; }
-                        if (do_button(input, "6", 16)) { selected_tile_index = 6; }
-                        if (do_button(input, "7", 16)) { selected_tile_index = 7; }
-                        if (do_button(input, "8", 16)) { selected_tile_index = 8; }
-                        if (do_button(input, "9", 16)) { selected_tile_index = 9; }
-                    }
+                do_label("rectangle pos:", 100.0f);
+                F32 x = do_slider_f(input, "rectangle x slider", -500.0f, 500.0f, 132.0f);
+                F32 y = do_slider_f(input, "rectangle y slider", -500.0f, 500.0f, 132.0f);
 
-                    if (do_button(input, "this is another button", 100.0f)) { fprintf(stderr, "another button\n"); }
+                do_line_break();
+
+                do_label("rectangle col:", 100.0f);
+                F32 h = do_slider_f(input, "rectangle h slider", 0.0f, 1.0f, 85.0f);
+                F32 s = do_slider_f(input, "rectangle s slider", 0.0f, 1.0f, 85.0f);
+                F32 l = do_slider_f(input, "rectangle l slider", 0.0f, 1.0f, 85.0f);
+
+                do_line_break();
+
+                world_fill_rectangle(RECTANGLE(x, y, 32.0f, 32.0f), hsl_to_rgb(h, s, l, 1.0f));
+
+                if (do_toggle_button(input, "edit tiles", 256.0f))
+                {
+                    do_window(input, "tile selector", 32.0f, 32.0f, 200.0f)
+                    {
+                        do_scroll_panel(input, "other window scroll panel", 200.0f, 100.0f)
+                        {
+                            do_dropdown(input, "choose tile", 150.0f)
+                            {
+                                if (do_button(input, "dirt top left", 150.0f)) { selected_tile_index = 0; }
+                                if (do_button(input, "dirt top", 150.0f)) { selected_tile_index = 1; }
+                                if (do_button(input, "dirt top right", 150.0f)) { selected_tile_index = 2; }
+                                if (do_button(input, "dirt left", 150.0f)) { selected_tile_index = 16; }
+                                if (do_button(input, "dirt", 150.0f)) { selected_tile_index = 17; }
+                                if (do_button(input, "dirt right", 150.0f)) { selected_tile_index = 18; }
+                                if (do_button(input, "dirt bottom left", 150.0f)) { selected_tile_index = 32; }
+                                if (do_button(input, "dirt bottom", 150.0f)) { selected_tile_index = 33; }
+                                if (do_button(input, "dirt bottom right", 150.0f)) { selected_tile_index = 34; }
+                                if (do_button(input, "grass 1", 150.0f)) { selected_tile_index = 48; }
+                                if (do_button(input, "grass 2", 150.0f)) { selected_tile_index = 64; }
+                                if (do_button(input, "grass 3", 150.0f)) { selected_tile_index = 80; }
+                            }
+
+                            if (do_button(input, "this is another button", 100.0f)) { fprintf(stderr, "another button\n"); }
+                        }
+                    }
+                }
+
+                do_line_break();
+
+                if (do_button(input, "random button", 128.0f)) { fprintf(stderr, "hello, world!\n"); }
+
+                do_line_break();
+                do_label("random text 1", 100.0f);
+                do_line_break();
+                do_label("random text 2", 100.0f);
+                do_line_break();
+                do_label("random text 3", 100.0f);
+                do_line_break();
+                do_label("random text 4", 100.0f);
+                do_line_break();
+                do_label("random text 5", 100.0f);
+                do_line_break();
+                do_label("random text 6", 100.0f);
+                do_line_break();
+                do_label("random text 7 blah blah blah blah", 100.0f);
+                do_line_break();
+                do_dropdown(input, "dropdown thingy", 150.0f)
+                {
+                    if (do_button(input, "option one", 150.0f)) { fprintf(stderr, "go away\n"); };
+                    do_slider_f(input, "slidey thingy", 0.0f, 1.0f, 50.0f);
                 }
             }
+            do_label("this is outside the scroll panel", 250.0f);
 
-            if (do_button(input, "this is not a toggle", 128)) { fprintf(stderr, "hello, world!\n"); }
+            do_line_break();
+
+            do_slider_f(input, "extra slidey thing", 0.0f, 1.0f, 125.0f);
+            do_slider_f(input, "extra slidey thing 2", 0.0f, 1.0f, 125.0f);
+
+            do_line_break();
+
+            do_toggle_button(input, "this is a toggle", 150.0f);
+
+            do_line_break();
+
+            do_label("here is another scroll panel: ", 200.0f);
+
+            do_line_break();
+
+            Colour picked_colour;
+
+            do_scroll_panel(input, "scroll 2", 600.0f, 300.0f)
+            {
+                do_toggle_button(input, "this is also a toggle", 150.0f);
+                do_slider_f(input, "another slider", 0.0f, 100.0f, 300.0f);
+                do_button(input, "this is a button", 150.0f);
+                do_label("this is a label. It isn't very interesting!", 200.0f);
+                F32 hue = do_slider_f(input, "hue slider", 0.0f, 360.0f, 200.0f);
+                do_line_break();
+                picked_colour = do_colour_picker(input,
+                                                 "this is a colour picker",
+                                                 200.0f,
+                                                 hue,
+                                                 1.0f);
+                do_text_entry(input, "test text entry", 150.0f);
+            }
+
+            world_fill_rectangle(RECTANGLE(0.0f, 0.0f, 128.0f, 128.0f), picked_colour);
         }
 
         Tile *tile_under_cursor;
-        if ((tile_under_cursor = get_tile_under_cursor(input, global_map)))
+        if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
+            !global_hot_widget)
         {
             world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
                                              ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
@@ -547,9 +631,13 @@ game_update_and_render(OpenGLFunctions *gl,
                                    COLOUR(0.0f, 0.0f, 0.0f, 0.5f),
                                    2);
 
-            if (input->is_mouse_button_pressed[MOUSE_BUTTON_1])
+            if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
             {
                 tile_under_cursor->texture = global_tile_textures + selected_tile_index;
+            }
+            else if (input->is_mouse_button_pressed[MOUSE_BUTTON_RIGHT])
+            {
+                tile_under_cursor->texture = NULL;
             }
         }
     }

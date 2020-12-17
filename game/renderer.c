@@ -2,11 +2,13 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 13 Dec 2020
+  Updated : 16 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 #define BATCH_SIZE 256
+
+typedef U32 ShaderID;
 
 typedef struct
 {
@@ -26,6 +28,7 @@ typedef struct
     U32 quad_count;
     TextureID texture;
     ShaderID shader;
+    F32 *projection_matrix;
     B32 in_use;
 } RenderBatch;
 
@@ -35,6 +38,9 @@ enum
     RENDER_MESSAGE_STROKE_RECTANGLE,
     RENDER_MESSAGE_DRAW_TEXT,
     RENDER_MESSAGE_BLUR_SCREEN_REGION,
+    RENDER_MESSAGE_MASK_RECTANGLE_BEGIN,
+    RENDER_MESSAGE_MASK_RECTANGLE_END,
+    RENDER_MESSAGE_DRAW_GRADIENT,
 };
 
 typedef struct RenderMessage RenderMessage;
@@ -63,13 +69,14 @@ internal U32 global_vao_id;
 internal U32 global_index_buffer_id;
 internal U32 global_vertex_buffer_id;
 
-internal I32 global_default_shader_projection_matrix_location;
+#define MAX_SHADERS 5
+
+internal I32 global_projection_matrix_locations[MAX_SHADERS];
+
 internal ShaderID global_default_shader;
 
-internal I32 global_text_shader_projection_matrix_location;
 internal ShaderID global_text_shader;
 
-internal I32 global_blur_shader_projection_matrix_location;
 internal I32 global_blur_shader_direction_location;
 internal ShaderID global_blur_shader;
 
@@ -181,30 +188,212 @@ initialise_renderer(OpenGLFunctions *gl)
                    GL_UNSIGNED_BYTE,
                    &flat_colour_texture_data);
 
-    /* NOTE(tbt): load shaders and get uniform locations */
-    global_default_shader = load_shader(gl,
-                                        SHADER_PATH("default.vert"),
-                                        SHADER_PATH("default.frag"));
-    global_default_shader_projection_matrix_location =
+    /* NOTE(tbt): compile shaders */
+    I32 status;
+#define SHADER_INFO_LOG_MAX_LEN 128
+
+    global_default_shader = gl->CreateProgram();
+    global_blur_shader = gl->CreateProgram();
+    global_text_shader = gl->CreateProgram();
+    I8 *shader_src;
+    ShaderID vertex_shader;
+    ShaderID fragment_shader;
+
+    temporary_memory_begin(&global_asset_memory);
+
+    shader_src = read_entire_file(&global_asset_memory,
+                                  SHADER_PATH("default.vert"));
+    assert(shader_src);
+
+    vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
+    gl->ShaderSource(vertex_shader, 1, (const I8 * const *)&shader_src, NULL);
+    gl->CompileShader(vertex_shader);
+
+    /* NOTE(tbt): check for vertex shader compilation errors */
+    gl->GetShaderiv(vertex_shader, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(vertex_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteShader(vertex_shader);
+
+        fprintf(stderr, "vertex shader compilation failure. '%s'\n", msg);
+        exit(-1);
+    }
+
+    /* NOTE(tbt): attach vertex shader to all shader programs */
+    gl->AttachShader(global_default_shader, vertex_shader);
+    gl->AttachShader(global_blur_shader, vertex_shader);
+    gl->AttachShader(global_text_shader, vertex_shader);
+
+    /* NOTE(tbt): compile default fragment shader */
+    shader_src = read_entire_file(&global_asset_memory,
+                                  SHADER_PATH("default.frag"));
+    assert(shader_src);
+    fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
+    gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
+    gl->CompileShader(fragment_shader);
+
+    gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(fragment_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "fragment shader compilation failure. '%s'\n", msg);
+        exit(-1);
+    }
+    gl->AttachShader(global_default_shader, fragment_shader);
+
+    /* NOTE(tbt): link default shader */
+    gl->LinkProgram(global_default_shader);
+
+    gl->GetProgramiv(global_default_shader, GL_LINK_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(global_default_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteProgram(global_default_shader);
+        gl->DeleteShader(vertex_shader);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "shader link failure. '%s'\n", msg);
+        exit(-1);
+    }
+
+    gl->DetachShader(global_default_shader, vertex_shader);
+    gl->DetachShader(global_default_shader, fragment_shader);
+    gl->DeleteShader(fragment_shader);
+
+    /* NOTE(tbt): compile blur fragment shader */
+    shader_src = read_entire_file(&global_asset_memory,
+                                  SHADER_PATH("blur.frag"));
+    assert(shader_src);
+    fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
+    gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
+    gl->CompileShader(fragment_shader);
+
+    gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(fragment_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "fragment shader compilation failure. '%s'\n", msg);
+        exit(-1);
+    }
+    gl->AttachShader(global_blur_shader, fragment_shader);
+
+    /* NOTE(tbt): link blur shader */
+    gl->LinkProgram(global_blur_shader);
+
+    gl->GetProgramiv(global_blur_shader, GL_LINK_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(global_blur_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteProgram(global_blur_shader);
+        gl->DeleteShader(vertex_shader);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "shader link failure. '%s'\n", msg);
+        exit(-1);
+    }
+
+    gl->DetachShader(global_blur_shader, vertex_shader);
+    gl->DetachShader(global_blur_shader, fragment_shader);
+    gl->DeleteShader(fragment_shader);
+
+    /* NOTE(tbt): compile text fragment shader */
+    shader_src = read_entire_file(&global_asset_memory,
+                                  SHADER_PATH("text.frag"));
+    assert(shader_src);
+    fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
+    gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
+    gl->CompileShader(fragment_shader);
+
+    gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(fragment_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "fragment shader compilation failure. '%s'\n", msg);
+        exit(-1);
+    }
+    gl->AttachShader(global_text_shader, fragment_shader);
+
+    /* NOTE(tbt): link text shader */
+    gl->LinkProgram(global_text_shader);
+
+    gl->GetProgramiv(global_text_shader, GL_LINK_STATUS, &status);
+    if (status == GL_FALSE)
+    {
+        I8 msg[SHADER_INFO_LOG_MAX_LEN];
+
+        gl->GetShaderInfoLog(global_text_shader,
+                             SHADER_INFO_LOG_MAX_LEN,
+                             NULL,
+                             msg);
+        gl->DeleteProgram(global_text_shader);
+        gl->DeleteShader(vertex_shader);
+        gl->DeleteShader(fragment_shader);
+
+        fprintf(stderr, "shader link failure. '%s'\n", msg);
+        exit(-1);
+    }
+
+    gl->DetachShader(global_text_shader, vertex_shader);
+    gl->DetachShader(global_text_shader, fragment_shader);
+    gl->DeleteShader(fragment_shader);
+
+    /* NOTE(tbt): cleanup vertex shader */
+    gl->DeleteShader(vertex_shader);
+    temporary_memory_end(&global_asset_memory);
+
+    /* NOTE(tbt): cache uniform locations */
+    global_projection_matrix_locations[global_default_shader] =
         gl->GetUniformLocation(global_default_shader,
                                "u_projection_matrix");
-    assert(global_default_shader_projection_matrix_location != -1);
+    assert(global_projection_matrix_locations[global_default_shader] != -1);
 
-    global_text_shader = load_shader(gl,
-                                     SHADER_PATH("text.vert"),
-                                     SHADER_PATH("text.frag"));
-    global_text_shader_projection_matrix_location =
+    global_projection_matrix_locations[global_text_shader] =
         gl->GetUniformLocation(global_text_shader,
                                "u_projection_matrix");
-    assert(global_text_shader_projection_matrix_location != -1);
+    assert(global_projection_matrix_locations[global_text_shader] != -1);
 
-    global_blur_shader = load_shader(gl,
-                                     SHADER_PATH("blur.vert"),
-                                     SHADER_PATH("blur.frag"));
-    global_blur_shader_projection_matrix_location =
+    global_projection_matrix_locations[global_blur_shader] =
         gl->GetUniformLocation(global_blur_shader,
                                "u_projection_matrix");
-    assert(global_blur_shader_projection_matrix_location != -1);
+    assert(global_projection_matrix_locations[global_blur_shader] != -1);
+
     global_blur_shader_direction_location = 
         gl->GetUniformLocation(global_blur_shader,
                                "u_direction");
@@ -213,7 +402,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->UseProgram(global_currently_bound_shader);
 
     /* NOTE(tbt): setup some OpenGL state */
-    gl->ClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    gl->ClearColor(0.1f, 0.2f, 0.5f, 1.0f);
 
     gl->Enable(GL_BLEND);
     gl->BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -272,25 +461,6 @@ initialise_renderer(OpenGLFunctions *gl)
 
     gl->BindTexture(GL_TEXTURE_2D, 0);
     gl->BindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-internal void
-upload_projection_matrix(OpenGLFunctions *gl,
-                         F32 *matrix)
-{
-            gl->UseProgram(global_default_shader);
-            gl->UniformMatrix4fv(global_default_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 matrix);
-
-            gl->UseProgram(global_text_shader);
-            gl->UniformMatrix4fv(global_text_shader_projection_matrix_location,
-                                 1,
-                                 GL_FALSE,
-                                 matrix);
-
-            gl->UseProgram(global_currently_bound_shader);
 }
 
 internal void
@@ -412,6 +582,59 @@ draw_text(Font *font,
     enqueue_render_message(&global_render_queue, message);
 }
 
+#define GRADIENT(_tl, _tr, _bl, _br) ((Gradient){ (_tl), (_tr), (_bl), (_br) })
+typedef struct
+{
+    Colour tl, tr, bl, br;
+} Gradient;
+
+#define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 5, global_ui_projection_matrix)
+#define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 2, global_ui_matrix)
+internal void
+draw_gradient(Rectangle rectangle,
+              Gradient gradient,
+              U32 sort,
+              F32 *projection_matrix)
+{
+    RenderMessage message = {0};
+
+    message.type = RENDER_MESSAGE_DRAW_GRADIENT;
+    message.rectangle = rectangle;
+    message.projection_matrix = projection_matrix;
+    message.sort = sort;
+    message.data = arena_allocate(&global_frame_memory, sizeof(Gradient));
+    *((Gradient *)message.data) = gradient;
+
+    enqueue_render_message(&global_render_queue, message);
+}
+
+internal void
+begin_rectangle_mask(Rectangle region,
+                     U32 sort)
+{
+    RenderMessage message = {0};
+
+    message.type = RENDER_MESSAGE_MASK_RECTANGLE_BEGIN;
+    message.rectangle = region;
+    message.sort = sort;
+
+    enqueue_render_message(&global_render_queue, message);
+}
+
+internal void
+end_rectangle_mask(U32 sort)
+{
+    RenderMessage message = {0};
+
+    message.type = RENDER_MESSAGE_MASK_RECTANGLE_END;
+    message.sort = sort;
+
+    enqueue_render_message(&global_render_queue, message);
+}
+
+/* NOTE(tbt): be careful - _sort is evaluated twice! */
+#define mask_rectangular_region(_region, _sort) for (I32 i = (begin_rectangle_mask((_region), (_sort)), 0); !i; (++i, end_rectangle_mask((_sort))))
+
 internal void
 blur_screen_region(Rectangle region,
                    U32 sort)
@@ -475,7 +698,7 @@ set_renderer_window_size(OpenGLFunctions *gl,
                                             0, height);
 
     gl->UseProgram(global_blur_shader);
-    gl->UniformMatrix4fv(global_blur_shader_projection_matrix_location,
+    gl->UniformMatrix4fv(global_projection_matrix_locations[global_blur_shader],
                          1,
                          GL_FALSE,
                          global_ui_projection_matrix);
@@ -531,6 +754,12 @@ flush_batch(OpenGLFunctions *gl,
         gl->BindTexture(GL_TEXTURE_2D, batch->texture);
         global_currently_bound_texture = batch->texture;
     }
+
+    gl->UniformMatrix4fv(global_projection_matrix_locations[batch->shader],
+                         1,
+                         GL_FALSE,
+                         batch->projection_matrix);
+    
 
     gl->BufferData(GL_ARRAY_BUFFER,
                    batch->quad_count * sizeof(Quad),
@@ -689,19 +918,19 @@ process_render_queue(OpenGLFunctions *gl)
         {
             case RENDER_MESSAGE_DRAW_RECTANGLE:
             {
-                if (batch.texture != message.texture.id   ||
-                    batch.shader != global_default_shader ||
-                    batch.quad_count >= BATCH_SIZE        ||
+                if (batch.texture != message.texture.id                  ||
+                    batch.shader != global_default_shader                ||
+                    batch.quad_count >= BATCH_SIZE                       ||
+                    batch.projection_matrix != message.projection_matrix ||
                     !(batch.in_use))
                 {
                     flush_batch(gl, &batch);
         
                     batch.shader = global_default_shader;
                     batch.texture = message.texture.id;
+                    batch.projection_matrix = message.projection_matrix;
                 }
 
-                upload_projection_matrix(gl, message.projection_matrix);
-        
                 batch.in_use = true;
         
                 batch.buffer[batch.quad_count++] =
@@ -716,18 +945,18 @@ process_render_queue(OpenGLFunctions *gl)
                 Rectangle top, bottom, left, right;
                 F32 stroke_width;
 
-                if (batch.texture != global_flat_colour_texture.id ||
-                    batch.shader  != global_default_shader         ||
-                    batch.quad_count >= BATCH_SIZE                 ||
+                if (batch.texture != global_flat_colour_texture.id       ||
+                    batch.shader != global_default_shader                ||
+                    batch.projection_matrix != message.projection_matrix ||
+                    batch.quad_count >= BATCH_SIZE                       ||
                     !(batch.in_use))
                 {
                     flush_batch(gl, &batch);
         
                     batch.shader = global_default_shader;
                     batch.texture = global_flat_colour_texture.id;
+                    batch.projection_matrix = message.projection_matrix;
                 }
-        
-                upload_projection_matrix(gl, message.projection_matrix);
 
                 batch.in_use = true;
 
@@ -789,21 +1018,21 @@ process_render_queue(OpenGLFunctions *gl)
                 F32 y = message.rectangle.y;
                 U32 wrap_width = message.rectangle.w;
 
-                if (message.font->texture.id != batch.texture ||
-                    batch.shader != global_text_shader        ||
-                    batch.quad_count >= BATCH_SIZE            ||
+                if (batch.texture != message.font->texture.id            ||
+                    batch.shader != global_text_shader                   ||
+                    batch.projection_matrix != message.projection_matrix ||
+                    batch.quad_count >= BATCH_SIZE                       ||
                     !(batch.in_use))
                 {
                     flush_batch(gl, &batch);
         
                     batch.shader = global_text_shader;
                     batch.texture = message.font->texture.id;
+                    batch.projection_matrix = message.projection_matrix;
                 }
 
                 batch.in_use = true;
 
-                upload_projection_matrix(gl, message.projection_matrix);
-        
                 while (*string)
                 {
                     if (*string >=32 &&
@@ -866,8 +1095,6 @@ process_render_queue(OpenGLFunctions *gl)
 
                 flush_batch(gl, &batch);
 
-                upload_projection_matrix(gl, global_ui_projection_matrix);
-
                 /* NOTE(tbt): blit screen to framebuffer */
                 gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                 gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_blur_target_a);
@@ -911,6 +1138,7 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.shader = global_blur_shader;
                 batch.texture = global_blur_texture_a;
+                batch.projection_matrix = global_ui_projection_matrix;
                 batch.in_use = true;
                 batch.quad_count = 1;
                 batch.buffer[0] = generate_quad(RECTANGLE(0.0f,
@@ -934,15 +1162,10 @@ process_render_queue(OpenGLFunctions *gl)
                 /* NOTE(tbt): render back to screen, applying second blur pass */
                 gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
 
-                if (batch.texture != global_blur_texture_b ||
-                    batch.shader != global_blur_shader     ||
-                    batch.quad_count >= BATCH_SIZE         ||
-                    !(batch.in_use))
-                {
-                    flush_batch(gl, &batch);
-                    batch.texture = global_blur_texture_b;
-                    batch.shader = global_blur_shader;
-                }
+                batch.texture = global_blur_texture_b;
+                batch.shader = global_blur_shader;
+                batch.projection_matrix = global_ui_projection_matrix;
+                batch.in_use = true;
 
                 texture.min_x = message.rectangle.x /
                                 (F32)global_renderer_window_w;
@@ -962,6 +1185,81 @@ process_render_queue(OpenGLFunctions *gl)
                                   texture);
 
                 batch.in_use = true;
+                break;
+            }
+            case RENDER_MESSAGE_MASK_RECTANGLE_BEGIN:
+            {
+                flush_batch(gl, &batch);
+                gl->Enable(GL_SCISSOR_TEST);
+                gl->Scissor(message.rectangle.x, global_renderer_window_h - message.rectangle.y - message.rectangle.h,
+                            message.rectangle.w, message.rectangle.h);
+                break;
+            }
+            case RENDER_MESSAGE_MASK_RECTANGLE_END:
+            {
+                flush_batch(gl, &batch);
+                gl->Disable(GL_SCISSOR_TEST);
+                break;
+            }
+            case RENDER_MESSAGE_DRAW_GRADIENT:
+            {
+                Quad quad;
+
+                Gradient gradient = *((Gradient *)message.data);
+
+                quad.bl.x = message.rectangle.x;
+                quad.bl.y = message.rectangle.y + message.rectangle.h;
+                quad.bl.r = gradient.bl.r;
+                quad.bl.g = gradient.bl.g;
+                quad.bl.b = gradient.bl.b;
+                quad.bl.a = gradient.bl.a;
+                quad.bl.u = 0.0f;
+                quad.bl.v = 1.0f;
+
+                quad.br.x = message.rectangle.x + message.rectangle.w;
+                quad.br.y = message.rectangle.y + message.rectangle.h;
+                quad.br.r = gradient.br.r;
+                quad.br.g = gradient.br.g;
+                quad.br.b = gradient.br.b;
+                quad.br.a = gradient.br.a;
+                quad.br.u = 1.0f;
+                quad.br.v = 1.0f;
+
+                quad.tr.x = message.rectangle.x + message.rectangle.w;
+                quad.tr.y = message.rectangle.y;
+                quad.tr.r = gradient.tr.r;
+                quad.tr.g = gradient.tr.g;
+                quad.tr.b = gradient.tr.b;
+                quad.tr.a = gradient.tr.a;
+                quad.tr.u = 1.0f;
+                quad.tr.v = 0.0f;
+
+                quad.tl.x = message.rectangle.x;
+                quad.tl.y = message.rectangle.y;
+                quad.tl.r = gradient.tl.r;
+                quad.tl.g = gradient.tl.g;
+                quad.tl.b = gradient.tl.b;
+                quad.tl.a = gradient.tl.a;
+                quad.tl.u = 0.0f;
+                quad.tl.v = 0.0f;
+
+                if (batch.texture != global_flat_colour_texture.id       ||
+                    batch.shader != global_default_shader                ||
+                    batch.quad_count >= BATCH_SIZE                       ||
+                    batch.projection_matrix != message.projection_matrix ||
+                    !(batch.in_use))
+                {
+                    flush_batch(gl, &batch);
+        
+                    batch.shader = global_default_shader;
+                    batch.texture = global_flat_colour_texture.id;
+                    batch.projection_matrix = message.projection_matrix;
+                }
+
+                batch.in_use = true;
+        
+                batch.buffer[batch.quad_count++] = quad;
+
                 break;
             }
         }

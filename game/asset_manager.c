@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 06 Dec 2020
+  Updated : 15 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -49,8 +49,6 @@ free_for_stb(void *p)
 #define TEXTURE_PATH(_path) ("../assets/textures/" _path)
 #define FONT_PATH(_path) ("../assets/fonts/" _path)
 
-#define SHADER_INFO_LOG_MAX_LEN 128
-
 typedef U32 TextureID;
 
 typedef struct Texture Texture;
@@ -61,8 +59,6 @@ struct Texture
     F32 min_x, min_y;
     F32 max_x, max_y;
 };
-
-typedef U32 ShaderID;
 
 typedef struct
 {
@@ -95,102 +91,6 @@ read_entire_file(MemoryArena *arena,
     result[file_size] = 0;
 
     return result;
-}
-
-internal ShaderID
-load_shader(OpenGLFunctions *gl,
-            I8 *vertex_path,
-            I8 *fragment_path)
-{
-    ShaderID program;
-    I8 *vertex_source, *fragment_source;
-    U32 vertex_id, fragment_id;
-    I32 status;
-
-    temporary_memory_begin(&global_asset_memory);
-
-    vertex_source = read_entire_file(&global_asset_memory, vertex_path);
-    fragment_source = read_entire_file(&global_asset_memory, fragment_path);
-    assert(vertex_source);
-    assert(fragment_source);
-
-    program = gl->CreateProgram();
-    
-    vertex_id = gl->CreateShader(GL_VERTEX_SHADER);
-
-    gl->ShaderSource(vertex_id, 1, (const I8 * const *)&vertex_source, NULL);
-    gl->CompileShader(vertex_id);
-
-    gl->GetShaderiv(vertex_id, GL_COMPILE_STATUS, &status);
-
-    if (status == GL_FALSE)
-    {
-        I8 msg[SHADER_INFO_LOG_MAX_LEN];
-
-        gl->GetShaderInfoLog(vertex_id,
-                             SHADER_INFO_LOG_MAX_LEN,
-                             NULL,
-                             msg);
-        gl->DeleteShader(vertex_id);
-
-        fprintf(stderr, "vertex shader compilation failure. '%s'\n", msg);
-        exit(-1);
-    }
-
-    gl->AttachShader(program, vertex_id);
-    
-    fragment_id = gl->CreateShader(GL_FRAGMENT_SHADER);
-
-    gl->ShaderSource(fragment_id, 1, (const I8 * const *)&fragment_source, NULL);
-
-    gl->CompileShader(fragment_id);
-
-    gl->GetShaderiv(fragment_id, GL_COMPILE_STATUS, &status);
-
-    if (status == GL_FALSE)
-    {
-        I8 msg[SHADER_INFO_LOG_MAX_LEN];
-
-        gl->GetShaderInfoLog(fragment_id,
-                             SHADER_INFO_LOG_MAX_LEN,
-                             NULL,
-                             msg);
-        gl->DeleteShader(fragment_id);
-
-        fprintf(stderr, "fragment shader compilation failure. '%s'\n", msg);
-        exit(-1);
-    }
-
-    gl->AttachShader(program, fragment_id);
-
-    gl->LinkProgram(program);
-
-    gl->GetProgramiv(program, GL_LINK_STATUS, &status);
-    if (status == GL_FALSE)
-    {
-        I8 msg[SHADER_INFO_LOG_MAX_LEN];
-
-        gl->GetShaderInfoLog(program,
-                             SHADER_INFO_LOG_MAX_LEN,
-                             NULL,
-                             msg);
-        gl->DeleteProgram(program);
-        gl->DeleteShader(vertex_id);
-        gl->DeleteShader(fragment_id);
-
-        fprintf(stderr, "shader link failure. '%s'\n", msg);
-        exit(-1);
-    }
-
-    gl->DetachShader(program, vertex_id);
-    gl->DetachShader(program, fragment_id);
-
-    gl->DeleteShader(vertex_id);
-    gl->DeleteShader(fragment_id);
-
-    temporary_memory_end(&global_asset_memory);
-
-    return program;
 }
 
 internal Texture
