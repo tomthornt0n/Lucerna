@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 16 Dec 2020
+  Updated : 17 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -51,6 +51,7 @@ struct RenderMessage
     U32 sort;
     Font *font;
     Texture texture;
+    SubTexture sub_texture;
     Colour colour;
     Rectangle rectangle;
     F32 *projection_matrix;
@@ -402,7 +403,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->UseProgram(global_currently_bound_shader);
 
     /* NOTE(tbt): setup some OpenGL state */
-    gl->ClearColor(0.1f, 0.2f, 0.5f, 1.0f);
+    gl->ClearColor(0.92f, 0.88f, 0.9f, 1.0f);
 
     gl->Enable(GL_BLEND);
     gl->BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -497,14 +498,15 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
-#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
-#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, global_projection_matrix)
+#define ui_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), 5, global_ui_projection_matrix)
+#define world_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), 2, global_projection_matrix)
 internal void
-draw_texture(Rectangle rectangle,
-             Colour colour,
-             Texture texture,
-             U32 sort,
-             F32 *projection_matrix)
+draw_sub_texture(Rectangle rectangle,
+                 Colour colour,
+                 Texture texture,
+                 SubTexture sub_texture,
+                 U32 sort,
+                 F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
@@ -512,10 +514,28 @@ draw_texture(Rectangle rectangle,
     message.rectangle = rectangle;
     message.colour = colour;
     message.texture = texture;
+    message.sub_texture = sub_texture;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
+}
+
+#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
+#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, global_projection_matrix)
+internal void
+draw_texture(Rectangle rectangle,
+                 Colour colour,
+                 Texture texture,
+                 U32 sort,
+                 F32 *projection_matrix)
+{
+    draw_sub_texture(rectangle,
+                     colour,
+                     texture,
+                     ENTIRE_TEXTURE,
+                     sort,
+                     projection_matrix);
 }
 
 #define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 5, global_ui_projection_matrix)
@@ -526,11 +546,12 @@ fill_rectangle(Rectangle rectangle,
                U32 sort,
                F32 *projection_matrix)
 {
-    draw_texture(rectangle,
-                 colour,
-                 global_flat_colour_texture,
-                 sort,
-                 projection_matrix);
+    draw_sub_texture(rectangle,
+                     colour,
+                     global_flat_colour_texture,
+                     ENTIRE_TEXTURE,
+                     sort,
+                     projection_matrix);
 }
 
 #define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, global_ui_projection_matrix)
@@ -780,7 +801,7 @@ flush_batch(OpenGLFunctions *gl,
 Quad
 generate_quad(Rectangle rectangle,
               Colour colour,
-              Texture texture)
+              SubTexture sub_texture)
 {
     Quad result;
 
@@ -790,8 +811,8 @@ generate_quad(Rectangle rectangle,
     result.bl.g = colour.g;
     result.bl.b = colour.b;
     result.bl.a = colour.a;
-    result.bl.u = texture.min_x;
-    result.bl.v = texture.max_y;
+    result.bl.u = sub_texture.min_x;
+    result.bl.v = sub_texture.max_y;
 
     result.br.x = rectangle.x + rectangle.w;
     result.br.y = rectangle.y + rectangle.h;
@@ -799,8 +820,8 @@ generate_quad(Rectangle rectangle,
     result.br.g = colour.g;
     result.br.b = colour.b;
     result.br.a = colour.a;
-    result.br.u = texture.max_x;
-    result.br.v = texture.max_y;
+    result.br.u = sub_texture.max_x;
+    result.br.v = sub_texture.max_y;
 
     result.tr.x = rectangle.x + rectangle.w;
     result.tr.y = rectangle.y;
@@ -808,8 +829,8 @@ generate_quad(Rectangle rectangle,
     result.tr.g = colour.g;
     result.tr.b = colour.b;
     result.tr.a = colour.a;
-    result.tr.u = texture.max_x;
-    result.tr.v = texture.min_y;
+    result.tr.u = sub_texture.max_x;
+    result.tr.v = sub_texture.min_y;
 
     result.tl.x = rectangle.x;
     result.tl.y = rectangle.y;
@@ -817,8 +838,8 @@ generate_quad(Rectangle rectangle,
     result.tl.g = colour.g;
     result.tl.b = colour.b;
     result.tl.a = colour.a;
-    result.tl.u = texture.min_x;
-    result.tl.v = texture.min_y;
+    result.tl.u = sub_texture.min_x;
+    result.tl.v = sub_texture.min_y;
 
     return result;
 }
@@ -936,7 +957,7 @@ process_render_queue(OpenGLFunctions *gl)
                 batch.buffer[batch.quad_count++] =
                     generate_quad(message.rectangle,
                                   message.colour,
-                                  message.texture);
+                                  message.sub_texture);
         
                 break;
             }
@@ -991,22 +1012,22 @@ process_render_queue(OpenGLFunctions *gl)
                 batch.buffer[batch.quad_count++] =
                     generate_quad(top,
                                   message.colour,
-                                  message.texture);
+                                  message.sub_texture);
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(bottom,
                                   message.colour,
-                                  message.texture);
+                                  message.sub_texture);
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(left,
                                   message.colour,
-                                  message.texture);
+                                  message.sub_texture);
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(right,
                                   message.colour,
-                                  message.texture);
+                                  message.sub_texture);
 
                 break;
             }
@@ -1040,11 +1061,7 @@ process_render_queue(OpenGLFunctions *gl)
                     {
                         stbtt_aligned_quad q;
                         Rectangle rectangle;
-                        Texture texture; /* NOTE(tbt): temporary texture to
-                                                       store tex coords for
-                                                       glyph so it can be passed
-                                                       to `generate_quad`
-                                         */
+                        SubTexture sub_texture;
         
                         stbtt_GetBakedQuad(message.font->char_data,
                                            message.font->texture.width,
@@ -1055,10 +1072,10 @@ process_render_queue(OpenGLFunctions *gl)
                                            &q,
                                            1);
         
-                        texture.min_x = q.s0;
-                        texture.min_y = q.t0;
-                        texture.max_x = q.s1;
-                        texture.max_y = q.t1;
+                        sub_texture.min_x = q.s0;
+                        sub_texture.min_y = q.t0;
+                        sub_texture.max_x = q.s1;
+                        sub_texture.max_y = q.t1;
         
                         rectangle = RECTANGLE(q.x0, q.y0,
                                               q.x1 - q.x0,
@@ -1067,7 +1084,7 @@ process_render_queue(OpenGLFunctions *gl)
                         batch.buffer[batch.quad_count++] =
                             generate_quad(rectangle,
                                           message.colour,
-                                          texture);
+                                          sub_texture);
         
                         if (wrap_width && isspace(*string))
                         {
@@ -1091,8 +1108,6 @@ process_render_queue(OpenGLFunctions *gl)
             }
             case RENDER_MESSAGE_BLUR_SCREEN_REGION:
             {
-                Texture texture;
-
                 flush_batch(gl, &batch);
 
                 /* NOTE(tbt): blit screen to framebuffer */
@@ -1128,14 +1143,6 @@ process_render_queue(OpenGLFunctions *gl)
 
                 gl->Clear(GL_COLOR_BUFFER_BIT);
 
-                Texture blur_tex_coords =
-                {
-                    .min_x = 0.0f,
-                    .min_y = 0.0f,
-                    .max_x = 1.0f,
-                    .max_y = 1.0f
-                };
-
                 batch.shader = global_blur_shader;
                 batch.texture = global_blur_texture_a;
                 batch.projection_matrix = global_ui_projection_matrix;
@@ -1146,7 +1153,7 @@ process_render_queue(OpenGLFunctions *gl)
                                                           (F32)global_renderer_window_w,
                                                           (F32)global_renderer_window_h),
                                                 COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                                                blur_tex_coords);
+                                                ENTIRE_TEXTURE);
 
                 gl->UseProgram(global_blur_shader);
                 global_currently_bound_shader = global_blur_shader;
@@ -1167,22 +1174,25 @@ process_render_queue(OpenGLFunctions *gl)
                 batch.projection_matrix = global_ui_projection_matrix;
                 batch.in_use = true;
 
-                texture.min_x = message.rectangle.x /
-                                (F32)global_renderer_window_w;
+                SubTexture blur_tex_coords;
+                blur_tex_coords.min_x = message.rectangle.x /
+                                        (F32)global_renderer_window_w;
 
-                texture.max_x = (message.rectangle.x + message.rectangle.w) /
-                                (F32)global_renderer_window_w;
+                blur_tex_coords.max_x = (message.rectangle.x +
+                                         message.rectangle.w) /
+                                        (F32)global_renderer_window_w;
 
-                texture.min_y = message.rectangle.y /
-                                (F32)global_renderer_window_h;
+                blur_tex_coords.min_y = message.rectangle.y /
+                                        (F32)global_renderer_window_h;
 
-                texture.max_y = (message.rectangle.y + message.rectangle.h) /
-                                (F32)global_renderer_window_h;
+                blur_tex_coords.max_y = (message.rectangle.y +
+                                         message.rectangle.h) /
+                                        (F32)global_renderer_window_h;
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(message.rectangle,
                                   COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                                  texture);
+                                  blur_tex_coords);
 
                 batch.in_use = true;
                 break;

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 15 Dec 2020
+  Updated : 17 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -51,14 +51,18 @@ free_for_stb(void *p)
 
 typedef U32 TextureID;
 
-typedef struct Texture Texture;
-struct Texture
+typedef struct
 {
     TextureID id;
     I32 width, height;
+} Texture;
+
+#define ENTIRE_TEXTURE ((SubTexture){ 0.0f, 0.0f, 1.0f, 1.0f })
+typedef struct
+{
     F32 min_x, min_y;
     F32 max_x, max_y;
-};
+} SubTexture;
 
 typedef struct
 {
@@ -106,11 +110,6 @@ load_texture(OpenGLFunctions *gl,
 
     assert(pixels);
 
-    result.min_x = 0.0f;
-    result.min_y = 0.0f;
-    result.max_x = 1.0f;
-    result.max_y = 1.0f;
-
     gl->GenTextures(1, &result.id);
     gl->BindTexture(GL_TEXTURE_2D, result.id);
 
@@ -134,21 +133,23 @@ load_texture(OpenGLFunctions *gl,
     return result;
 }
 
-internal Texture
+internal SubTexture
 create_sub_texture(Texture texture,
                    F32 x, F32 y,
                    F32 w, F32 h)
 {
-    texture.min_x = x / texture.width;
-    texture.min_y = y / texture.height;
+    SubTexture result;
 
-    texture.max_x = (x + w) / texture.width;
-    texture.max_y = (y + h) / texture.height;
+    result.min_x = x / texture.width;
+    result.min_y = y / texture.height;
 
-    return texture;
+    result.max_x = (x + w) / texture.width;
+    result.max_y = (y + h) / texture.height;
+
+    return result;
 }
 
-internal Texture *
+internal SubTexture *
 slice_animation(Texture texture,
                 F32 x, F32 y,
                 F32 w, F32 h,
@@ -158,10 +159,10 @@ slice_animation(Texture texture,
     I32 x_index, y_index;
     I32 index = 0;
 
-    Texture *result = arena_allocate(&global_asset_memory,
-                                     horizontal_count *
-                                     vertical_count *
-                                     sizeof(*result));
+    SubTexture *result = arena_allocate(&global_asset_memory,
+                                        horizontal_count *
+                                        vertical_count *
+                                        sizeof(*result));
 
     for (y_index = 0;
          y_index < vertical_count;
@@ -200,10 +201,6 @@ load_font(OpenGLFunctions *gl,
 
     result->texture.width = 1024;
     result->texture.height = 1024;
-    result->texture.min_x = 0.0f;
-    result->texture.min_y = 0.0f;
-    result->texture.max_x = 1.0f;
-    result->texture.max_y = 1.0f;
     result->size = size;
 
     gl->GenTextures(1, &result->texture.id);

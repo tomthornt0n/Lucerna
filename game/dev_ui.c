@@ -326,6 +326,13 @@ begin_window(PlatformState *input,
 
     }
 
+    if (point_is_in_region(input->mouse_x,
+                           input->mouse_y,
+                           node->bounds))
+    {
+        global_is_mouse_over_ui = true;
+    }
+
     if (global_hot_widget == node &&
         input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT] &&
         !global_active_widget)
@@ -342,7 +349,6 @@ begin_window(PlatformState *input,
 
         if (!global_hot_widget)
         {
-            global_hot_widget = node;
             global_active_widget = node;
         }
 
@@ -627,7 +633,6 @@ do_slider_f(PlatformState *input,
 
             if (!global_hot_widget)
             {
-                global_hot_widget = node;
                 global_active_widget = node;
             }
 
@@ -768,7 +773,6 @@ begin_scroll_panel(PlatformState *input,
 
             if (!global_hot_widget)
             {
-                global_hot_widget = node;
                 global_active_widget = node;
             }
 
@@ -862,7 +866,6 @@ do_colour_picker(PlatformState *input,
 
             if (!global_hot_widget)
             {
-                global_hot_widget = node;
                 global_active_widget = node;
             }
 
@@ -975,6 +978,13 @@ do_text_entry(PlatformState *input,
         else
         {
             node->toggled = false;
+        }
+
+        if (node->toggled &&
+            input->is_key_pressed[KEY_ESCAPE])
+        {
+            node->toggled = false;
+            last_active_widget = NULL;
         }
     }
 
@@ -1601,47 +1611,39 @@ layout_and_render_ui_node(PlatformState *input,
             if (node->toggled)
             {
                 fill_rectangle(node->bounds,
-                               FG_COL_1,
-                               node->sort,
-                               global_ui_projection_matrix);
-
-                stroke_rectangle(node->bounds,
-                                 BG_COL_1,
-                                 STROKE_WIDTH,
-                                 node->sort,
-                                 global_ui_projection_matrix);
-
-                draw_text(global_ui_font,
-                          x + PADDING,
-                          y + global_ui_font->size,
-                          node->max_width,
-                          BG_COL_1,
-                          node->label,
-                          node->sort,
-                          global_ui_projection_matrix);
-            }
-            else
-            {
-                fill_rectangle(node->bounds,
                                BG_COL_1,
                                node->sort,
                                global_ui_projection_matrix);
 
-                stroke_rectangle(node->bounds,
-                                 FG_COL_1,
-                                 STROKE_WIDTH,
-                                 node->sort,
-                                 global_ui_projection_matrix);
+                Rectangle text_bounds = get_text_bounds(global_ui_font,
+                                                        x + PADDING,
+                                                        y + global_ui_font->size,
+                                                        node->max_width,
+                                                        node->label);
 
-                draw_text(global_ui_font,
-                          x + PADDING,
-                          y + global_ui_font->size,
-                          node->max_width,
-                          FG_COL_1,
-                          node->label,
-                          node->sort,
-                          global_ui_projection_matrix);
+                fill_rectangle(RECTANGLE(text_bounds.x + text_bounds.w + 2.0f,
+                                         text_bounds.y,
+                                         2.0f,
+                                         text_bounds.h),
+                               FG_COL_1,
+                               node->sort,
+                               global_ui_projection_matrix);
             }
+
+            stroke_rectangle(node->bounds,
+                             FG_COL_1,
+                             STROKE_WIDTH,
+                             node->sort,
+                             global_ui_projection_matrix);
+
+            draw_text(global_ui_font,
+                      x + PADDING,
+                      y + global_ui_font->size,
+                      node->max_width,
+                      FG_COL_1,
+                      node->label,
+                      node->sort,
+                      global_ui_projection_matrix);
 
             break;
         }
@@ -1662,11 +1664,16 @@ internal void
 prepare_ui(void)
 {
     global_widgets_under_mouse = NULL;
+    global_is_mouse_over_ui = false;
 }
 
 internal void
 finish_ui(PlatformState *input)
 {
+    global_is_mouse_over_ui = global_is_mouse_over_ui              ||
+                              (global_widgets_under_mouse != NULL) ||
+                              (global_active_widget != NULL);
+
     global_hot_widget = NULL;
     UINode *widget_under_mouse = global_widgets_under_mouse;
     while (widget_under_mouse)

@@ -70,7 +70,8 @@ struct GameEntity
     GameEntity *next;
     U64 flags;
     Rectangle bounds;
-    Texture *texture;
+    Texture texture;
+    SubTexture *sub_texture;
     Colour colour;
     F32 speed;
     F32 x_vel, y_vel;
@@ -83,8 +84,10 @@ struct GameEntity
 
 typedef struct
 {
-    Texture *texture;
+    Texture texture;
+    SubTexture sub_texture;
     B32 solid;
+    B32 visible;
 } Tile;
 
 typedef struct
@@ -115,10 +118,12 @@ create_map(MemoryArena *memory,
     return result;
 }
 
-Texture *global_player_left_texture;
-Texture *global_player_right_texture;
-Texture *global_player_up_texture;
-Texture *global_player_down_texture;
+internal Texture global_spritesheet;
+
+internal SubTexture *global_player_left_texture;
+internal SubTexture *global_player_right_texture;
+internal SubTexture *global_player_up_texture;
+internal SubTexture *global_player_down_texture;
 
 internal GameEntity *
 create_player(GameMap *map,
@@ -133,7 +138,8 @@ create_player(GameMap *map,
                     ENTITY_FLAG_ANIMATED        |
                     ENTITY_FLAG_CAMERA_FOLLOW;
     result->bounds = RECTANGLE(x, y, TILE_SIZE, TILE_SIZE);
-    result->texture = global_player_down_texture;
+    result->texture = global_spritesheet;
+    result->sub_texture = global_player_down_texture;
     result->speed = 8.0f;
     result->animation_speed = 10;
     result->animation_length = 4;
@@ -147,14 +153,15 @@ create_player(GameMap *map,
 internal GameEntity *
 create_static_object(GameMap *map,
                      Rectangle rectangle,
-                     Texture *texture)
+                     SubTexture *texture)
 {
     GameEntity *result = arena_allocate(map->arena, sizeof(*result));
     ++(map->entity_count);
 
     result->flags = ENTITY_FLAG_RENDER_TEXTURE;
     result->bounds = rectangle;
-    result->texture = texture;
+    result->texture = global_spritesheet;
+    result->sub_texture = texture;
 
     result->next = map->entities;
     map->entities = result;
@@ -179,14 +186,14 @@ process_entities(PlatformState *input,
             {
                 entity->x_vel = -entity->speed;
                 entity->flags |= ENTITY_FLAG_ANIMATED;
-                entity->texture = global_player_left_texture;
+                entity->sub_texture = global_player_left_texture;
                 moving = true;
             }
             else if (input->is_key_pressed[KEY_D])
             {
                 entity->x_vel = entity->speed;
                 entity->flags |= ENTITY_FLAG_ANIMATED;
-                entity->texture = global_player_right_texture;
+                entity->sub_texture = global_player_right_texture;
                 moving = true;
             }
 
@@ -194,14 +201,14 @@ process_entities(PlatformState *input,
             {
                 entity->y_vel = -entity->speed;
                 entity->flags |= ENTITY_FLAG_ANIMATED;
-                entity->texture = global_player_up_texture;
+                entity->sub_texture = global_player_up_texture;
                 moving = true;
             }
             else if (input->is_key_pressed[KEY_S])
             {
                 entity->y_vel = entity->speed;
                 entity->flags |= ENTITY_FLAG_ANIMATED;
-                entity->texture = global_player_down_texture;
+                entity->sub_texture = global_player_down_texture;
                 moving = true;
             }
 
@@ -256,9 +263,10 @@ process_entities(PlatformState *input,
                 colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
             }
 
-            world_draw_texture(entity->bounds,
-                               colour,
-                               entity->texture[entity->frame]);
+            world_draw_sub_texture(entity->bounds,
+                                   colour,
+                                   entity->texture,
+                                   entity->sub_texture[entity->frame]);
         }
     }
 }
@@ -316,9 +324,9 @@ render_tiles(GameMap map,
             if (y > map.tilemap_width) { continue; }
 
             Tile tile = map.tilemap[y * map.tilemap_width + x];
-            
-            if (!tile.texture) { continue; }
 
+            if (!tile.visible) { continue; }
+            
             Colour colour;
             if (editor_mode &&
                 tile.solid)
@@ -330,18 +338,19 @@ render_tiles(GameMap map,
                 colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
             }
 
-            world_draw_texture(RECTANGLE((F32)x * TILE_SIZE,
-                                         (F32)y * TILE_SIZE,
-                                         (F32)TILE_SIZE,
-                                         (F32)TILE_SIZE),
-                                colour,
-                                *(tile.texture));
+            world_draw_sub_texture(RECTANGLE((F32)x * TILE_SIZE,
+                                             (F32)y * TILE_SIZE,
+                                             (F32)TILE_SIZE,
+                                             (F32)TILE_SIZE),
+                                    colour,
+                                    tile.texture,
+                                    tile.sub_texture);
         }
     }
 }
 
 internal GameMap global_map;
-internal Texture *global_tile_textures;
+internal SubTexture *global_tile_textures;
 
 void
 game_init(OpenGLFunctions *gl)
@@ -354,19 +363,20 @@ game_init(OpenGLFunctions *gl)
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 18);
 
-    Texture spritesheet = load_texture(gl, TEXTURE_PATH("spritesheet.png"));
+    global_spritesheet = load_texture(gl, TEXTURE_PATH("spritesheet.png"));
 
-    global_player_down_texture = slice_animation(spritesheet, 48.0f, 0.0f, 16.0f, 16.0f, 4, 1);
-    global_player_left_texture = slice_animation(spritesheet, 48.0f, 16.0f, 16.0f, 16.0f, 4, 1);
-    global_player_right_texture = slice_animation(spritesheet, 48.0f, 32.0f, 16.0f, 16.0f, 4, 1);
-    global_player_up_texture = slice_animation(spritesheet, 48.0f, 48.0f, 16.0f, 16.0f, 4, 1);
+    global_player_down_texture = slice_animation(global_spritesheet, 48.0f, 0.0f, 16.0f, 16.0f, 4, 1);
+    global_player_left_texture = slice_animation(global_spritesheet, 48.0f, 16.0f, 16.0f, 16.0f, 4, 1);
+    global_player_right_texture = slice_animation(global_spritesheet, 48.0f, 32.0f, 16.0f, 16.0f, 4, 1);
+    global_player_up_texture = slice_animation(global_spritesheet, 48.0f, 48.0f, 16.0f, 16.0f, 4, 1);
 
-    global_tile_textures = slice_animation(spritesheet, 0.0f, 0.0f, 16.0f, 16.0f, 16, 16);
+    global_tile_textures = slice_animation(global_spritesheet, 0.0f, 0.0f, 16.0f, 16.0f, 16, 16);
 
     global_map = create_map(&global_static_memory, 100, 100);
     create_player(&global_map, 0.0f, 0.0f);
 }
 
+/*
 internal I32
 do_tile_selector(PlatformState *input)
 {
@@ -460,6 +470,7 @@ do_tile_selector(PlatformState *input)
     if (mouse_over_tile_selector) { return -1; }
     else { return selected_tile_index; }
 }
+*/
 
 void
 game_update_and_render(OpenGLFunctions *gl,
@@ -489,7 +500,8 @@ game_update_and_render(OpenGLFunctions *gl,
     process_entities(input, &global_map);
 
     ++editor_mode_toggle_cooldown_timer;
-    if (input->is_key_pressed[KEY_E] &&
+    if (input->is_key_pressed[KEY_E]            &&
+        input->is_key_pressed[KEY_LEFT_CONTROL] &&
         editor_mode_toggle_cooldown_timer > 15)
     {
         editor_mode_toggle_cooldown_timer = 0;
@@ -522,7 +534,7 @@ game_update_and_render(OpenGLFunctions *gl,
                 do_line_break();
 
                 do_label("rectangle col:", 100.0f);
-                F32 h = do_slider_f(input, "rectangle h slider", 0.0f, 1.0f, 85.0f);
+                F32 h = do_slider_f(input, "rectangle h slider", 0.0f, 360.0f, 85.0f);
                 F32 s = do_slider_f(input, "rectangle s slider", 0.0f, 1.0f, 85.0f);
                 F32 l = do_slider_f(input, "rectangle l slider", 0.0f, 1.0f, 85.0f);
 
@@ -614,7 +626,7 @@ game_update_and_render(OpenGLFunctions *gl,
                                                  200.0f,
                                                  hue,
                                                  1.0f);
-                do_text_entry(input, "test text entry", 150.0f);
+                do_text_entry(input, "test text entry", 300.0f);
             }
 
             world_fill_rectangle(RECTANGLE(0.0f, 0.0f, 128.0f, 128.0f), picked_colour);
@@ -622,7 +634,7 @@ game_update_and_render(OpenGLFunctions *gl,
 
         Tile *tile_under_cursor;
         if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
-            !global_hot_widget)
+            !global_is_mouse_over_ui)
         {
             world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
                                              ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
@@ -633,11 +645,14 @@ game_update_and_render(OpenGLFunctions *gl,
 
             if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
             {
-                tile_under_cursor->texture = global_tile_textures + selected_tile_index;
+                tile_under_cursor->texture = global_spritesheet;
+                tile_under_cursor->sub_texture = global_tile_textures[selected_tile_index];
+                tile_under_cursor->visible = true;
             }
             else if (input->is_mouse_button_pressed[MOUSE_BUTTON_RIGHT])
             {
-                tile_under_cursor->texture = NULL;
+                tile_under_cursor->visible = false;
+                tile_under_cursor->solid = false;
             }
         }
     }
