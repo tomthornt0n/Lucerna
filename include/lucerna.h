@@ -88,6 +88,22 @@ clamp_u(U64 n,
     return max_f(min, min_f(n, max));
 }
 
+U64
+hash_string(I8 *string,
+            U32 bounds)
+{
+    U64 hash = 5381;
+    I32 c;
+
+    while (c = *string++)
+    {
+        hash = ((hash << 5) + hash) + c;
+    }
+
+    return hash % bounds;
+}
+
+
 #define RECTANGLE(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
@@ -272,6 +288,7 @@ typedef struct
     PFNGLDELETEBUFFERSPROC           DeleteBuffers;
     PFNGLDELETEPROGRAMPROC           DeleteProgram;
     PFNGLDELETESHADERPROC            DeleteShader;
+    PFNGLDELETETEXTURESPROC          DeleteTextures;
     PFNGLDELETEVERTEXARRAYSPROC      DeleteVertexArrays;
     PFNGLDETACHSHADERPROC            DetachShader;
     PFNGLDISABLEPROC                 Disable;

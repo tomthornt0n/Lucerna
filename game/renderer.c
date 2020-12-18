@@ -84,7 +84,6 @@ internal ShaderID global_blur_shader;
 internal Texture global_flat_colour_texture;
 
 internal ShaderID global_currently_bound_shader = 0;
-internal TextureID global_currently_bound_texture = 0;
 
 internal U32 global_renderer_window_w = 0;
 internal U32 global_renderer_window_h = 0;

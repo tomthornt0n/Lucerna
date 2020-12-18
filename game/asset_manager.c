@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 17 Dec 2020
+  Updated : 18 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -51,11 +51,89 @@ free_for_stb(void *p)
 
 typedef U32 TextureID;
 
+internal TextureID global_currently_bound_texture = 0;
+
 typedef struct
 {
     TextureID id;
     I32 width, height;
 } Texture;
+
+enum
+{
+    ASSET_TYPE_TEXTURE,
+};
+
+#define ASSET_HASH_TABLE_SIZE (512)
+
+#define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
+
+typedef struct Asset Asset;
+struct Asset
+{
+    Asset *next_hash;
+    I32 type;
+    B32 loaded;
+    I8 *path;
+
+    union
+    {
+        Texture texture;
+        /* TODO(tbt): audio assets */
+    };
+};
+
+internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
+
+internal Asset *
+new_asset_from_path(MemoryArena *memory,
+                    I8 *path)
+{
+    Asset *result;
+    U64 index = asset_hash(path);
+
+    if (global_assets_dict[index].path &&
+        strcmp(global_assets_dict[index].path, path))
+    {
+        /* NOTE(tbt): hash collision */
+        Asset *tail;
+
+        result = arena_allocate(memory, sizeof(*result));
+
+        while (tail->next_hash) { tail = tail->next_hash; }
+        tail->next_hash = result;
+    }
+    else
+    {
+        result = global_assets_dict + index;
+    }
+
+    result->path = arena_allocate(memory, strlen(path) + 1);
+    strcpy(result->path, path);
+
+    return result;
+}
+
+internal Asset *
+asset_from_path(I8 *path)
+{
+    U64 index = asset_hash(path);
+    Asset *result = global_assets_dict + index;
+
+    while (result)
+    {
+        if (!result->path) { return NULL; }
+
+        if (strcmp(result->path, path))
+        {
+            result = result->next_hash;
+        }
+        else
+        {
+            return result;
+        }
+    }
+}
 
 #define ENTIRE_TEXTURE ((SubTexture){ 0.0f, 0.0f, 1.0f, 1.0f })
 typedef struct
@@ -97,21 +175,27 @@ read_entire_file(MemoryArena *arena,
     return result;
 }
 
-internal Texture
+internal void
 load_texture(OpenGLFunctions *gl,
-             I8 *path)
+             Asset *asset)
 {
-    Texture result = {0};
     U8 *pixels;
+
+    if (asset->loaded) { return; }
+
+    assert(asset->path);
 
     temporary_memory_begin(&global_asset_memory);
 
-    pixels = stbi_load(path, &result.width, &result.height, NULL, 4);
+    pixels = stbi_load(asset->path,
+                       &(asset->texture.width),
+                       &(asset->texture.height),
+                       NULL, 4);
 
     assert(pixels);
 
-    gl->GenTextures(1, &result.id);
-    gl->BindTexture(GL_TEXTURE_2D, result.id);
+    gl->GenTextures(1, &(asset->texture.id));
+    gl->BindTexture(GL_TEXTURE_2D, asset->texture.id);
 
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -121,8 +205,8 @@ load_texture(OpenGLFunctions *gl,
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_RGBA8,
-                   result.width,
-                   result.height,
+                   asset->texture.width,
+                   asset->texture.height,
                    0,
                    GL_RGBA,
                    GL_UNSIGNED_BYTE,
@@ -130,7 +214,17 @@ load_texture(OpenGLFunctions *gl,
 
     temporary_memory_end(&global_asset_memory);
 
-    return result;
+    asset->loaded = true;
+    asset->type = ASSET_TYPE_TEXTURE;
+}
+
+internal void
+unload_texture(OpenGLFunctions *gl,
+               Asset *asset)
+{
+    assert(asset->type == ASSET_TYPE_TEXTURE && asset->loaded);
+    gl->DeleteTextures(1, &asset->texture.id);
+    global_currently_bound_texture = 0;
 }
 
 internal SubTexture

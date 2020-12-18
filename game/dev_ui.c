@@ -17,7 +17,7 @@
 
 #define BG_COL_1 COLOUR(0.0f, 0.0f, 0.0f, 0.4f)
 #define BG_COL_2 COLOUR(0.0f, 0.0f, 0.0f, 0.8f)
-#define FG_COL_1 COLOUR(1.0f, 1.0f, 1.0f, 1.0f)
+#define FG_COL_1 COLOUR(1.0f, 1.0f, 1.0f, 0.9f)
 
 /* TODO(tbt): cache vertices when rendering text so they don't need to be
               recalculated to find the bounds
@@ -170,24 +170,9 @@ struct UINode
     F32 min, max;
 };
 
-#define UI_HASH_TABLE_SIZE (4096)
+#define UI_HASH_TABLE_SIZE (1024)
 
 #define ui_hash(string) hash_string((string), UI_HASH_TABLE_SIZE);
-
-U64
-hash_string(I8 *string,
-            U32 bounds)
-{
-    U64 hash = 5381;
-    I32 c;
-
-    while (c = *string++)
-    {
-        hash = ((hash << 5) + hash) + c;
-    }
-
-    return hash % bounds;
-}
 
 internal UINode global_ui_state_dict[UI_HASH_TABLE_SIZE] = {{0}};
 
@@ -199,8 +184,8 @@ new_widget_state_from_string(MemoryArena *memory,
 
     if (global_ui_state_dict[index].key &&
         strcmp(global_ui_state_dict[index].key, string))
-        /* NOTE(tbt): hash collision */
     {
+        /* NOTE(tbt): hash collision */
         UINode *tail;
 
         UINode *widget = arena_allocate(memory, sizeof(*widget));
@@ -1659,6 +1644,8 @@ layout_and_render_ui_node(PlatformState *input,
         }
     }
 }
+
+#define do_ui(_input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_input))))
 
 internal void
 prepare_ui(void)

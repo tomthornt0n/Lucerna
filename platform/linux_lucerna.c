@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 16 Dec 2020
+  Updated : 17 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -165,6 +165,7 @@ linux_load_all_opengl_functions(OpenGLFunctions *result)
     result->DeleteBuffers           = (PFNGLDELETEBUFFERSPROC          )linux_load_opengl_function("glDeleteBuffers");
     result->DeleteProgram           = (PFNGLDELETEPROGRAMPROC          )linux_load_opengl_function("glDeleteProgram");
     result->DeleteShader            = (PFNGLDELETESHADERPROC           )linux_load_opengl_function("glDeleteShader");
+    result->DeleteTextures          = (PFNGLDELETETEXTURESPROC         )linux_load_opengl_function("glDeleteTextures");
     result->DeleteVertexArrays      = (PFNGLDELETEVERTEXARRAYSPROC     )linux_load_opengl_function("glDeleteVertexArrays");
     result->DetachShader            = (PFNGLDETACHSHADERPROC           )linux_load_opengl_function("glDetachShader");
     result->Disable                 = (PFNGLDISABLEPROC                )linux_load_opengl_function("glDisable");
