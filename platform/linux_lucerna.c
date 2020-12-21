@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 17 Dec 2020
+  Updated : 21 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -376,8 +376,8 @@ main(int argc,
     struct timespec start_time, end_time;
     U64 ts = 0;
 
-    MemoryArena keys_typed_arena;
-    initialise_arena_with_new_memory(&keys_typed_arena, ONE_MB);
+    MemoryArena platform_layer_frame_memory;
+    initialise_arena_with_new_memory(&platform_layer_frame_memory, ONE_MB);
 
     PlatformState input;
     OpenGLFunctions gl;
@@ -650,7 +650,7 @@ main(int argc,
                     if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
                     {
                         KeyTyped *key_typed;
-                        key_typed = arena_allocate(&keys_typed_arena,
+                        key_typed = arena_allocate(&platform_layer_frame_memory,
                                                    sizeof(*key_typed));
                         /* NOTE(tbt): only want ASCII for now, so only take
                                       first byte.
@@ -687,7 +687,7 @@ main(int argc,
                         if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
                         {
                             KeyTyped *key_typed;
-                            key_typed = arena_allocate(&keys_typed_arena,
+                            key_typed = arena_allocate(&platform_layer_frame_memory,
                                                        sizeof(*key_typed));
                             /* NOTE(tbt): only want ASCII for now, so only take
                                           first byte.
@@ -794,7 +794,7 @@ main(int argc,
         glX.SwapBuffers(global_display, global_drawable);
         game_update_and_render(&gl, &input, ts);
 
-        arena_free_all(&keys_typed_arena);
+        arena_free_all(&platform_layer_frame_memory);
 
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
         ts = ((end_time.tv_sec -

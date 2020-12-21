@@ -2,19 +2,17 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 18 Dec 2020
+  Updated : 21 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 #define WAV_IMPLEMENTATION
 #include "wav.h"
 
-MemoryArena global_asset_memory;
-
 internal void *
 malloc_for_stb(U64 size)
 {
-    return arena_allocate(&global_asset_memory, size);
+    return arena_allocate(&global_static_memory, size);
 }
 
 internal void *
@@ -22,7 +20,7 @@ realloc_for_stb(void *p,
                 U64 old_size,
                 U64 new_size)
 {
-    void *result = arena_allocate(&global_asset_memory, new_size);
+    void *result = arena_allocate(&global_static_memory, new_size);
     memcpy(result, p, old_size);
     return result;
 }
@@ -59,9 +57,23 @@ typedef struct
     I32 width, height;
 } Texture;
 
+typedef struct GameEntity GameEntity;
+typedef struct Tile Tile;
+typedef struct
+{
+    MemoryArena *arena;
+    U64 entity_count;
+    GameEntity *entities;
+    U32 tilemap_width, tilemap_height;
+    Tile *tilemap;
+} GameMap;
+
 enum
 {
+    ASSET_TYPE_NONE,
+
     ASSET_TYPE_TEXTURE,
+    ASSET_TYPE_MAP,
 };
 
 #define ASSET_HASH_TABLE_SIZE (512)
@@ -72,6 +84,7 @@ typedef struct Asset Asset;
 struct Asset
 {
     Asset *next_hash;
+    Asset *next_loaded;
     I32 type;
     B32 loaded;
     I8 *path;
@@ -79,11 +92,14 @@ struct Asset
     union
     {
         Texture texture;
+        GameMap map;
         /* TODO(tbt): audio assets */
     };
 };
 
 internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
+
+internal Asset *global_loaded_assets = NULL;
 
 internal Asset *
 new_asset_from_path(MemoryArena *memory,
@@ -185,7 +201,7 @@ load_texture(OpenGLFunctions *gl,
 
     assert(asset->path);
 
-    temporary_memory_begin(&global_asset_memory);
+    temporary_memory_begin(&global_static_memory);
 
     pixels = stbi_load(asset->path,
                        &(asset->texture.width),
@@ -212,10 +228,12 @@ load_texture(OpenGLFunctions *gl,
                    GL_UNSIGNED_BYTE,
                    pixels);
 
-    temporary_memory_end(&global_asset_memory);
+    temporary_memory_end(&global_static_memory);
 
-    asset->loaded = true;
     asset->type = ASSET_TYPE_TEXTURE;
+    asset->loaded = true;
+    asset->next_loaded = global_loaded_assets;
+    global_loaded_assets = asset;
 }
 
 internal void
@@ -225,6 +243,14 @@ unload_texture(OpenGLFunctions *gl,
     assert(asset->type == ASSET_TYPE_TEXTURE && asset->loaded);
     gl->DeleteTextures(1, &asset->texture.id);
     global_currently_bound_texture = 0;
+    asset->texture.id = 0;
+    asset->texture.width = 0;
+    asset->texture.height = 0;
+    asset->loaded = false;
+
+    Asset **indirect = &global_loaded_assets;
+    while (*indirect != asset) { indirect = &(*indirect)->next_loaded; }
+    *indirect = (*indirect)->next_loaded;
 }
 
 internal SubTexture
@@ -253,7 +279,7 @@ slice_animation(Texture texture,
     I32 x_index, y_index;
     I32 index = 0;
 
-    SubTexture *result = arena_allocate(&global_asset_memory,
+    SubTexture *result = arena_allocate(&global_static_memory,
                                         horizontal_count *
                                         vertical_count *
                                         sizeof(*result));
@@ -281,14 +307,14 @@ load_font(OpenGLFunctions *gl,
           I8 *path,
           U32 size)
 {
-    Font *result = arena_allocate(&global_asset_memory, sizeof(*result));
+    Font *result = arena_allocate(&global_static_memory, sizeof(*result));
 
     U8 *file_buffer;
     U8 pixels[1024 * 1024];
 
-    temporary_memory_begin(&global_asset_memory);
+    temporary_memory_begin(&global_static_memory);
 
-    file_buffer = read_entire_file(&global_asset_memory, path);
+    file_buffer = read_entire_file(&global_static_memory, path);
     assert(file_buffer);
 
     stbtt_BakeFontBitmap(file_buffer, 0, size, pixels, 1024, 1024, 32, 96, result->char_data);
@@ -315,11 +341,13 @@ load_font(OpenGLFunctions *gl,
                    GL_UNSIGNED_BYTE,
                    pixels);
 
-    temporary_memory_end(&global_asset_memory);
+    temporary_memory_end(&global_static_memory);
 
     return result;
 }
 
+/* TODO(tbt): audio streaming */
+/* TODO(tbt): represent audio streams as assets */
 internal AudioSource
 load_wav(I8 *path)
 {
@@ -339,7 +367,7 @@ load_wav(I8 *path)
     assert(bits_per_sample == 16);
     assert(channels == 2);
 
-    data = arena_allocate(&global_asset_memory, data_size);
+    data = arena_allocate(&global_static_memory, data_size);
 
     wav_read(path, NULL, NULL, NULL, NULL, data);
 
@@ -351,6 +379,35 @@ load_wav(I8 *path)
     result.pan = 0.5f;
 
     return result;
+}
+
+internal void
+unload_all_assets(OpenGLFunctions *gl)
+{
+    Asset *asset = global_loaded_assets;
+
+    while (asset)
+    {
+        if (!asset->loaded) { continue; }
+
+        switch (asset->type)
+        {
+            case ASSET_TYPE_TEXTURE:
+            {
+                unload_texture(gl, asset);
+                break;
+            }
+            default:
+            {
+                fprintf(stderr, "warning: skipping asset with no type");
+                break;
+            }
+        }
+
+        asset = asset->next_loaded;
+    }
+
+    global_loaded_assets = NULL;
 }
 
 /*

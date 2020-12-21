@@ -117,6 +117,29 @@ typedef struct
     F32 r, g, b, a;
 } Colour;
 
+internal B32
+rectangles_are_intersecting(Rectangle a,
+                            Rectangle b)
+{
+    if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
+    if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
+    return true;
+}
+
+internal B32
+point_is_in_region(F32 x, F32 y,
+                   Rectangle region)
+{
+    if (x < region.x              ||
+        y < region.y              ||
+        x > (region.x + region.w) ||
+        y > (region.y + region.h))
+    {
+        return false;
+    }
+    return true;
+}
+
 
 #define KEY_NONE                0
 #define KEY_A                   4
@@ -316,6 +339,15 @@ typedef struct
     PFNGLVERTEXATTRIBPOINTERPROC     VertexAttribPointer;
     PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
+
+enum
+{
+    GAME_STATE_PLAYING,
+    GAME_STATE_EDITOR,
+    GAME_STATE_TILE_EDITOR,
+    GAME_STATE_OPEN_MAP,
+    GAME_STATE_NEW_MAP,
+};
 
 typedef struct MemoryArena MemoryArena;
 

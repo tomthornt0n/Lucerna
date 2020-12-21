@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 18 Dec 2020
+  Updated : 21 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -69,25 +69,40 @@ serialise_entity(GameEntity entity,
 
     success = success && (fwrite(&e, 1, sizeof(e), file) == sizeof(e));
 
-    for (I32 frame_index = 0;
-         frame_index < entity.animation_length;
-         ++frame_index)
+    if (entity.sub_texture)
     {
-        SubTextureInFile t;
+        for (I32 frame_index = 0;
+             frame_index < entity.animation_length;
+             ++frame_index)
+        {
+            SubTextureInFile t;
 
-        t.min_x = entity.sub_texture[frame_index].min_x;
-        t.min_y = entity.sub_texture[frame_index].min_y;
-        t.max_x = entity.sub_texture[frame_index].max_x;
-        t.max_y = entity.sub_texture[frame_index].max_y;
+            t.min_x = entity.sub_texture[frame_index].min_x;
+            t.min_y = entity.sub_texture[frame_index].min_y;
+            t.max_x = entity.sub_texture[frame_index].max_x;
+            t.max_y = entity.sub_texture[frame_index].max_y;
 
-        success = success &&
-                  (fwrite(&t, 1, sizeof(t), file) == sizeof(t));
+            success = success &&
+                      (fwrite(&t, 1, sizeof(t), file) == sizeof(t));
+        }
+    }
+    else
+    {
+        e.animation_length = 0;
     }
 
-    U32 texture_path_size = strlen(entity.texture->path) + 1;
-    success = success &&
-              (fwrite(entity.texture->path, 1, texture_path_size, file) ==
-               texture_path_size);
+    if (entity.texture)
+    {
+        U32 texture_path_size = strlen(entity.texture->path) + 1;
+        success = success &&
+                  (fwrite(entity.texture->path, 1, texture_path_size, file) ==
+                   texture_path_size);
+    }
+    else
+    {
+        success = success &&
+                  (fwrite("", 1, 1, file) == 1);
+    }
 
     return success;
 }
@@ -248,22 +263,28 @@ deserialise_tile(MemoryArena *memory,
 }
 
 internal B32
-write_map(GameMap *map,
-          I8 *path,
-          I8 *temp_path)
+serialise_map(GameMap *map,
+              I8 *path)
+
 {
     B32 success = true;
 
+    /* NOTE(tbt): append "_" to end of path */
+    I8 *temp_path = arena_allocate(&global_frame_memory, strlen(path) + 2);
+    strcpy(temp_path, path);
+    strcat(temp_path, "_");
+
+    /* NOTE(tbt): write to temp file to prevent loosing data if the write fails */
     FILE *f = fopen(temp_path, "wb");
+    assert(f);
 
     /* NOTE(tbt): write map header */
-    MapInFile m;
+    MapInFile m = {0};
     m.entity_count = map->entity_count;
     m.tilemap_width = map->tilemap_width;
     m.tilemap_height = map->tilemap_height;
 
-    success = success &&
-              (fwrite(&m, 1, sizeof(m), f) == sizeof(m));
+    success = success && fwrite(&m, sizeof(m), 1, f);
 
     /* NOTE(tbt): write tiles */
     for (I32 tile_index = 0;
@@ -274,11 +295,11 @@ write_map(GameMap *map,
     }
 
     /* NOTE(tbt): write entities */
-    for (I32 entity_index = 0;
-         entity_index < map->entity_count;
-         ++entity_index)
+    GameEntity *entity = map->entities;
+    while (entity)
     {
-        success = success && serialise_entity(map->entities[entity_index], f);
+        success = success && serialise_entity(*entity, f);
+        entity = entity->next;
     }
 
     fclose(f);
@@ -287,23 +308,31 @@ write_map(GameMap *map,
     if (success)
     {
         success = success && (0 == rename(temp_path, path));
+
+        fprintf(stderr,
+                "successfully wrote %u entities, %u tiles.\n",
+                map->entity_count,
+                map->tilemap_width * map->tilemap_height);
     }
 
     return success;
 }
-#define write_map(_map, _path) write_map((_map), _path, _path "_")
 
-internal GameMap
-read_map(MemoryArena *memory,
-         I8 *path)
+internal B32
+deserialise_map(MemoryArena *memory,
+                I8 *path,
+                GameMap *map)
 {
     U32 err;
 
-    GameMap result;
-
-    result.arena = memory;
+    map->arena = memory;
 
     FILE *f = fopen(path, "rb");
+
+    if (!f)
+    {
+        return false;
+    }
 
     /* NOTE(tbt): read map header */
     MapInFile header;
@@ -311,35 +340,80 @@ read_map(MemoryArena *memory,
     assert(err == sizeof(header));
 
     /* NOTE(tbt): read tiles */
-    result.tilemap_width = header.tilemap_width;
-    result.tilemap_height = header.tilemap_height;
-    result.tilemap = arena_allocate(memory,
-                                    header.tilemap_height *
-                                    header.tilemap_width *
-                                    sizeof(*result.tilemap));
+    map->tilemap_width = header.tilemap_width;
+    map->tilemap_height = header.tilemap_height;
+    map->tilemap = arena_allocate(memory,
+                                  header.tilemap_height *
+                                  header.tilemap_width *
+                                  sizeof(*map->tilemap));
 
     for (I32 tile_index = 0;
          tile_index < header.tilemap_width * header.tilemap_height;
          ++tile_index)
     {
-        result.tilemap[tile_index] = deserialise_tile(memory, f);
+        map->tilemap[tile_index] = deserialise_tile(memory, f);
     }
 
     /* NOTE(tbt): read entities */
-    result.entities = NULL;
-    result.entity_count = header.entity_count;
+    map->entities = NULL;
+    map->entity_count = header.entity_count;
 
     for (I32 entity_index = 0;
          entity_index < header.entity_count;
          ++entity_index)
     {
+        fprintf(stderr, "reading entity\n");
         GameEntity *e = deserialise_entity(memory, f);
-        e->next = result.entities;
-        result.entities = e;
+        e->next = map->entities;
+        map->entities = e;
     }
 
-    return result;
+    fprintf(stderr,
+            "successfully read %u entities, %u tiles.\n",
+            header.entity_count,
+            header.tilemap_width * header.tilemap_height);
+
+    fclose(f);
+    return true;
 }
+
+internal B32
+load_map(OpenGLFunctions *gl,
+         Asset *asset)
+{
+    if (asset->loaded) { return true; }
+
+    assert(asset->path);
+
+    if (deserialise_map(&global_level_memory,
+                        asset->path,
+                        &asset->map))
+    {
+        asset->type = ASSET_TYPE_MAP;
+        asset->loaded = true;
+        /* NOTE(tbt): maps aren't kept in the loaded_assets list */
+
+        return true;
+    }
+
+    return false;
+}
+
+internal void
+unload_map(OpenGLFunctions *gl,
+           Asset *asset)
+{
+    assert(asset->type == ASSET_TYPE_MAP);
+    if (!asset->loaded) { return; }
+
+    serialise_map(&asset->map, asset->path);
+
+    unload_all_assets(gl);
+    arena_free_all(asset->map.arena);
+
+    asset->loaded = false;
+}
+
 
 /*
 MIT License

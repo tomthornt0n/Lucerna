@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 18 Dec 2020
+  Updated : 21 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -17,173 +17,49 @@
 #include "lucerna.h"
 
 #include "arena.c"
+
+internal MemoryArena global_static_memory;
+internal MemoryArena global_frame_memory;
+internal MemoryArena global_level_memory;
+
 #include "audio.c"
 #include "asset_manager.c"
 #include "math.c"
 
-#define GRAVITY 4.0f
-
-MemoryArena global_static_memory;
-internal MemoryArena global_frame_memory;
-
 Font *global_ui_font;
-
-internal B32
-rectangles_are_intersecting(Rectangle a,
-                            Rectangle b)
-{
-    if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
-    if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
-    return true;
-}
-
-internal B32
-point_is_in_region(F32 x, F32 y,
-                   Rectangle region)
-{
-    if (x < region.x              ||
-        y < region.y              ||
-        x > (region.x + region.w) ||
-        y > (region.y + region.h))
-    {
-        return false;
-    }
-    return true;
-}
 
 #include "renderer.c"
 #include "dev_ui.c"
 #include "entities.c"
 #include "serialisation.c"
 
-internal GameMap global_map;
-internal SubTexture *global_tile_textures;
+
+internal Asset *global_map = NULL;
 
 void
 game_init(OpenGLFunctions *gl)
 {
-    initialise_arena_with_new_memory(&global_static_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_static_memory, ONE_GB);
     initialise_arena_with_new_memory(&global_frame_memory, ONE_MB);
-    initialise_arena_with_new_memory(&global_asset_memory, 500 * ONE_MB);
+    initialise_arena_with_new_memory(&global_level_memory, ONE_MB);
 
     initialise_renderer(gl);
 
-    global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 18);
+    global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
 
-    Asset *spritesheet = new_asset_from_path(&global_static_memory,
-                                             TEXTURE_PATH("spritesheet.png"));
+    Asset *spritesheet;
+    if (!(spritesheet = asset_from_path(TEXTURE_PATH("spritesheet.png"))))
+    {
+        spritesheet = new_asset_from_path(&global_static_memory, TEXTURE_PATH("spritesheet.png"));
+    }
+
     load_texture(gl, spritesheet);
 
     global_player_down_texture = slice_animation(spritesheet->texture, 48.0f, 0.0f, 16.0f, 16.0f, 4, 1);
     global_player_left_texture = slice_animation(spritesheet->texture, 48.0f, 16.0f, 16.0f, 16.0f, 4, 1);
     global_player_right_texture = slice_animation(spritesheet->texture, 48.0f, 32.0f, 16.0f, 16.0f, 4, 1);
     global_player_up_texture = slice_animation(spritesheet->texture, 48.0f, 48.0f, 16.0f, 16.0f, 4, 1);
-
-    global_tile_textures = slice_animation(spritesheet->texture, 0.0f, 0.0f, 16.0f, 16.0f, 16, 16);
-
-    /*
-    global_map = create_map(&global_static_memory, 100, 100);
-    create_player(&global_map, 0.0f, 0.0f);
-    */
-
-    global_map = read_map(&global_static_memory, "test.map");
 }
-
-/*
-internal I32
-do_tile_selector(PlatformState *input)
-{
-    static U32 selected_tile_index = 0;
-    static F32 x = 16.0f, y = 128.0f;
-    static B32 dragging = false;
-    B32 mouse_over_tile_selector = false;
-    F32 scale = 16.0f;
-    I32 width = 16;
-    F32 title_bar_height = 24;
-
-    Rectangle title_bar = RECTANGLE(x,
-                                    y - title_bar_height,
-                                    width * scale,
-                                    title_bar_height);
-
-    Rectangle bg = RECTANGLE(x, y,
-                             scale * width,
-                             scale * width);
-
-
-    if (point_is_in_region(input->mouse_x,
-                           input->mouse_y,
-                           title_bar) &&
-        input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-    {
-        dragging = true;
-    }
-    if (dragging)
-    {
-        mouse_over_tile_selector = true;
-        x = input->mouse_x - 128.0f;
-        y = input->mouse_y + title_bar_height / 2;
-        if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-        {
-            dragging = false;
-        }
-    }
-
-    blur_screen_region(RECTANGLE(title_bar.x,
-                                 title_bar.y,
-                                 bg.w,
-                                 title_bar.h + bg.h),
-                       5);
-
-    ui_fill_rectangle(title_bar, COLOUR(0.0f, 0.0f, 0.0f, 0.8f));
-    ui_draw_text(global_ui_font,
-                 x + 8.0f,
-                 y - title_bar_height / 3,
-                 0,
-                 COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                 "select tile");
-
-    ui_fill_rectangle(bg, COLOUR(0.0f, 0.0f, 0.0f, 0.5f));
-
-    I32 i;
-    for (i = 0;
-         i < 16 * 16;
-         ++i)
-    {
-        Colour colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
-        Rectangle rectangle = RECTANGLE(x +
-                                        (i % width) * 
-                                        scale,
-                                        y +
-                                        (i / width) * 
-                                        scale,
-                                        scale,
-                                        scale);
-
-        if (point_is_in_region(input->mouse_x, input->mouse_y, rectangle))
-        {
-            mouse_over_tile_selector = true;
-            colour = COLOUR(1.0f, 0.5f, 0.5f, 1.0f);
-            if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-            {
-                selected_tile_index = i;
-            }
-        }
-
-        ui_draw_texture(rectangle,
-                        colour,
-                        global_tile_textures[i]);
-
-        if (i == selected_tile_index)
-        {
-            ui_stroke_rectangle(rectangle, colour, 1);
-        }
-    }
-
-    if (mouse_over_tile_selector) { return -1; }
-    else { return selected_tile_index; }
-}
-*/
 
 void
 game_update_and_render(OpenGLFunctions *gl,
@@ -191,22 +67,25 @@ game_update_and_render(OpenGLFunctions *gl,
                        U64 timestep_in_ns)
 {
     static U32 previous_width = 0, previous_height = 0;
-    static B32 editor_mode = false, tile_edit = false, entity_edit = false;
+    static I32 game_state = GAME_STATE_PLAYING;
     static U32 editor_mode_toggle_cooldown_timer = 500;
 
     if (input->window_width != previous_width ||
         input->window_height != previous_height)
     {
-        set_renderer_window_size(gl,
-                                 input->window_width,
-                                 input->window_height);
+        set_renderer_window_size(gl, input->window_width,
+                                     input->window_height);
     }
 
-    render_tiles(gl,
-                 global_map,
-                 tile_edit);
+    GameEntity *selected_entity = NULL;
+    if (global_map)
+    {
+        render_tiles(gl, global_map->map, game_state);
 
-    process_entities(gl, input, &global_map);
+        selected_entity = process_entities(gl, input,
+                                           &global_map->map,
+                                           game_state);
+    }
 
     ++editor_mode_toggle_cooldown_timer;
     if (input->is_key_pressed[KEY_E]            &&
@@ -214,12 +93,14 @@ game_update_and_render(OpenGLFunctions *gl,
         editor_mode_toggle_cooldown_timer > 15)
     {
         editor_mode_toggle_cooldown_timer = 0;
-        editor_mode = !editor_mode;
+        game_state = game_state == GAME_STATE_PLAYING ?
+                     GAME_STATE_EDITOR :
+                     GAME_STATE_PLAYING;
     }
 
-    if (editor_mode)
+    if (game_state == GAME_STATE_EDITOR ||
+        game_state == GAME_STATE_TILE_EDITOR)
     {
-        static I32 selected_tile_index = 0;
         F64 fps = (F64)1e9 / (F64)timestep_in_ns;
         I8 frame_time_string[64] = {0};
 
@@ -234,70 +115,229 @@ game_update_and_render(OpenGLFunctions *gl,
 
         do_ui(input)
         {
-            do_window(input, "level editor", 512.0f, 32.0f, 600.0f)
+            do_window(input, "level editor", 0.0f, 32.0f, 600.0f)
             {
-                tile_edit = do_toggle_button(input, "edit tiles", 256.0f);
-                entity_edit = do_toggle_button(input, "edit entities", 256.0f);
+                if (do_toggle_button(input, "edit tiles", 256.0f))
+                {
+                    game_state = GAME_STATE_TILE_EDITOR;
+                }
+                else
+                {
+                    game_state = GAME_STATE_EDITOR;
+                }
+
+                do_dropdown(input, "create entity", 256.0f)
+                {
+                    if (global_map)
+                    {
+                        if (do_button(input, "create static object", 256.0f))
+                        {
+                            create_static_object(&global_map->map,
+                                                 RECTANGLE(global_camera_x,
+                                                           global_camera_y,
+                                                           64.0f, 64.0f),
+                                                 TEXTURE_PATH("spritesheet.png"),
+                                                 ENTIRE_TEXTURE);
+                        }
+                        if (do_button(input, "create player", 256.0f))
+                        {
+                            create_player(&global_map->map,
+                                          global_camera_x,
+                                          global_camera_y);
+                        }
+                    }
+                    else
+                    {
+                        do_label("plmf", "please load a map first.", 256.0f);
+                    }
+                }
+
+                if (do_button(input, "load map", 256.0f))
+                {
+                    game_state = GAME_STATE_OPEN_MAP;
+                }
             }
 
-            if (tile_edit)
+            if (game_state == GAME_STATE_TILE_EDITOR)
             {
+                static SubTexture tile_sub_texture = ENTIRE_TEXTURE;
                 B32 solid;
 
-                do_window(input, "tile selector", 32.0f, 32.0f, 200.0f)
+                Asset *tile_texture = asset_from_path(TEXTURE_PATH("spritesheet.png"));
+                if (!tile_texture)
                 {
-                    do_dropdown(input, "choose tile", 150.0f)
-                    {
-                        if (do_button(input, "dirt top left", 150.0f)) { selected_tile_index = 0; }
-                        if (do_button(input, "dirt top", 150.0f)) { selected_tile_index = 1; }
-                        if (do_button(input, "dirt top right", 150.0f)) { selected_tile_index = 2; }
-                        if (do_button(input, "dirt left", 150.0f)) { selected_tile_index = 16; }
-                        if (do_button(input, "dirt", 150.0f)) { selected_tile_index = 17; }
-                        if (do_button(input, "dirt right", 150.0f)) { selected_tile_index = 18; }
-                        if (do_button(input, "dirt bottom left", 150.0f)) { selected_tile_index = 32; }
-                        if (do_button(input, "dirt bottom", 150.0f)) { selected_tile_index = 33; }
-                        if (do_button(input, "dirt bottom right", 150.0f)) { selected_tile_index = 34; }
-                        if (do_button(input, "grass 1", 150.0f)) { selected_tile_index = 48; }
-                        if (do_button(input, "grass 2", 150.0f)) { selected_tile_index = 64; }
-                        if (do_button(input, "grass 3", 150.0f)) { selected_tile_index = 80; }
-                    }
+                    tile_texture = new_asset_from_path(&global_static_memory,
+                                                       TEXTURE_PATH("spritesheet.png"));
+                }
+
+                if (!tile_texture->loaded)
+                {
+                    load_texture(gl, tile_texture);
+                }
+
+                do_window(input, "tile selector", 0.0f, 128.0f, 200.0f)
+                {
 
                     do_line_break();
+
+                    do_sprite_picker(input,
+                                     "tile sprite picker",
+                                     tile_texture,
+                                     16.0f,
+                                     &tile_sub_texture);
 
                     solid = do_toggle_button(input, "solid", 150.0f);
                 }
 
-                Tile *tile_under_cursor;
-                if ((tile_under_cursor = get_tile_under_cursor(input, global_map)) &&
-                    !global_is_mouse_over_ui)
+                if (global_map)
                 {
-                    world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
-                                                     ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
-                                                     TILE_SIZE,
-                                                     TILE_SIZE),
-                                           COLOUR(0.0f, 0.0f, 0.0f, 0.5f),
-                                           2);
+                    Tile *tile_under_cursor;
+                    if ((tile_under_cursor = get_tile_under_cursor(input, global_map->map)) &&
+                        !global_is_mouse_over_ui)
+                    {
+                        world_stroke_rectangle(RECTANGLE(((I32)(input->mouse_x + global_camera_x) / TILE_SIZE) * TILE_SIZE,
+                                                         ((I32)(input->mouse_y + global_camera_y) / TILE_SIZE) * TILE_SIZE,
+                                                         TILE_SIZE,
+                                                         TILE_SIZE),
+                                               COLOUR(0.0f, 0.0f, 0.0f, 0.5f),
+                                               2);
 
-                    if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-                    {
-                        tile_under_cursor->texture = asset_from_path(TEXTURE_PATH("spritesheet.png"));
-                        tile_under_cursor->sub_texture = global_tile_textures[selected_tile_index];
-                        tile_under_cursor->visible = true;
-                        tile_under_cursor->solid = solid;
-                    }
-                    else if (input->is_mouse_button_pressed[MOUSE_BUTTON_RIGHT])
-                    {
-                        tile_under_cursor->visible = false;
-                        tile_under_cursor->solid = false;
+                        if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+                        {
+                            tile_under_cursor->texture = tile_texture;
+                            tile_under_cursor->sub_texture = tile_sub_texture;
+                            tile_under_cursor->visible = true;
+                            tile_under_cursor->solid = solid;
+                        }
+                        else if (input->is_mouse_button_pressed[MOUSE_BUTTON_RIGHT])
+                        {
+                            tile_under_cursor->visible = false;
+                            tile_under_cursor->solid = false;
+                        }
                     }
                 }
             }
 
-            if (entity_edit)
+            if (selected_entity)
             {
-                do_window(input, "entity properties", 32.0f, 32.0f, 200.0f)
+                do_window(input, "entity properties", 0.0f, 128.0f, 600.0f)
                 {
-                    do_label("TODO(tbt): level editor", 150.0f);
+                    do_line_break();
+
+                    I8 entity_size_label[64] = {0};
+                    snprintf(entity_size_label, 64, "size: (%.1f x %.1f)", selected_entity->bounds.w, selected_entity->bounds.h);
+                    do_label("entity size", entity_size_label, 200.0f);
+                    do_line_break();
+                    do_slider_f(input, "entity w slider", 64.0f, 1024.0f, 64.0f, 200.0f, &(selected_entity->bounds.w));
+                    do_line_break();
+                    do_slider_f(input, "entity h slider", 64.0f, 1024.0f, 64.0f, 200.0f, &(selected_entity->bounds.h));
+
+
+                    do_line_break();
+
+                    I8 entity_speed_label[64] = {0};
+                    snprintf(entity_speed_label, 64, "speed: (%.1f)", selected_entity->speed);
+                    do_label("entity speed", entity_speed_label, 200.0f);
+                    do_line_break();
+                    do_slider_f(input, "entity speed slider", 0.0f, 32.0f, 1.0f, 200.0f, &(selected_entity->speed));
+
+
+                    do_line_break();
+
+                    do_label("entity sprite picker label", "texture:", 100.0f);
+                    do_line_break();
+                    do_sprite_picker(input,
+                                     "entity texture picker",
+                                     selected_entity->texture,
+                                     16.0f,
+                                     selected_entity->sub_texture);
+                }
+            }
+
+        }
+    }
+    else if (game_state == GAME_STATE_OPEN_MAP)
+    {
+        do_ui(input)
+        {
+            do_window(input,
+                      "open map",
+                      input->window_width / 2,
+                      input->window_height / 2,
+                      512.0f)
+            {
+                I8 *path = do_text_entry(input, "map path", 512.0f);
+                
+                do_line_break();
+
+                if (do_button(input, "cancel", 100.0f))
+                {
+                    game_state = GAME_STATE_EDITOR;
+                }
+                
+                if (do_button(input, "open", 100.0f))
+                {
+                    Asset *prev_map = global_map;
+
+                    global_map = asset_from_path(path);
+                    if (!global_map)
+                    {
+                        global_map = new_asset_from_path(&global_static_memory,
+                                                         path);
+                    }
+
+                    
+                    if (!load_map(gl, global_map))
+                    {
+                        fprintf(stderr, "could not load map '%s'\n", path);
+                        game_state = GAME_STATE_NEW_MAP;
+                    }
+                    else
+                    {
+                        game_state = GAME_STATE_EDITOR;
+                    }
+
+                    if (prev_map) { unload_map(gl, prev_map); }
+                }
+            }
+        }
+    }
+    else if (game_state == GAME_STATE_NEW_MAP)
+    {
+        do_ui(input)
+        {
+            do_window(input,
+                      "new map",
+                      input->window_width / 2,
+                      input->window_height / 2,
+                      512.0f)
+            {
+                I8 *path = do_text_entry(input, "map path", 512.0f);
+
+                do_line_break();
+
+                do_label("tmw", "tilemap width: ", 100.0f);
+                I32 width = atoi(do_text_entry(input, "tmw e", 100.0f));
+
+                do_line_break();
+
+                do_label("tmh", "tilemap height: ", 100.0f);
+                I32 height = atoi(do_text_entry(input, "tmh e", 100.0f));
+
+                do_line_break();
+
+                if (do_button(input, "create new map", 200.0f))
+                {
+                    global_map = asset_from_path(path);
+                    if (!global_map)
+                    {
+                        global_map = new_asset_from_path(&global_static_memory, path);
+                    }
+
+                    create_new_map(width, height, &global_map->map);
+                    global_map->type = ASSET_TYPE_MAP;
+                    global_map->loaded = true;
+                    game_state = GAME_STATE_EDITOR;
                 }
             }
         }
@@ -313,11 +353,10 @@ game_update_and_render(OpenGLFunctions *gl,
 void
 game_cleanup(OpenGLFunctions *gl)
 {
-    write_map(&global_map, "test.map");
+    if (global_map) { unload_map(gl, global_map); }
 
     free(global_static_memory.buffer);
     free(global_frame_memory.buffer);
-    free(global_asset_memory.buffer);
 }
 
 /*

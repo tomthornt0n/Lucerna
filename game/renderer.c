@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 17 Dec 2020
+  Updated : 21 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -199,9 +199,9 @@ initialise_renderer(OpenGLFunctions *gl)
     ShaderID vertex_shader;
     ShaderID fragment_shader;
 
-    temporary_memory_begin(&global_asset_memory);
+    temporary_memory_begin(&global_static_memory);
 
-    shader_src = read_entire_file(&global_asset_memory,
+    shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("default.vert"));
     assert(shader_src);
 
@@ -231,7 +231,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->AttachShader(global_text_shader, vertex_shader);
 
     /* NOTE(tbt): compile default fragment shader */
-    shader_src = read_entire_file(&global_asset_memory,
+    shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("default.frag"));
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
@@ -279,7 +279,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DeleteShader(fragment_shader);
 
     /* NOTE(tbt): compile blur fragment shader */
-    shader_src = read_entire_file(&global_asset_memory,
+    shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("blur.frag"));
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
@@ -327,7 +327,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DeleteShader(fragment_shader);
 
     /* NOTE(tbt): compile text fragment shader */
-    shader_src = read_entire_file(&global_asset_memory,
+    shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("text.frag"));
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
@@ -376,7 +376,7 @@ initialise_renderer(OpenGLFunctions *gl)
 
     /* NOTE(tbt): cleanup vertex shader */
     gl->DeleteShader(vertex_shader);
-    temporary_memory_end(&global_asset_memory);
+    temporary_memory_end(&global_static_memory);
 
     /* NOTE(tbt): cache uniform locations */
     global_projection_matrix_locations[global_default_shader] =
@@ -524,10 +524,10 @@ draw_sub_texture(Rectangle rectangle,
 #define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, global_projection_matrix)
 internal void
 draw_texture(Rectangle rectangle,
-                 Colour colour,
-                 Texture texture,
-                 U32 sort,
-                 F32 *projection_matrix)
+             Colour colour,
+             Texture texture,
+             U32 sort,
+             F32 *projection_matrix)
 {
     draw_sub_texture(rectangle,
                      colour,
