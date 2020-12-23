@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 21 Dec 2020
+  Updated : 23 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -146,18 +146,11 @@ get_tile_under_cursor(PlatformState *input,
                                 input->mouse_y + global_camera_y);
 }
 
-/* NOTE(tbt): returns a pointer to the selected entity in editor mode, NULL
-              otherwise
-*/
-internal GameEntity *
+internal void
 process_entities(OpenGLFunctions *gl,
                  PlatformState *input,
-                 GameMap *map,
-                 I32 game_state)
+                 GameMap *map)
 {
-    /* NOTE(tbt): only used when editor mode is enabled */
-    static GameEntity *selected = NULL, *active = NULL, *dragging = NULL;
-
     GameEntity *entity, *previous = NULL;
     for (entity = map->entities;
          entity;
@@ -177,196 +170,125 @@ process_entities(OpenGLFunctions *gl,
             }
         }
 
-        if (game_state == GAME_STATE_PLAYING)
+        if (entity->flags & ENTITY_FLAG_PLAYER_MOVEMENT)
         {
-            selected = NULL;
+            B32 moving = false;
 
-            if (entity->flags & ENTITY_FLAG_PLAYER_MOVEMENT)
+            if (input->is_key_pressed[KEY_A])
             {
-                B32 moving = false;
-
-                if (input->is_key_pressed[KEY_A])
-                {
-                    entity->x_vel = -entity->speed;
-                    entity->flags |= ENTITY_FLAG_ANIMATED;
-                    entity->sub_texture = global_player_left_texture;
-                    moving = true;
-                }
-                else if (input->is_key_pressed[KEY_D])
-                {
-                    entity->x_vel = entity->speed;
-                    entity->flags |= ENTITY_FLAG_ANIMATED;
-                    entity->sub_texture = global_player_right_texture;
-                    moving = true;
-                }
-                else
-                {
-                    entity->x_vel = 0.0f;
-                }
-
-                if (input->is_key_pressed[KEY_W])
-                {
-                    entity->y_vel = -entity->speed;
-                    entity->flags |= ENTITY_FLAG_ANIMATED;
-                    entity->sub_texture = global_player_up_texture;
-                    moving = true;
-                }
-                else if (input->is_key_pressed[KEY_S])
-                {
-                    entity->y_vel = entity->speed;
-                    entity->flags |= ENTITY_FLAG_ANIMATED;
-                    entity->sub_texture = global_player_down_texture;
-                    moving = true;
-                }
-                else
-                {
-                    entity->y_vel = 0.0f;
-                }
-
-                if (!moving)
-                {
-                    entity->flags &= ~ENTITY_FLAG_ANIMATED;
-                    entity->frame = 0;
-                }
+                entity->x_vel = -entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->sub_texture = global_player_left_texture;
+                moving = true;
+            }
+            else if (input->is_key_pressed[KEY_D])
+            {
+                entity->x_vel = entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->sub_texture = global_player_right_texture;
+                moving = true;
+            }
+            else
+            {
+                entity->x_vel = 0.0f;
             }
 
-            if (entity->flags & ENTITY_FLAG_DYNAMIC)
+            if (input->is_key_pressed[KEY_W])
             {
-                B32 colliding;
-                Tile *tile; 
-                Rectangle r;
-
-                /* NOTE(tbt): x-axis collision check */
-                colliding = false;
-                r = entity->bounds;
-                r.x += entity->x_vel;
-
-                tile = get_tile_at_position(*map, r.x, r.y);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x + r.w, r.y);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x, r.y + r.h);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x + r.w, r.y + r.h);
-                if (!tile || tile->solid) { colliding = true; }
-
-                if (!colliding) { entity->bounds.x += entity->x_vel; }
-
-                /* NOTE(tbt): y-axis collision check */
-                colliding = false;
-                r = entity->bounds;
-                r.y += entity->y_vel;
-
-                tile = get_tile_at_position(*map, r.x, r.y);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x + r.w, r.y);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x, r.y + r.h);
-                if (!tile || tile->solid) { colliding = true; }
-                tile = get_tile_at_position(*map, r.x + r.w, r.y + r.h);
-                if (!tile || tile->solid) { colliding = true; }
-
-                if (!colliding) { entity->bounds.y += entity->y_vel; }
+                entity->y_vel = -entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->sub_texture = global_player_up_texture;
+                moving = true;
+            }
+            else if (input->is_key_pressed[KEY_S])
+            {
+                entity->y_vel = entity->speed;
+                entity->flags |= ENTITY_FLAG_ANIMATED;
+                entity->sub_texture = global_player_down_texture;
+                moving = true;
+            }
+            else
+            {
+                entity->y_vel = 0.0f;
             }
 
-            if (entity->flags & ENTITY_FLAG_CAMERA_FOLLOW)
+            if (!moving)
             {
-                F32 camera_centre_x = global_camera_x +
-                                      global_renderer_window_w / 2.0f;
-                F32 camera_centre_y = global_camera_y +
-                                      global_renderer_window_h / 2.0f;
-
-                F32 camera_to_entity_x_vel = (entity->bounds.x + entity->bounds.w / 2.0f - camera_centre_x) / 2.0f;
-                F32 camera_to_entity_y_vel = (entity->bounds.y + entity->bounds.h / 2.0f - camera_centre_y) / 2.0f;
-
-                F32 camera_to_mouse_x_vel = ((input->mouse_x + global_camera_x) - camera_centre_x) / 2;
-                F32 camera_to_mouse_y_vel = ((input->mouse_y + global_camera_y) - camera_centre_y) / 2;
-
-                F32 camera_x_vel = (camera_to_entity_x_vel * 1.8f +
-                                    camera_to_mouse_x_vel * 0.2f) /
-                                   2.0f;
-                F32 camera_y_vel = (camera_to_entity_y_vel * 1.8f +
-                                    camera_to_mouse_y_vel * 0.2f) /
-                                   2.0f;
-
-                set_camera_position(global_camera_x + camera_x_vel,
-                                    global_camera_y + camera_y_vel);
-            }
-
-            if (entity->flags & ENTITY_FLAG_ANIMATED)
-            {
-                ++entity->animation_clock;
-                if (entity->animation_clock == entity->animation_speed)
-                {
-                    entity->frame = (entity->frame + 1) % entity->animation_length;
-                    entity->animation_clock = 0;
-                }
+                entity->flags &= ~ENTITY_FLAG_ANIMATED;
+                entity->frame = 0;
             }
         }
-        else
+
+        if (entity->flags & ENTITY_FLAG_DYNAMIC)
         {
+            B32 colliding;
+            Tile *tile; 
+            Rectangle r;
 
-            F32 editor_camera_speed = 8.0f;
+            /* NOTE(tbt): x-axis collision check */
+            colliding = false;
+            r = entity->bounds;
+            r.x += entity->x_vel;
 
-            if (!global_keyboard_focus)
+            tile = get_tile_at_position(*map, r.x, r.y);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x + r.w, r.y);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x, r.y + r.h);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x + r.w, r.y + r.h);
+            if (!tile || tile->solid) { colliding = true; }
+
+            if (!colliding) { entity->bounds.x += entity->x_vel; }
+
+            /* NOTE(tbt): y-axis collision check */
+            colliding = false;
+            r = entity->bounds;
+            r.y += entity->y_vel;
+
+            tile = get_tile_at_position(*map, r.x, r.y);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x + r.w, r.y);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x, r.y + r.h);
+            if (!tile || tile->solid) { colliding = true; }
+            tile = get_tile_at_position(*map, r.x + r.w, r.y + r.h);
+            if (!tile || tile->solid) { colliding = true; }
+
+            if (!colliding) { entity->bounds.y += entity->y_vel; }
+        }
+
+        if (entity->flags & ENTITY_FLAG_CAMERA_FOLLOW)
+        {
+            F32 camera_centre_x = global_camera_x +
+                                  global_renderer_window_w / 2.0f;
+            F32 camera_centre_y = global_camera_y +
+                                  global_renderer_window_h / 2.0f;
+
+            F32 camera_to_entity_x_vel = (entity->bounds.x + entity->bounds.w / 2.0f - camera_centre_x) / 2.0f;
+            F32 camera_to_entity_y_vel = (entity->bounds.y + entity->bounds.h / 2.0f - camera_centre_y) / 2.0f;
+
+            F32 camera_to_mouse_x_vel = ((input->mouse_x + global_camera_x) - camera_centre_x) / 2;
+            F32 camera_to_mouse_y_vel = ((input->mouse_y + global_camera_y) - camera_centre_y) / 2;
+
+            F32 camera_x_vel = (camera_to_entity_x_vel * 1.8f +
+                                camera_to_mouse_x_vel * 0.2f) /
+                               2.0f;
+            F32 camera_y_vel = (camera_to_entity_y_vel * 1.8f +
+                                camera_to_mouse_y_vel * 0.2f) /
+                               2.0f;
+
+            set_camera_position(global_camera_x + camera_x_vel,
+                                global_camera_y + camera_y_vel);
+        }
+
+        if (entity->flags & ENTITY_FLAG_ANIMATED)
+        {
+            ++entity->animation_clock;
+            if (entity->animation_clock == entity->animation_speed)
             {
-                set_camera_position(global_camera_x +
-                                    input->is_key_pressed[KEY_D] * editor_camera_speed +
-                                    input->is_key_pressed[KEY_A] * -editor_camera_speed,
-                                    global_camera_y +
-                                    input->is_key_pressed[KEY_S] * editor_camera_speed +
-                                    input->is_key_pressed[KEY_W] * -editor_camera_speed);
-            }
-
-            if (point_is_in_region(global_camera_x + input->mouse_x,
-                                   global_camera_y + input->mouse_y,
-                                   entity->bounds) &&
-                game_state == GAME_STATE_EDITOR &&
-                !global_is_mouse_over_ui)
-            {
-                stroke_rectangle(entity->bounds,
-                                 COLOUR(1.0f, 1.0f, 1.0f, 0.8f),
-                                 2.0f,
-                                 3,
-                                 global_projection_matrix);
-
-                if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-                {
-                    if (selected == entity)
-                    {
-                        dragging = entity;
-                    }
-                    else
-                    {
-                        active = entity;
-                    }
-                }
-            }
-
-            if (input->is_key_pressed[KEY_ESCAPE])
-            {
-                selected = NULL;
-            }
-
-            if (active == entity &&
-                !input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-            {
-                    selected = entity;
-            }
-
-            if (selected == entity)
-            {
-                fill_rectangle(entity->bounds,
-                               COLOUR(0.0f, 0.0f, 1.0f, 0.3f),
-                               3,
-                               global_projection_matrix);
-
-                if (input->is_key_pressed[KEY_DEL])
-                {
-                    fprintf(stderr, "deleting entity\n");
-                    entity->flags |= ENTITY_FLAG_DELETED;
-                    selected = NULL;
-                }
+                entity->frame = (entity->frame + 1) % entity->animation_length;
+                entity->animation_clock = 0;
             }
         }
 
@@ -397,11 +319,6 @@ process_entities(OpenGLFunctions *gl,
                 colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
             }
 
-            if (game_state == GAME_STATE_TILE_EDITOR)
-            {
-                colour.a = 0.4f;
-            }
-
             world_draw_sub_texture(entity->bounds,
                                    colour,
                                    texture,
@@ -412,50 +329,12 @@ process_entities(OpenGLFunctions *gl,
 
         previous = entity;
     }
-
-    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-    {
-        active = NULL;
-    }
-
-    if (dragging)
-    {
-        F32 drag_x = input->mouse_x + global_camera_x;
-        F32 drag_y = input->mouse_y + global_camera_y;
-
-        if (input->is_key_pressed[KEY_LEFT_ALT])
-        {
-            dragging->bounds.x = drag_x;
-            dragging->bounds.y = drag_y;
-        }
-        else
-        {
-#define GRID_SNAP 4.0f
-            dragging->bounds.x = floor(drag_x / GRID_SNAP) * GRID_SNAP;
-            dragging->bounds.y = floor(drag_y / GRID_SNAP) * GRID_SNAP;
-        }
-
-        if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT] ||
-            global_is_mouse_over_ui)
-        {
-            dragging = NULL;
-        }
-    }
-
-    if (game_state == GAME_STATE_EDITOR)
-    {
-        return selected;
-    }
-    else
-    {
-        return NULL;
-    }
 }
 
 internal void
 render_tiles(OpenGLFunctions *gl,
              GameMap map,
-             I32 game_state)
+             B32 editor_mode)
 {
     I32 x, y;
 
@@ -499,24 +378,26 @@ render_tiles(OpenGLFunctions *gl,
                 texture = global_flat_colour_texture;
             }
             
-            Colour colour;
-            if (game_state == GAME_STATE_TILE_EDITOR &&
-                tile.solid)
+            if (editor_mode && tile.solid)
             {
-                colour = COLOUR(1.0f, 0.7f, 0.7f, 1.0f);
+                world_draw_sub_texture(RECTANGLE((F32)x * TILE_SIZE,
+                                                 (F32)y * TILE_SIZE,
+                                                 (F32)TILE_SIZE,
+                                                 (F32)TILE_SIZE),
+                                        COLOUR(1.0f, 0.7f, 0.7f, 1.0f),
+                                        texture,
+                                        tile.sub_texture);
             }
             else
             {
-                colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
+                world_draw_sub_texture(RECTANGLE((F32)x * TILE_SIZE,
+                                                 (F32)y * TILE_SIZE,
+                                                 (F32)TILE_SIZE,
+                                                 (F32)TILE_SIZE),
+                                        COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                                        texture,
+                                        tile.sub_texture);
             }
-
-            world_draw_sub_texture(RECTANGLE((F32)x * TILE_SIZE,
-                                             (F32)y * TILE_SIZE,
-                                             (F32)TILE_SIZE,
-                                             (F32)TILE_SIZE),
-                                    colour,
-                                    texture,
-                                    tile.sub_texture);
         }
     }
 }

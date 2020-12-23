@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 21 Dec 2020
+  Updated : 23 Dec 2020
   License : MIT, at end of file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -47,6 +47,8 @@ free_for_stb(void *p)
 #define TEXTURE_PATH(_path) ("../assets/textures/" _path)
 #define FONT_PATH(_path) ("../assets/fonts/" _path)
 
+typedef struct Asset Asset;
+
 typedef U32 TextureID;
 
 internal TextureID global_currently_bound_texture = 0;
@@ -61,6 +63,7 @@ typedef struct GameEntity GameEntity;
 typedef struct Tile Tile;
 typedef struct
 {
+    Asset *assets;
     MemoryArena *arena;
     U64 entity_count;
     GameEntity *entities;
@@ -80,11 +83,10 @@ enum
 
 #define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
 
-typedef struct Asset Asset;
 struct Asset
 {
     Asset *next_hash;
-    Asset *next_loaded;
+    Asset *next_in_level;
     I32 type;
     B32 loaded;
     I8 *path;
@@ -98,8 +100,6 @@ struct Asset
 };
 
 internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
-
-internal Asset *global_loaded_assets = NULL;
 
 internal Asset *
 new_asset_from_path(MemoryArena *memory,
@@ -208,7 +208,11 @@ load_texture(OpenGLFunctions *gl,
                        &(asset->texture.height),
                        NULL, 4);
 
-    assert(pixels);
+    if (!pixels)
+    {
+        temporary_memory_end(&global_static_memory);
+        return;
+    }
 
     gl->GenTextures(1, &(asset->texture.id));
     gl->BindTexture(GL_TEXTURE_2D, asset->texture.id);
@@ -232,8 +236,6 @@ load_texture(OpenGLFunctions *gl,
 
     asset->type = ASSET_TYPE_TEXTURE;
     asset->loaded = true;
-    asset->next_loaded = global_loaded_assets;
-    global_loaded_assets = asset;
 }
 
 internal void
@@ -247,10 +249,6 @@ unload_texture(OpenGLFunctions *gl,
     asset->texture.width = 0;
     asset->texture.height = 0;
     asset->loaded = false;
-
-    Asset **indirect = &global_loaded_assets;
-    while (*indirect != asset) { indirect = &(*indirect)->next_loaded; }
-    *indirect = (*indirect)->next_loaded;
 }
 
 internal SubTexture
@@ -379,35 +377,6 @@ load_wav(I8 *path)
     result.pan = 0.5f;
 
     return result;
-}
-
-internal void
-unload_all_assets(OpenGLFunctions *gl)
-{
-    Asset *asset = global_loaded_assets;
-
-    while (asset)
-    {
-        if (!asset->loaded) { continue; }
-
-        switch (asset->type)
-        {
-            case ASSET_TYPE_TEXTURE:
-            {
-                unload_texture(gl, asset);
-                break;
-            }
-            default:
-            {
-                fprintf(stderr, "warning: skipping asset with no type");
-                break;
-            }
-        }
-
-        asset = asset->next_loaded;
-    }
-
-    global_loaded_assets = NULL;
 }
 
 /*

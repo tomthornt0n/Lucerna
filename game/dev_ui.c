@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 21 Dec 2020
+  Updated : 23 Dec 2020
   License : MIT, at end of file
   Notes   : terrible, but only for dev tools so just about acceptable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -961,6 +961,7 @@ internal void
 do_sprite_picker(PlatformState *input,
                  I8 *name,
                  Asset *texture,
+                 F32 width,
                  F32 snap,
                  SubTexture *sub_texture)
 {
@@ -988,9 +989,18 @@ do_sprite_picker(PlatformState *input,
     node->next_under_mouse = NULL;
 
     node->type = UI_NODE_TYPE_SPRITE_PICKER;
-    node->max_width = texture->texture.width;
-    node->max_height = texture->texture.height;
     node->texture = texture;
+    node->max_width = width;
+    if (texture &&
+        texture->loaded)
+    {
+        node->max_height = texture->texture.height * (width /
+                                                      texture->texture.width);
+    }
+    else
+    {
+        node->max_height = width;
+    }
 
     if (!node->hidden)
     {
@@ -1002,35 +1012,39 @@ do_sprite_picker(PlatformState *input,
             node->next_under_mouse = global_widgets_under_mouse;
             global_widgets_under_mouse = node;
         }
-        if (global_hot_widget == node &&
-            input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+
+        if (texture)
         {
-            global_active_widget = node;
-            node->dragging = true;
-
-            sub_texture->min_x = floor((input->mouse_x - node->bounds.x) / snap) * snap;
-            sub_texture->min_x /= texture->texture.width;
-
-            sub_texture->min_y = floor((input->mouse_y - node->bounds.y) / snap) * snap;
-            sub_texture->min_y /= texture->texture.height;
-        }
-
-        if (node->dragging)
-        {
-            F32 drag_x = clamp_f(input->mouse_x - node->bounds.x, 0.0f, node->max_width);
-            F32 drag_y = clamp_f(input->mouse_y - node->bounds.y, 0.0f, node->max_height);
-            
-            sub_texture->max_x = (ceil(drag_x / snap) * snap) / node->max_width;
-            sub_texture->max_y = (ceil(drag_y / snap) * snap) / node->max_height;
-
-            if (!global_hot_widget)
+            if (global_hot_widget == node &&
+                input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
             {
                 global_active_widget = node;
+                node->dragging = true;
+
+                sub_texture->min_x = floor((input->mouse_x - node->bounds.x) / snap) * snap;
+                sub_texture->min_x /= texture->texture.width;
+
+                sub_texture->min_y = floor((input->mouse_y - node->bounds.y) / snap) * snap;
+                sub_texture->min_y /= texture->texture.height;
             }
 
-            if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+            if (node->dragging)
             {
-                node->dragging = false;
+                F32 drag_x = clamp_f(input->mouse_x - node->bounds.x, 0.0f, node->max_width);
+                F32 drag_y = clamp_f(input->mouse_y - node->bounds.y, 0.0f, node->max_height);
+                
+                sub_texture->max_x = (ceil(drag_x / snap) * snap) / node->max_width;
+                sub_texture->max_y = (ceil(drag_y / snap) * snap) / node->max_height;
+
+                if (!global_hot_widget)
+                {
+                    global_active_widget = node;
+                }
+
+                if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+                {
+                    node->dragging = false;
+                }
             }
         }
 
@@ -1734,12 +1748,23 @@ layout_and_render_ui_node(PlatformState *input,
             node->bounds = RECTANGLE(x, y, node->max_width, node->max_height);
             node->interactable = node->bounds;
 
+            stroke_rectangle(node->bounds,
+                             FG_COL_1,
+                             -STROKE_WIDTH,
+                             node->sort,
+                             global_ui_projection_matrix);
+
+            fill_rectangle(node->bounds,
+                           BG_COL_1,
+                           node->sort,
+                           global_ui_projection_matrix);
+
             draw_texture(node->bounds,
                          COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                         node->texture->texture,
+                         node->texture && node->texture->loaded ?
+                         node->texture->texture : global_flat_colour_texture,
                          node->sort,
                          global_ui_projection_matrix);
-
 
             stroke_rectangle(node->bg,
                              FG_COL_1,

@@ -25,6 +25,8 @@ typedef double   F64;
 
 typedef uint32_t B32;
 
+#include "errno.h"
+
 internal F64
 min_f(F64 a,
       F64 b)
@@ -344,9 +346,6 @@ enum
 {
     GAME_STATE_PLAYING,
     GAME_STATE_EDITOR,
-    GAME_STATE_TILE_EDITOR,
-    GAME_STATE_OPEN_MAP,
-    GAME_STATE_NEW_MAP,
 };
 
 typedef struct MemoryArena MemoryArena;
