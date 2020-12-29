@@ -5,7 +5,7 @@
 #include "khrplatform.h"
 #include "stdint.h"
 
-#define true 1
+#define true  1
 #define false 0
 
 #define internal static
@@ -105,6 +105,7 @@ hash_string(I8 *string,
     return hash % bounds;
 }
 
+#define BIT(n) (1 << n)
 
 #define RECTANGLE(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
 typedef struct

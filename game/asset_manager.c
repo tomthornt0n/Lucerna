@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 29 Dec 2020
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -59,24 +59,11 @@ typedef struct
     I32 width, height;
 } Texture;
 
-typedef struct GameEntity GameEntity;
-typedef struct Tile Tile;
-typedef struct
-{
-    Asset *assets;
-    MemoryArena *arena;
-    U64 entity_count;
-    GameEntity *entities;
-    U32 tilemap_width, tilemap_height;
-    Tile *tilemap;
-} GameMap;
-
 enum
 {
     ASSET_TYPE_NONE,
 
     ASSET_TYPE_TEXTURE,
-    ASSET_TYPE_MAP,
 };
 
 #define ASSET_HASH_TABLE_SIZE (512)
@@ -86,7 +73,7 @@ enum
 struct Asset
 {
     Asset *next_hash;
-    Asset *next_in_level;
+    Asset *next_loaded;
     I32 type;
     B32 loaded;
     I8 *path;
@@ -94,41 +81,13 @@ struct Asset
     union
     {
         Texture texture;
-        GameMap map;
         /* TODO(tbt): audio assets */
     };
 };
 
 internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
 
-internal Asset *
-new_asset_from_path(MemoryArena *memory,
-                    I8 *path)
-{
-    Asset *result;
-    U64 index = asset_hash(path);
-
-    if (global_assets_dict[index].path &&
-        strcmp(global_assets_dict[index].path, path))
-    {
-        /* NOTE(tbt): hash collision */
-        Asset *tail;
-
-        result = arena_allocate(memory, sizeof(*result));
-
-        while (tail->next_hash) { tail = tail->next_hash; }
-        tail->next_hash = result;
-    }
-    else
-    {
-        result = global_assets_dict + index;
-    }
-
-    result->path = arena_allocate(memory, strlen(path) + 1);
-    strcpy(result->path, path);
-
-    return result;
-}
+Asset *global_loaded_assets = NULL;
 
 internal Asset *
 asset_from_path(I8 *path)
@@ -138,7 +97,7 @@ asset_from_path(I8 *path)
 
     while (result)
     {
-        if (!result->path) { return NULL; }
+        if (!result->path) { goto new_asset; }
 
         if (strcmp(result->path, path))
         {
@@ -149,6 +108,30 @@ asset_from_path(I8 *path)
             return result;
         }
     }
+
+    return NULL;
+
+new_asset:
+    if (global_assets_dict[index].path &&
+        strcmp(global_assets_dict[index].path, path))
+    {
+        /* NOTE(tbt): hash collision */
+        Asset *tail;
+
+        result = arena_allocate(&global_static_memory, sizeof(*result));
+
+        while (tail->next_hash) { tail = tail->next_hash; }
+        tail->next_hash = result;
+    }
+    else
+    {
+        result = global_assets_dict + index;
+    }
+
+    result->path = arena_allocate(&global_static_memory, strlen(path) + 1);
+    strcpy(result->path, path);
+
+    return result;
 }
 
 #define ENTIRE_TEXTURE ((SubTexture){ 0.0f, 0.0f, 1.0f, 1.0f })
@@ -197,7 +180,8 @@ load_texture(OpenGLFunctions *gl,
 {
     U8 *pixels;
 
-    if (asset->loaded) { return; }
+    if (!asset) { return; }
+    if (!asset->path || asset->loaded) { return; }
 
     assert(asset->path);
 
@@ -236,6 +220,8 @@ load_texture(OpenGLFunctions *gl,
 
     asset->type = ASSET_TYPE_TEXTURE;
     asset->loaded = true;
+    asset->next_loaded = global_loaded_assets;
+    global_loaded_assets = asset;
 }
 
 internal void
@@ -249,6 +235,10 @@ unload_texture(OpenGLFunctions *gl,
     asset->texture.width = 0;
     asset->texture.height = 0;
     asset->loaded = false;
+
+    Asset **indirect = &global_loaded_assets;
+    while (*indirect != asset) { indirect = &(*indirect)->next_loaded; }
+    *indirect = (*indirect)->next_loaded;
 }
 
 internal SubTexture

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 29 Dec 2020
   License : N/A
   Notes   : terrible, but only for dev tools so just about acceptable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -168,7 +168,6 @@ struct UINode
     F32 scroll;
     B32 hidden;
     Colour colour;
-    U32 buffer_size;
     F32 min, max;
     Asset *texture;
 };
@@ -861,12 +860,13 @@ do_colour_picker(PlatformState *input,
     return node->colour;
 }
 
-internal I8 *
+internal void
 do_text_entry(PlatformState *input,
               I8 *name,
-              F32 width)
+              I8 *buffer,
+              U32 buffer_size)
 {
-    /* TODO(tbt): movable cursor */
+    /* TODO(tbt): proper cursor */
 
     UINode *node;
 
@@ -875,10 +875,8 @@ do_text_entry(PlatformState *input,
     */
     F32 char_width = get_text_bounds(global_ui_font, 0.0f, 0.0f, 0.0f, "e").w;
 
-    /* NOTE(tbt): allow one character for NULL, one for padding and one for
-                  safety
-    */
-    U32 buffer_size = width / char_width - 3;
+    /* NOTE(tbt): allow a few characters for padding */
+    F32 width = (buffer_size + 4) * char_width;
 
     if (!(node = widget_state_from_string(name)))
     {
@@ -901,15 +899,9 @@ do_text_entry(PlatformState *input,
     node->next_sibling = NULL;
     node->next_under_mouse = NULL;
 
-    if (node->buffer_size != buffer_size)
-    {
-        node->label = arena_allocate(&global_static_memory, buffer_size);
-    }
-
-    node->buffer_size = buffer_size;
-
-    node->type = UI_NODE_TYPE_ENTRY;
+    node->label = buffer;
     node->max_width = width;
+    node->type = UI_NODE_TYPE_ENTRY;
 
     if (!node->hidden)
     {
@@ -953,8 +945,6 @@ do_text_entry(PlatformState *input,
             node->toggled = false;
         }
     }
-
-    return node->label;
 }
 
 internal void
@@ -1021,11 +1011,14 @@ do_sprite_picker(PlatformState *input,
                 global_active_widget = node;
                 node->dragging = true;
 
-                sub_texture->min_x = floor((input->mouse_x - node->bounds.x) / snap) * snap;
-                sub_texture->min_x /= texture->texture.width;
+                if (sub_texture)
+                {
+                    sub_texture->min_x = floor((input->mouse_x - node->bounds.x) / snap) * snap;
+                    sub_texture->min_x /= texture->texture.width;
 
-                sub_texture->min_y = floor((input->mouse_y - node->bounds.y) / snap) * snap;
-                sub_texture->min_y /= texture->texture.height;
+                    sub_texture->min_y = floor((input->mouse_y - node->bounds.y) / snap) * snap;
+                    sub_texture->min_y /= texture->texture.height;
+                }
             }
 
             if (node->dragging)
@@ -1033,8 +1026,11 @@ do_sprite_picker(PlatformState *input,
                 F32 drag_x = clamp_f(input->mouse_x - node->bounds.x, 0.0f, node->max_width);
                 F32 drag_y = clamp_f(input->mouse_y - node->bounds.y, 0.0f, node->max_height);
                 
-                sub_texture->max_x = (ceil(drag_x / snap) * snap) / node->max_width;
-                sub_texture->max_y = (ceil(drag_y / snap) * snap) / node->max_height;
+                if (sub_texture)
+                {
+                    sub_texture->max_x = (ceil(drag_x / snap) * snap) / node->max_width;
+                    sub_texture->max_y = (ceil(drag_y / snap) * snap) / node->max_height;
+                }
 
                 if (!global_hot_widget)
                 {
@@ -1049,10 +1045,13 @@ do_sprite_picker(PlatformState *input,
         }
 
         F32 selected_x, selected_y, selected_w, selected_h;
-        selected_x = sub_texture->min_x * node->max_width;
-        selected_y = sub_texture->min_y * node->max_height;
-        selected_w = sub_texture->max_x * node->max_width - selected_x;
-        selected_h = sub_texture->max_y * node->max_height - selected_y;
+        if (sub_texture)
+        {
+            selected_x = sub_texture->min_x * node->max_width;
+            selected_y = sub_texture->min_y * node->max_height;
+            selected_w = sub_texture->max_x * node->max_width - selected_x;
+            selected_h = sub_texture->max_y * node->max_height - selected_y;
+        }
 
         node->bg = RECTANGLE(node->bounds.x + selected_x,
                              node->bounds.y + selected_y,
@@ -1061,7 +1060,8 @@ do_sprite_picker(PlatformState *input,
 }
 
 internal void
-layout_and_render_ui_node(PlatformState *input,
+layout_and_render_ui_node(OpenGLFunctions *gl,
+                          PlatformState *input,
                           UINode *node,
                           F32 x, F32 y)
 {
@@ -1107,7 +1107,8 @@ layout_and_render_ui_node(PlatformState *input,
                     tallest = 0.0f;
                 }
 
-                layout_and_render_ui_node(input,
+                layout_and_render_ui_node(gl,
+                                          input,
                                           child,
                                           current_x,
                                           current_y);
@@ -1308,7 +1309,8 @@ layout_and_render_ui_node(PlatformState *input,
                 child->max_width = min_f(child->max_width,
                                                 node->bounds.w);
 
-                layout_and_render_ui_node(input,
+                layout_and_render_ui_node(gl,
+                                          input,
                                           child,
                                           node->bg.x + PADDING,
                                           current_y);
@@ -1506,7 +1508,8 @@ layout_and_render_ui_node(PlatformState *input,
                     mask_rectangular_region(node->bounds,
                                             child->sort)
                     {
-                        layout_and_render_ui_node(input,
+                        layout_and_render_ui_node(gl,
+                                                  input,
                                                   child,
                                                   current_x,
                                                   current_y - node->scroll);
@@ -1759,10 +1762,10 @@ layout_and_render_ui_node(PlatformState *input,
                            node->sort,
                            global_ui_projection_matrix);
 
-            draw_texture(node->bounds,
+            draw_texture(gl,
+                         node->bounds,
                          COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                         node->texture && node->texture->loaded ?
-                         node->texture->texture : global_flat_colour_texture,
+                         node->texture,
                          node->sort,
                          global_ui_projection_matrix);
 
@@ -1780,14 +1783,14 @@ layout_and_render_ui_node(PlatformState *input,
 
             while (child)
             {
-                layout_and_render_ui_node(input, child, x, y);
+                layout_and_render_ui_node(gl, input, child, x, y);
                 child = child->next_sibling;
             }
         }
     }
 }
 
-#define do_ui(_input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_input))))
+#define do_ui(_gl, _input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_gl), (_input))))
 
 internal void
 prepare_ui(void)
@@ -1797,7 +1800,8 @@ prepare_ui(void)
 }
 
 internal void
-finish_ui(PlatformState *input)
+finish_ui(OpenGLFunctions *gl,
+          PlatformState *input)
 {
     global_is_mouse_over_ui = global_is_mouse_over_ui              ||
                               (global_widgets_under_mouse != NULL) ||
@@ -1815,7 +1819,7 @@ finish_ui(PlatformState *input)
         widget_under_mouse = widget_under_mouse->next_under_mouse;
     }
 
-    layout_and_render_ui_node(input, &global_ui_root, 0, 0);
+    layout_and_render_ui_node(gl, input, &global_ui_root, 0, 0);
     memset(&global_ui_root, 0, sizeof(global_ui_root));
     global_ui_root.parent = &global_ui_root;
 

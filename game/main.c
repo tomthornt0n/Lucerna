@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 29 Dec 2020
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -26,43 +26,39 @@ internal MemoryArena global_level_memory;
 #include "asset_manager.c"
 #include "math.c"
 
-Font *global_ui_font;
+internal Font *global_ui_font;
 
 #include "renderer.c"
 #include "dev_ui.c"
-#include "entities.c"
-#include "serialisation.c"
 
-internal Asset *global_map = NULL;
+typedef struct GameEntity GameEntity;
+typedef struct Tile Tile;
+struct GameMap
+{
+    I8 path[64];
+    U64 entity_count;
+    GameEntity *entities;
+    U32 tilemap_width, tilemap_height;
+    Tile *tilemap;
+} global_map = {{0}};
+#include "entities.c"
+#include "maps.c"
 
 #include "editor.c"
 
 void
 game_init(OpenGLFunctions *gl)
 {
-    initialise_arena_with_new_memory(&global_static_memory, ONE_GB);
-    initialise_arena_with_new_memory(&global_frame_memory, ONE_MB);
-    initialise_arena_with_new_memory(&global_level_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_static_memory, 10 * ONE_MB);
+    initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
+    initialise_arena_with_new_memory(&global_level_memory, 2 * ONE_MB);
 
     initialise_renderer(gl);
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
-
-    Asset *spritesheet;
-    if (!(spritesheet = asset_from_path(TEXTURE_PATH("spritesheet.png"))))
-    {
-        spritesheet = new_asset_from_path(&global_static_memory, TEXTURE_PATH("spritesheet.png"));
-    }
-
-    load_texture(gl, spritesheet);
-
-    global_player_down_texture = slice_animation(spritesheet->texture, 48.0f, 0.0f, 16.0f, 16.0f, 4, 1);
-    global_player_left_texture = slice_animation(spritesheet->texture, 48.0f, 16.0f, 16.0f, 16.0f, 4, 1);
-    global_player_right_texture = slice_animation(spritesheet->texture, 48.0f, 32.0f, 16.0f, 16.0f, 4, 1);
-    global_player_up_texture = slice_animation(spritesheet->texture, 48.0f, 48.0f, 16.0f, 16.0f, 4, 1);
-
-    unload_texture(gl, spritesheet);
 }
+
+internal I32 global_game_state = GAME_STATE_PLAYING;
 
 void
 game_update_and_render(OpenGLFunctions *gl,
@@ -70,7 +66,6 @@ game_update_and_render(OpenGLFunctions *gl,
                        U64 timestep_in_ns)
 {
     static U32 previous_width = 0, previous_height = 0;
-    static I32 game_state = GAME_STATE_PLAYING;
     static U32 editor_mode_toggle_cooldown_timer = 500;
 
     if (input->window_width != previous_width ||
@@ -86,25 +81,31 @@ game_update_and_render(OpenGLFunctions *gl,
         editor_mode_toggle_cooldown_timer > 15)
     {
         editor_mode_toggle_cooldown_timer = 0;
-        game_state = game_state == GAME_STATE_PLAYING ?
-                     GAME_STATE_EDITOR :
-                     GAME_STATE_PLAYING;
+
+        if (global_game_state == GAME_STATE_EDITOR)
+        {
+            save_map();
+            global_game_state = GAME_STATE_PLAYING;
+            global_editor_selected_entity = NULL;
+        }
+        else if (global_game_state == GAME_STATE_PLAYING)
+        {
+            load_map(gl, global_map.path); /* NOTE(tbt): reload map to reset level */
+            global_game_state = GAME_STATE_EDITOR;
+        }
     }
 
-    if (game_state == GAME_STATE_EDITOR)
+    if (global_game_state == GAME_STATE_EDITOR)
     {
-        do_ui(input)
+        do_ui(gl, input)
         {
             do_editor(gl, input);
         }
     }
-    else if (game_state == GAME_STATE_PLAYING)
+    else if (global_game_state == GAME_STATE_PLAYING)
     {
-        if (global_map)
-        {
-            render_tiles(gl, global_map->map, false);
-            process_entities(gl, input, &global_map->map);
-        }
+        if (global_map.tilemap) { render_tiles(gl, false); }
+        process_entities(gl, input);
     }
 
     process_render_queue(gl);
@@ -117,10 +118,9 @@ game_update_and_render(OpenGLFunctions *gl,
 void
 game_cleanup(OpenGLFunctions *gl)
 {
-    if (global_map)
+    if (global_game_state == GAME_STATE_EDITOR)
     {
-        save_map(global_map);
-        unload_map(gl, global_map);
+        save_map();
     }
 
     free(global_static_memory.buffer);

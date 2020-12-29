@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 29 Dec 2020
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -497,22 +497,30 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
-#define ui_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), 5, global_ui_projection_matrix)
-#define world_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), 2, global_projection_matrix)
+#define ui_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), 5, global_ui_projection_matrix)
+#define world_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), 2, global_projection_matrix)
 internal void
-draw_sub_texture(Rectangle rectangle,
+draw_sub_texture(OpenGLFunctions *gl,
+                 Rectangle rectangle,
                  Colour colour,
-                 Texture texture,
+                 Asset *texture,
                  SubTexture sub_texture,
                  U32 sort,
                  F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
+    if (texture)
+    {
+        load_texture(gl, texture);
+        assert(texture->loaded);
+    }
+
     message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
     message.rectangle = rectangle;
     message.colour = colour;
-    message.texture = texture;
+    message.texture = texture != NULL ? texture->texture :
+                                        global_flat_colour_texture;
     message.sub_texture = sub_texture;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -520,16 +528,18 @@ draw_sub_texture(Rectangle rectangle,
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
-#define world_draw_texture(_rectangle, _colour, _texture) draw_texture((_rectangle), (_colour), (_texture), 2, global_projection_matrix)
+#define ui_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
+#define world_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), 2, global_projection_matrix)
 internal void
-draw_texture(Rectangle rectangle,
+draw_texture(OpenGLFunctions *gl,
+             Rectangle rectangle,
              Colour colour,
-             Texture texture,
+             Asset *texture,
              U32 sort,
              F32 *projection_matrix)
 {
-    draw_sub_texture(rectangle,
+    draw_sub_texture(gl,
+                     rectangle,
                      colour,
                      texture,
                      ENTIRE_TEXTURE,
@@ -545,12 +555,17 @@ fill_rectangle(Rectangle rectangle,
                U32 sort,
                F32 *projection_matrix)
 {
-    draw_sub_texture(rectangle,
-                     colour,
-                     global_flat_colour_texture,
-                     ENTIRE_TEXTURE,
-                     sort,
-                     projection_matrix);
+    RenderMessage message = {0};
+
+    message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
+    message.rectangle = rectangle;
+    message.colour = colour;
+    message.texture = global_flat_colour_texture;
+    message.sub_texture = ENTIRE_TEXTURE;
+    message.projection_matrix = projection_matrix;
+    message.sort = sort;
+
+    enqueue_render_message(&global_render_queue, message);
 }
 
 #define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, global_ui_projection_matrix)
@@ -609,7 +624,7 @@ typedef struct
 } Gradient;
 
 #define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 5, global_ui_projection_matrix)
-#define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 2, global_ui_matrix)
+#define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 2, global_projection_matrix)
 internal void
 draw_gradient(Rectangle rectangle,
               Gradient gradient,
