@@ -47,9 +47,9 @@ struct GameMap
 #include "editor.c"
 
 void
-print_message(void)
+print_message(void *arg)
 {
-    fprintf(stderr, "hello from another thread!\n");
+    fprintf(stderr, (I8 *)arg);
 }
 
 void
@@ -61,14 +61,8 @@ game_init(OpenGLFunctions *gl)
 
     initialise_renderer(gl);
 
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
-    platform_enqueue_work(print_message);
+    I8 message[] = "this message will be printed from another thread\n";
+    platform_enqueue_work(print_message, message, strlen(message) + 1);
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
 }

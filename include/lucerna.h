@@ -278,6 +278,8 @@ point_is_in_region(F32 x, F32 y,
 #define MOUSE_BUTTON_7          6
 #define MOUSE_BUTTON_8          7
 
+// NOTE(tbt): the platform layer constructs a linked list of the ASCII values relating
+//            to all of the key presses for a given frame
 typedef struct KeyTyped KeyTyped;
 struct KeyTyped
 {
@@ -285,6 +287,7 @@ struct KeyTyped
     I8 key;
 };
 
+// NOTE(tbt): input recorded by the platform layer in the main event processing loop
 typedef struct
 {
     B32 is_key_pressed[256];
@@ -295,6 +298,7 @@ typedef struct
     U32 window_width, window_height;
 } PlatformState;
 
+// NOTE(tbt): functions loaded by the platform layer before the game begins
 typedef struct
 {
     PFNGLATTACHSHADERPROC            AttachShader;
@@ -349,23 +353,35 @@ enum
     GAME_STATE_EDITOR,
 };
 
+// NOTE(tbt): memory arenas are used by both the platform layer and the game
 typedef struct MemoryArena MemoryArena;
 
-typedef struct PlatformTimer PlatformTimer;
+// NOTE(tbt): the functions called by the platform layer
+typedef void ( *GameInit) (OpenGLFunctions *gl);                                                      // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
+typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, U64 timestep_in_ns); // NOTE(tbt): called every frame
+typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);                                   // NOTE(tbt): called from the audio thread when the buffer needs refilling
+typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);                                     // NOTE(tbt): called when the window is closed and the main loop exits
 
-typedef void ( *GameInit) (OpenGLFunctions *gl);
-typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, U64 timestep_in_ns);
-typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);
-typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);
-
-typedef void ( *WorkFunction) (void);
-
+// NOTE(tbt): control for a lock to be used with the audio thread
 void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
+
+// NOTE(tbt): I don't think this works... :(
 void platform_set_vsync(B32 enabled);
+
+// NOTE(tbt): opaque structure which implementations varies depending on platform
+typedef struct PlatformTimer PlatformTimer;
+// NOTE(tbt): returns the current time in the opaque `PlatformTimer` format,
+//            which can be compared against by `platform_end_timer()` to get
+//            the interval since the timer was 'began'
 PlatformTimer *platform_start_timer(MemoryArena *arena);
-U64 platform_end_timer(PlatformTimer *timer);
-void platform_enqueue_work(WorkFunction work);
+U64 platform_end_timer(PlatformTimer *timer); // NOTE(tbt): returns the elapsed time in ns since the timer was 'began'
+
+typedef void ( *WorkFunction) (void *arg); // NOTE(tbt): prototype for functions which can be pushed to a queue to be executed by a thread pool
+// NOTE(tbt): `arg_size` is first copied from `arg_buffer` on the main thread
+//            before `work` is called on the helper thread with a pointer to the
+//            copy as an argument
+void platform_enqueue_work(WorkFunction work, void *arg_buffer, U32 arg_size);
 
 #endif
 

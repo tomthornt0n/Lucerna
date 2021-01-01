@@ -373,6 +373,7 @@ typedef struct WorkUnit WorkUnit;
 struct WorkUnit
 {
     WorkUnit *next;
+    void *arg;
     WorkFunction function;
 };
 
@@ -383,11 +384,14 @@ pthread_cond_t global_work_queue_cond = PTHREAD_COND_INITIALIZER;
 
 internal WorkUnit *global_work_queue_start = NULL, *global_work_queue_end = NULL;
 
-void platform_enqueue_work(WorkFunction function)
+void platform_enqueue_work(WorkFunction function,
+                           void *arg_buffer, U32 arg_size)
 {
     WorkUnit *work = arena_allocate(&global_platform_static_memory, sizeof(*work));
     work->next = NULL;
     work->function = function;
+    work->arg = arena_allocate(&global_platform_static_memory, arg_size);
+    memcpy(work->arg, arg_buffer, arg_size);
 
     pthread_mutex_lock(&global_work_queue_lock);
     if (global_work_queue_end)
@@ -433,7 +437,7 @@ process_work_queue(void *arg)
 
         if (work)
         {
-            work->function();
+            work->function(work->arg);
         }
     }
 }
