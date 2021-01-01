@@ -390,8 +390,21 @@ void platform_enqueue_work(WorkFunction function,
     WorkUnit *work = arena_allocate(&global_platform_static_memory, sizeof(*work));
     work->next = NULL;
     work->function = function;
+
+    //
+    // NOTE(tbt): arguments passed to commands will remain allocated forever,
+    //            which could quickly add up if a command is being pushed every
+    //            frame. are arena's the right thing to use here?
+    //            perhaps I just use `malloc()` and allow the command to
+    //            `free()` the argument?
+    //
+
     work->arg = arena_allocate(&global_platform_static_memory, arg_size);
-    memcpy(work->arg, arg_buffer, arg_size);
+    memcpy(work->arg, arg_buffer, arg_size); // NOTE(tbt): make a copy of the
+                                             // argument to prevent the main
+                                             // thread and worker threads
+                                             // reading/writing to/from the same
+                                             // memory
 
     pthread_mutex_lock(&global_work_queue_lock);
     if (global_work_queue_end)
@@ -440,6 +453,34 @@ process_work_queue(void *arg)
             work->function(work->arg);
         }
     }
+}
+
+struct MutexLock
+{
+    pthread_mutex_t mutex;
+};
+
+MutexLock *
+platform_allocate_mutex(void)
+{
+    MutexLock *result = arena_allocate(&global_platform_static_memory, sizeof(*result));
+
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    result->mutex = mutex;
+
+    return result;
+}
+
+void
+platform_lock_mutex(MutexLock *lock)
+{
+    pthread_mutex_lock(&lock->mutex);
+}
+
+void
+platform_unlock_mutex(MutexLock *lock)
+{
+    pthread_mutex_unlock(&lock->mutex);
 }
 
 I32

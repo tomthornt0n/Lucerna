@@ -46,10 +46,15 @@ struct GameMap
 
 #include "editor.c"
 
+MutexLock *global_message_lock;
+
 void
 print_message(void *arg)
 {
-    fprintf(stderr, (I8 *)arg);
+    platform_lock_mutex(global_message_lock);
+    I8 *buffer = *((I8 **)arg);
+    snprintf(buffer, 64, "\n\n\x1b[32mthis message was written by another thread\x1b[0m\n\n\n\n");
+    platform_unlock_mutex(global_message_lock);
 }
 
 void
@@ -61,10 +66,21 @@ game_init(OpenGLFunctions *gl)
 
     initialise_renderer(gl);
 
-    I8 message[] = "this message will be printed from another thread\n";
-    platform_enqueue_work(print_message, message, strlen(message) + 1);
+    global_message_lock = platform_allocate_mutex();
+
+    //
+    // NOTE(tbt): write message into buffer while main thread loads font to
+    //            verify `MutexLock` works
+    //
+
+    I8 *message = arena_allocate(&global_static_memory, 64);
+    platform_enqueue_work(print_message, &message, sizeof(&message));
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
+
+    platform_lock_mutex(global_message_lock);
+    fprintf(stderr, message);
+    platform_unlock_mutex(global_message_lock);
 }
 
 internal I32 global_game_state = GAME_STATE_PLAYING;

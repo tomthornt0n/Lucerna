@@ -332,8 +332,8 @@ process_entities(OpenGLFunctions *gl,
             Tile *tile; 
             Rectangle r;
             
-            // HACK(tbt): only checks each corner, so doesn't work for entities
-            //            larger than `TILE_SIZE`
+            // BUG(tbt): only checks each corner, so doesn't work for entities
+            //           larger than `TILE_SIZE`
             // TODO(tbt): step through each edge in intervals of TILE_SIZE and
             //            check for collisions
 

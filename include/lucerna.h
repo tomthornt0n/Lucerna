@@ -383,5 +383,11 @@ typedef void ( *WorkFunction) (void *arg); // NOTE(tbt): prototype for functions
 //            copy as an argument
 void platform_enqueue_work(WorkFunction work, void *arg_buffer, U32 arg_size);
 
+// NOTE(tbt): mutex locks for if data needs to be shared with commands in the work queue
+typedef struct MutexLock MutexLock;
+MutexLock *platform_allocate_mutex(void);
+void platform_lock_mutex(MutexLock *lock);
+void platform_unlock_mutex(MutexLock *lock);
+
 #endif
 
