@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -22,8 +22,8 @@ internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
-#include "audio.c"
 #include "asset_manager.c"
+#include "audio.c"
 #include "math.c"
 
 internal Font *global_ui_font;
@@ -47,6 +47,12 @@ struct GameMap
 #include "editor.c"
 
 void
+print_message(void)
+{
+    fprintf(stderr, "hello from another thread!\n");
+}
+
+void
 game_init(OpenGLFunctions *gl)
 {
     initialise_arena_with_new_memory(&global_static_memory, 10 * ONE_MB);
@@ -54,6 +60,15 @@ game_init(OpenGLFunctions *gl)
     initialise_arena_with_new_memory(&global_level_memory, 2 * ONE_MB);
 
     initialise_renderer(gl);
+
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
+    platform_enqueue_work(print_message);
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
 }
@@ -90,9 +105,15 @@ game_update_and_render(OpenGLFunctions *gl,
         }
         else if (global_game_state == GAME_STATE_PLAYING)
         {
-            load_map(gl, global_map.path); /* NOTE(tbt): reload map to reset level */
+            load_map(gl, global_map.path); // NOTE(tbt): reload map to reset level
             global_game_state = GAME_STATE_EDITOR;
         }
+    }
+
+    if (input->is_key_pressed[KEY_P]            &&
+        input->is_key_pressed[KEY_LEFT_CONTROL])
+    {
+        play_audio_source(asset_from_path(SOUND_PATH("testSound.wav")));
     }
 
     if (global_game_state == GAME_STATE_EDITOR)

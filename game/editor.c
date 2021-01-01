@@ -2,11 +2,11 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-#define PATH_ENTRY_BUFFER_SIZE   32
+#define PATH_ENTRY_BUFFER_SIZE   48
 #define NUMBER_ENTRY_BUFFER_SIZE 8
 
 enum
@@ -16,6 +16,8 @@ enum
     EDITOR_FLAG_NEW_LEVEL       = 1 << 2,
     EDITOR_FLAG_LOAD_TEXTURE    = 1 << 3,
     EDITOR_FLAG_CREATE_TELEPORT = 1 << 4,
+    EDITOR_FLAG_EDIT_ANIMATION  = 1 << 5,
+    EDITOR_FLAG_LOAD_SOUND      = 1 << 6,
 };
 
 internal void
@@ -54,16 +56,7 @@ editor_proccess_entities(OpenGLFunctions *gl,
         {
             if (!entity->texture) { continue; }
 
-            Colour colour;
-            if (entity->flags & BIT(ENTITY_FLAG_COLOURED))
-            {
-                colour = entity->colour;
-            }
-            else
-            {
-                colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
-            }
-
+            Colour colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
             if (editor_flags & EDITOR_FLAG_TILE_EDIT)
             {
                 colour.a = 0.4f;
@@ -77,8 +70,19 @@ editor_proccess_entities(OpenGLFunctions *gl,
                                    entity->sub_texture[entity->frame] :
                                    ENTIRE_TEXTURE);
         }
+        else if (!(entity->flags & BIT(ENTITY_FLAG_RENDER_GRADIENT)))
+        {
+            // NOTE(tbt): make sure even invisible entities can be seen in the editor
 
-        /* NOTE(tbt): editor stuff */
+            Colour colour = COLOUR(0.0f, 1.0f, 0.0f, 0.3f);
+            if (editor_flags & EDITOR_FLAG_TILE_EDIT)
+            {
+                colour.a = 0.15f;
+            }
+            fill_rectangle(entity->bounds, colour, 3, global_projection_matrix);
+        }
+
+        // NOTE(tbt): editor stuff
         if (!editor_flags)
         {
             if (point_is_in_region(global_camera_x + input->mouse_x,
@@ -131,7 +135,9 @@ editor_proccess_entities(OpenGLFunctions *gl,
                 }
             }
         }
-        else
+        else if (!(editor_flags & EDITOR_FLAG_EDIT_ANIMATION) &&
+                 !(editor_flags & EDITOR_FLAG_LOAD_TEXTURE)   &&
+                 !(editor_flags & EDITOR_FLAG_LOAD_SOUND))
         {
             global_editor_selected_entity = NULL;
         }
@@ -211,7 +217,13 @@ do_editor(OpenGLFunctions *gl,
         {
             if (global_map.tilemap)
             {
-                if (do_button(input, "create static object", 256.0f))
+                if (do_button(input, "empty", 256.0f))
+                {
+                    create_empty_entity(RECTANGLE(global_camera_x,
+                                                  global_camera_y,
+                                                  64.0f, 64.0f));
+                }
+                if (do_button(input, "static object", 256.0f))
                 {
                     create_static_object(RECTANGLE(global_camera_x,
                                                    global_camera_y,
@@ -219,11 +231,11 @@ do_editor(OpenGLFunctions *gl,
                                          TEXTURE_PATH("spritesheet.png"),
                                          ENTIRE_TEXTURE);
                 }
-                if (do_button(input, "create player", 256.0f))
+                if (do_button(input, "player", 256.0f))
                 {
                     create_player(gl, global_camera_x, global_camera_y);
                 }
-                if (do_button(input, "create teleport", 256.0f))
+                if (do_button(input, "teleport", 256.0f))
                 {
                     editor_flags |= EDITOR_FLAG_CREATE_TELEPORT;
                 }
@@ -334,6 +346,20 @@ do_editor(OpenGLFunctions *gl,
     {
         do_window(input, "entity properties", 0.0f, 128.0f, 600.0f)
         {
+            do_dropdown(input, "entity flags", 256.0f)
+            {
+                for (I32 i = 0; i < ENTITY_FLAG_COUNT; ++i)
+                {
+                    do_bit_toggle_button(input,
+                                         ENTITY_FLAG_TO_STRING(i),
+                                         &global_editor_selected_entity->flags,
+                                         i,
+                                         256.0f);
+                }
+            }
+
+            do_line_break();
+
             I8 entity_size_label[64] = {0};
             snprintf(entity_size_label, 64, "size: (%.1f x %.1f)", global_editor_selected_entity->bounds.w, global_editor_selected_entity->bounds.h);
             do_label("entity size", entity_size_label, 200.0f);
@@ -395,6 +421,23 @@ do_editor(OpenGLFunctions *gl,
                     }
                 }
             }
+            else if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_ANIMATED))
+            {
+                do_line_break();
+
+                if (do_button(input, "edit animation", 150.0f))
+                {
+                    editor_flags |= EDITOR_FLAG_EDIT_ANIMATION;
+                }
+
+                do_line_break();
+
+                I8 entity_anim_speed_label[64] = {0};
+                snprintf(entity_anim_speed_label, 64, "animation speed: (%u)", global_editor_selected_entity->animation_speed);
+                do_label("entity animation speed", entity_anim_speed_label, 200.0f);
+                do_line_break();
+                do_slider_u(input, "entity animation speed slider", 0.0f, 60.0f, 1.0f, 200.0f, &global_editor_selected_entity->animation_speed);
+            }
 
             if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER))
             {
@@ -425,6 +468,33 @@ do_editor(OpenGLFunctions *gl,
                 do_label("teleport to: ", "teleport to: ", 150.0f);
                 do_label( "teleport destination", global_editor_selected_entity->level_transport, 150.0f);
             }
+
+            if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_TRIGGER_SOUND))
+            {
+                do_line_break();
+
+                do_dropdown(input, "sound asset", 200.0f)
+                {
+                    Asset *asset = global_loaded_assets;
+                    while (asset)
+                    {
+                        if (asset->type == ASSET_TYPE_AUDIO &&
+                            asset->loaded)
+                        {
+                            if (do_button(input, asset->path, 200.0f))
+                            {
+                                global_editor_selected_entity->sound = asset;
+                            }
+                        }
+                        asset = asset->next_loaded;
+                    }
+
+                    if (do_button(input, "load new sound", 200.0f))
+                    {
+                        editor_flags |= EDITOR_FLAG_LOAD_SOUND;
+                    }
+                }
+            }
         }
     }
 
@@ -438,7 +508,7 @@ do_editor(OpenGLFunctions *gl,
                   input->window_height / 2,
                   512.0f)
         {
-            do_text_entry(input, "map path", level_path, 32);
+            do_text_entry(input, "level path", level_path, PATH_ENTRY_BUFFER_SIZE);
             
             do_line_break();
             
@@ -484,24 +554,25 @@ do_editor(OpenGLFunctions *gl,
         {
             static I8 tilemap_width_str[NUMBER_ENTRY_BUFFER_SIZE];
             static I8 tilemap_height_str[NUMBER_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "map path", level_path, 32);
+            do_text_entry(input, "map path", level_path, PATH_ENTRY_BUFFER_SIZE);
 
             do_line_break();
 
             do_label("tmw", "tilemap width: ", 100.0f);
-            do_text_entry(input, "tmw e", tilemap_width_str, 8);
-            I32 width = atoi(tilemap_width_str);
+            do_text_entry(input, "tmw e", tilemap_width_str, NUMBER_ENTRY_BUFFER_SIZE);
 
             do_line_break();
 
             do_label("tmh", "tilemap height: ", 100.0f);
-            do_text_entry(input, "tmh e", tilemap_height_str, 8);
-            I32 height = atoi(tilemap_height_str);
+            do_text_entry(input, "tmh e", tilemap_height_str, NUMBER_ENTRY_BUFFER_SIZE);
 
             do_line_break();
 
             if (do_button(input, "create new map", 200.0f))
             {
+                I32 width = atoi(tilemap_width_str);
+                I32 height = atoi(tilemap_height_str);
+
                 create_new_map(gl, width, height);
                 strncpy(global_map.path, level_path, sizeof(global_map.path));
                 global_editor_selected_entity = NULL;
@@ -524,7 +595,7 @@ do_editor(OpenGLFunctions *gl,
                   512.0f)
         {
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "texture path", path, 32);
+            do_text_entry(input, "texture path", path, PATH_ENTRY_BUFFER_SIZE);
             
             do_line_break();
 
@@ -542,6 +613,40 @@ do_editor(OpenGLFunctions *gl,
                 if (global_editor_selected_entity)
                 {
                     global_editor_selected_entity->texture = texture;
+                }
+
+                editor_flags = 0;
+            }
+        }
+    }
+
+    if (editor_flags & EDITOR_FLAG_LOAD_SOUND)
+    {
+        do_window(input,
+                  "load sound",
+                  input->window_width / 2,
+                  input->window_height / 2,
+                  512.0f)
+        {
+            static I8 path[PATH_ENTRY_BUFFER_SIZE];
+            do_text_entry(input, "sound path", path, PATH_ENTRY_BUFFER_SIZE);
+            
+            do_line_break();
+
+            if (do_button(input, "cancel", 100.0f))
+            {
+                editor_flags = 0;
+            }
+            
+            if (do_button(input, "open", 100.0f))
+            {
+                Asset *sound = asset_from_path(path);
+                load_audio(sound);
+                assert(sound->loaded);
+
+                if (global_editor_selected_entity)
+                {
+                    global_editor_selected_entity->sound = sound;
                 }
 
                 editor_flags = 0;
@@ -569,7 +674,7 @@ do_editor(OpenGLFunctions *gl,
             do_line_break();
 
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "texture path", path, 32);
+            do_text_entry(input, "level path", path, PATH_ENTRY_BUFFER_SIZE);
             
             do_line_break();
 
@@ -587,6 +692,102 @@ do_editor(OpenGLFunctions *gl,
 
                 editor_flags = 0;
             }
+        }
+    }
+
+    if (editor_flags & EDITOR_FLAG_EDIT_ANIMATION)
+    {
+        do_window(input,
+                  "animation editor",
+                  input->window_width / 2,
+                  input->window_height / 2,
+                  512.0f)
+        {
+            do_label("animation region", "region:", 256.0f);
+            do_line_break();
+            static SubTexture animation_region = ENTIRE_TEXTURE;
+            do_sprite_picker(input,
+                             "animation region selector",
+                             global_editor_selected_entity->texture,
+                             256.0f,
+                             16.0f,
+                             &animation_region);
+
+            do_line_break();
+
+            do_dropdown(input, "texture asset", 200.0f)
+            {
+                Asset *asset = global_loaded_assets;
+                while (asset)
+                {
+                    if (asset->type == ASSET_TYPE_TEXTURE &&
+                        asset->loaded)
+                    {
+                        if (do_button(input, asset->path, 200.0f))
+                        {
+                            global_editor_selected_entity->texture = asset;
+                        }
+                    }
+                    asset = asset->next_loaded;
+                }
+
+                if (do_button(input, "load new texture", 200.0f))
+                {
+                    editor_flags |= EDITOR_FLAG_LOAD_TEXTURE;
+                }
+            }
+
+            do_line_break();
+
+            static I8 frame_w_str[NUMBER_ENTRY_BUFFER_SIZE];
+            static I8 frame_h_str[NUMBER_ENTRY_BUFFER_SIZE];
+
+            do_label("animation frame size", "frame size: ", 256.0f);
+            do_text_entry(input, "afswe", frame_w_str, NUMBER_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "afshe", frame_h_str, NUMBER_ENTRY_BUFFER_SIZE);
+
+            do_line_break();
+
+            if (do_button(input, "save animation", 100.0f))
+            {
+                F32 region_x = animation_region.min_x *
+                               global_editor_selected_entity->texture->texture.width;
+
+                F32 region_y = animation_region.min_y *
+                               global_editor_selected_entity->texture->texture.height;
+
+                F32 region_w = (animation_region.max_x -
+                                animation_region.min_x) *
+                               global_editor_selected_entity->texture->texture.width;
+
+                F32 region_h = (animation_region.max_y -
+                                animation_region.min_y) *
+                               global_editor_selected_entity->texture->texture.height;
+
+                I32 frame_width  = atoi(frame_w_str);
+                I32 frame_height = atoi(frame_h_str);
+
+                global_editor_selected_entity->sub_texture =
+                    slice_animation(global_editor_selected_entity->texture->texture,
+                                    region_x,
+                                    region_y,
+                                    frame_width,
+                                    frame_height,
+                                    region_w / frame_width,
+                                    region_h / frame_height);
+
+                global_editor_selected_entity->animation_length = (region_w / frame_width) * (region_h / frame_height);
+                global_editor_selected_entity->animation_start = 0;
+                global_editor_selected_entity->animation_end = global_editor_selected_entity->animation_length;
+
+                editor_flags = 0;
+            }
+
+            if (do_button(input, "cancel", 100.0f))
+            {
+                editor_flags = 0;
+            }
+            
         }
     }
 }

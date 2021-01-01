@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
   Notes   : terrible, but only for dev tools so just about acceptable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -21,9 +21,8 @@
 #define BG_COL_2 COLOUR(0.0f, 0.0f, 0.0f, 0.8f)
 #define FG_COL_1 COLOUR(1.0f, 1.0f, 1.0f, 0.9f)
 
-/* TODO(tbt): cache vertices when rendering text so they don't need to be
-              recalculated to find the bounds
-*/
+// TODO(tbt): cache vertices when rendering text so they don't need to be
+//            recalculated to find the bounds
 internal Rectangle
 get_text_bounds(Font *font,
                 F32 x, F32 y,
@@ -92,59 +91,6 @@ get_text_bounds(Font *font,
     return result;
 }
 
-internal Colour
-hsl_to_rgb(F32 h,
-           F32 s,
-           F32 v,
-           F32 a)
-{
-    F64 p, q, t, ff;
-    I64 i;
-
-    if (s <= 0.0f)
-    {
-        return COLOUR(v, v, v, a);
-    }
-
-    if (h >= 360.0f) { h = 0.0f; }
-    h /= 60.0f;
-    i = (I64)h;
-    ff = h - i;
-
-    p = v * (1.0 - s);
-    q = v * (1.0 - (s * ff));
-    t = v * (1.0 - (s * (1.0 - ff)));
-
-    switch (i)
-    {
-        case 0:
-        {
-            return COLOUR(v, t, p, a);
-        }
-        case 1:
-        {
-            return COLOUR(q, v, p, a);
-        }
-        case 2:
-        {
-            return COLOUR(p, v, t, a);
-        }
-        case 3:
-        {
-            return COLOUR(p, q, v, a);
-        }
-        case 4:
-        {
-            return COLOUR(t, p, v, a);
-        }
-        case 5:
-        default:
-        {
-            return COLOUR(v, p, q, a);
-        }
-    }
-}
-
 typedef struct UINode UINode;
 struct UINode
 {
@@ -154,9 +100,9 @@ struct UINode
     UINode *next_hash;
     UINode *next_under_mouse;
 
-    Rectangle bounds; /* NOTE(tbt): the total area on the screen taken up by the widget */
-    Rectangle interactable; /* NOTE(tbt): the area that can be interacted with to make the widget active */
-    Rectangle bg; /* NOTE(tbt): an area that is rendered but not able to be interacted with */
+    Rectangle bounds;       // NOTE(tbt): the total area on the screen taken up by the widget
+    Rectangle interactable; // NOTE(tbt): the area that can be interacted with
+    Rectangle bg;           // NOTE(tbt): an area that is rendered but not able to be interacted with
     F32 drag_x, drag_y;
     F32 max_width;
     F32 max_height;
@@ -165,9 +111,9 @@ struct UINode
     B32 dragging;
     I8 *label;
     F32 value_f;
+    I64 value_u;
     F32 scroll;
     B32 hidden;
-    Colour colour;
     F32 min, max;
     Asset *texture;
 };
@@ -187,9 +133,7 @@ new_widget_state_from_string(MemoryArena *memory,
     if (global_ui_state_dict[index].key &&
         strcmp(global_ui_state_dict[index].key, string))
     {
-        /* NOTE(tbt): hash collision */
-
-        fprintf(stderr, "hash collision for UI node '%s'\n", string);
+        // NOTE(tbt): hash collision
 
         UINode *widget = arena_allocate(memory, sizeof(*widget));
         widget->key = arena_allocate(memory, strlen(string) + 1);
@@ -241,6 +185,7 @@ enum
     UI_NODE_TYPE_BUTTON,
     UI_NODE_TYPE_DROPDOWN,
     UI_NODE_TYPE_SLIDER_F,
+    UI_NODE_TYPE_SLIDER_U,
     UI_NODE_TYPE_LABEL,
     UI_NODE_TYPE_LINE_BREAK,
     UI_NODE_TYPE_SCROLL_PANEL,
@@ -255,8 +200,7 @@ internal UINode *global_widgets_under_mouse;
 internal B32 global_is_mouse_over_ui;
 
 internal UINode global_ui_root = {0};
-/* NOTE(tbt): the parent of new nodes */
-internal UINode *global_current_ui_parent = &global_ui_root;
+internal UINode *global_current_ui_parent = &global_ui_root; // NOTE(tbt): new nodes are added as children to this
 
 internal void
 begin_window(PlatformState *input,
@@ -296,11 +240,14 @@ begin_window(PlatformState *input,
     node->max_width = max_w;
     if (last_active_window == node)
     {
-        node->sort = 15;
+        node->sort = UI_SORT_DEPTH;
     }
     else
     {
-        node->sort = 6;
+        // NOTE(tbt): 10 is chosen arbitrarily. will cause sorting errors if
+        //            the tree is more than 10 deep
+        // TODO(tbt): deal with this better
+        node->sort = UI_SORT_DEPTH + 10;
     }
 
     node->type = UI_NODE_TYPE_WINDOW;
@@ -358,9 +305,11 @@ end_window(void)
 #define do_window(_input, _name, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, end_window()))
 
 internal B32
-do_toggle_button(PlatformState *input,
-                 I8 *name,
-                 F32 width)
+do_bit_toggle_button(PlatformState *input,
+                     I8 *name,
+                     U64 *mask,
+                     I32 bit,
+                     F32 width)
 {
     UINode *node;
 
@@ -390,12 +339,25 @@ do_toggle_button(PlatformState *input,
     node->type = UI_NODE_TYPE_BUTTON;
     node->max_width = width;
 
+    if (mask != NULL) { node->toggled = *mask & BIT(bit); };
+
     if (!node->hidden)
     {
         if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT] &&
             global_active_widget == node)
         {
             node->toggled = !node->toggled;
+            if (mask != NULL)
+            {
+                if (node->toggled)
+                {
+                    *mask |= BIT(bit);
+                }
+                else
+                {
+                    *mask &= ~BIT(bit);
+                }
+            }
         }
 
         if (point_is_in_region(input->mouse_x,
@@ -414,6 +376,14 @@ do_toggle_button(PlatformState *input,
     }
 
     return node->toggled;
+}
+
+internal B32
+do_toggle_button(PlatformState *input,
+                 I8 *name,
+                 F32 width)
+{
+    return do_bit_toggle_button(input, name, NULL, 0, width);
 }
 
 internal B32
@@ -552,6 +522,87 @@ end_dropdown(void)
 }
 
 #define do_dropdown(_input, _name, _width) for (I32 i = (begin_dropdown((_input), (_name), (_width)), 0); !i; (++i, end_dropdown()))
+
+internal void
+do_slider_u(PlatformState *input,
+            I8 *name,
+            F32 min, F32 max,
+            F32 snap,
+            F32 width,
+            I64 *value)
+{
+    UINode *node;
+
+    if (!(node = widget_state_from_string(name)))
+    {
+        node = new_widget_state_from_string(&global_static_memory, name);
+    }
+
+    if (global_current_ui_parent->last_child)
+    {
+        global_current_ui_parent->last_child->next_sibling = node;
+        global_current_ui_parent->last_child = node;
+    }
+    else
+    {
+        global_current_ui_parent->first_child = node;
+        global_current_ui_parent->last_child = node;
+    }
+    node->parent = global_current_ui_parent;
+    node->first_child = NULL;
+    node->last_child = NULL;
+    node->next_sibling = NULL;
+    node->next_under_mouse = NULL;
+
+    node->type = UI_NODE_TYPE_SLIDER_U;
+    node->min = min;
+    node->max = max;
+    node->max_width = width;
+
+    if (!node->hidden)
+    {
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               node->interactable) &&
+            !global_active_widget)
+        {
+            node->next_under_mouse = global_widgets_under_mouse;
+            global_widgets_under_mouse = node;
+        }
+        if (global_hot_widget == node &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+        {
+            global_active_widget = node;
+            node->dragging = true;
+        }
+
+        if (node->dragging)
+        {
+            F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
+                                  0.0f, width - SLIDER_THUMB_SIZE);
+
+            *value = thumb_x / (width - SLIDER_THUMB_SIZE) *
+                               (node->max - node->min) + node->min;
+
+            if (snap > 0.0f)
+            {
+                *value = floor(*value / snap) * snap;
+            }
+
+            if (!global_hot_widget)
+            {
+                global_active_widget = node;
+            }
+
+            if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+            {
+                node->dragging = false;
+            }
+        }
+
+        node->value_u = *value;
+    }
+}
 
 internal void
 do_slider_f(PlatformState *input,
@@ -784,98 +835,20 @@ end_scroll_panel(void)
 
 #define do_scroll_panel(_input, _name, _width, _height) for (I32 i = (begin_scroll_panel((_input), (_name), (_width), (_height)), 0); !i; (++i, end_scroll_panel()))
 
-internal Colour
-do_colour_picker(PlatformState *input,
-                 I8 *name,
-                 F32 size,
-                 F32 hue,
-                 F32 alpha)
-{
-    UINode *node;
-
-    if (!(node = widget_state_from_string(name)))
-    {
-        node = new_widget_state_from_string(&global_static_memory, name);
-        node->label = arena_allocate(&global_static_memory, strlen(name) + 1);
-        strcpy(node->label, name);
-    }
-
-    if (global_current_ui_parent->last_child)
-    {
-        global_current_ui_parent->last_child->next_sibling = node;
-        global_current_ui_parent->last_child = node;
-    }
-    else
-    {
-        global_current_ui_parent->first_child = node;
-        global_current_ui_parent->last_child = node;
-    }
-    node->parent = global_current_ui_parent;
-    node->first_child = NULL;
-    node->last_child = NULL;
-    node->next_sibling = NULL;
-    node->next_under_mouse = NULL;
-
-    node->type = UI_NODE_TYPE_COLOUR_PICKER;
-    node->max_width = size;
-    node->max_height = size;
-    node->value_f = hue;
-    node->colour.a = alpha;
-
-    if (!node->hidden)
-    {
-        if (point_is_in_region(input->mouse_x,
-                               input->mouse_y,
-                               node->interactable) &&
-            !global_active_widget)
-        {
-            node->next_under_mouse = global_widgets_under_mouse;
-            global_widgets_under_mouse = node;
-
-        }
-        if (global_hot_widget == node &&
-            input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-        {
-            global_active_widget = node;
-            node->dragging = true;
-        }
-
-        if (node->dragging)
-        {
-            node->drag_x = input->mouse_x - node->bounds.x;
-            node->drag_y = input->mouse_y - node->bounds.y;
-
-            if (!global_hot_widget)
-            {
-                global_active_widget = node;
-            }
-
-            if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
-            {
-                node->dragging = false;
-            }
-        }
-    }
-
-    return node->colour;
-}
-
 internal void
 do_text_entry(PlatformState *input,
               I8 *name,
               I8 *buffer,
               U32 buffer_size)
 {
-    /* TODO(tbt): proper cursor */
+    // TODO(tbt): proper cursor
 
     UINode *node;
 
-    /* NOTE(tbt): approximate width of one character on average by taking the
-                  width of 'e'
-    */
+    // NOTE(tbt): approximate width of one character on average by taking the width of 'e'
     F32 char_width = get_text_bounds(global_ui_font, 0.0f, 0.0f, 0.0f, "e").w;
 
-    /* NOTE(tbt): allow a few characters for padding */
+    // NOTE(tbt): allow a few characters for padding
     F32 width = (buffer_size + 4) * char_width;
 
     if (!(node = widget_state_from_string(name)))
@@ -1091,10 +1064,10 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
                                            title_bounds.h + PADDING * 2);
 
             UINode *child = node->first_child;
-            /* NOTE(tbt): keep track of where to place the next child */
+            // NOTE(tbt): keep track of where to place the next child
             F32 current_x = node->bg.x + PADDING;
             F32 current_y = node->bg.y + PADDING;
-            F32 tallest = 0.0f; /* NOTE(tbt): the height of the tallest widget in the current row */
+            F32 tallest = 0.0f; // NOTE(tbt): the height of the tallest widget in the current row
 
             while (child)
             {
@@ -1381,6 +1354,49 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
 
             break;
         }
+        case UI_NODE_TYPE_SLIDER_U:
+        {
+            F32 thumb_x = ((node->value_u - node->min) /
+                           (node->max - node->min)) *
+                          (node->max_width - SLIDER_THUMB_SIZE);
+
+            node->bounds = RECTANGLE(x, y,
+                                     node->max_width,
+                                     SLIDER_THICKNESS);
+            node->bg = node->bounds;
+            node->interactable = RECTANGLE(x + thumb_x, y,
+                                           SLIDER_THUMB_SIZE,
+                                           SLIDER_THICKNESS);
+
+            stroke_rectangle(node->bg,
+                             FG_COL_1,
+                             STROKE_WIDTH,
+                             node->sort,
+                             global_ui_projection_matrix);
+
+            if (global_hot_widget == node)
+            {
+                fill_rectangle(node->interactable,
+                               BG_COL_1,
+                               node->sort,
+                               global_ui_projection_matrix);
+            }
+            if (node->dragging)
+            {
+                fill_rectangle(node->interactable,
+                               BG_COL_2,
+                               node->sort,
+                               global_ui_projection_matrix);
+            }
+
+            stroke_rectangle(node->interactable,
+                             FG_COL_1,
+                             STROKE_WIDTH,
+                             node->sort,
+                             global_ui_projection_matrix);
+
+            break;
+        }
         case UI_NODE_TYPE_SLIDER_F:
         {
             F32 thumb_x;
@@ -1471,12 +1487,12 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
             node->bounds = RECTANGLE(x, y, SLIDER_THICKNESS, node->max_height);
 
             UINode *child = node->first_child;
-            /* NOTE(tbt): keep track of where to place the next child */
+            // NOTE(tbt): keep track of where to place the next child
             F32 current_x = node->bounds.x + PADDING;
             F32 current_y = node->bounds.y + PADDING;
-            /* NOTE(tbt): the height of the tallest widget in the current row */
+            // NOTE(tbt): the height of the tallest widget in the current row
             F32 tallest = 0.0f;
-            /* NOTE(tbt): store the total height of the widgets in the panel */
+            // NOTE(tbt): store the total height of the widgets in the panel
             node->value_f = 0.0f;
 
             while (child)
@@ -1591,85 +1607,8 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
         }
         case UI_NODE_TYPE_LINE_BREAK:
         {
-            /* NOTE(tbt): line break nodes don't actually do anything, just act
-                          as a hint to the parent when handling layouting
-            */
-
-            break;
-        }
-        case UI_NODE_TYPE_COLOUR_PICKER:
-        {
-            F32 thumb_x = clamp_f(node->drag_x,
-                                  0.0f,
-                                  node->max_width - SLIDER_THUMB_SIZE);
-
-            F32 thumb_y = clamp_f(node->drag_y,
-                                  0.0f,
-                                  node->max_width - SLIDER_THUMB_SIZE);
-
-            node->bounds = RECTANGLE(x, y, node->max_width, node->max_width);
-
-            node->bg = node->bounds;
-            node->interactable = RECTANGLE(x + thumb_x, y + thumb_y,
-                                           SLIDER_THUMB_SIZE,
-                                           SLIDER_THUMB_SIZE);
-
-            node->colour = hsl_to_rgb(node->value_f,
-                                      thumb_y / (node->max_width -
-                                                 SLIDER_THUMB_SIZE),
-                                      thumb_x / (node->max_width -
-                                                 SLIDER_THUMB_SIZE),
-                                      node->colour.a);
-
-            if (node->dragging)
-            {
-                fill_rectangle(node->bounds,
-                               node->colour,
-                               node->sort,
-                               global_ui_projection_matrix);
-            }
-            else
-            {
-                F32 hue = node->value_f;
-
-                Gradient gradient;
-                gradient.tl = hsl_to_rgb(hue, 0.0f, 0.0f, 1.0f);
-                gradient.tr = hsl_to_rgb(hue, 0.0f, 1.0f, 1.0f);
-                gradient.bl = hsl_to_rgb(hue, 1.0f, 0.0f, 1.0f);
-                gradient.br = hsl_to_rgb(hue, 1.0f, 1.0f, 1.0f);
-
-                draw_gradient(node->bounds,
-                              gradient,
-                              node->sort,
-                              global_ui_projection_matrix);
-            }
-
-            if (global_active_widget == node)
-            {
-                fill_rectangle(node->interactable,
-                               BG_COL_2,
-                               node->sort,
-                               global_ui_projection_matrix);
-            }
-            else if (global_hot_widget == node)
-            {
-                fill_rectangle(node->interactable,
-                               BG_COL_1,
-                               node->sort,
-                               global_ui_projection_matrix);
-            }
-
-            stroke_rectangle(node->interactable,
-                             FG_COL_1,
-                             STROKE_WIDTH,
-                             node->sort,
-                             global_ui_projection_matrix);
-
-            stroke_rectangle(node->bounds,
-                             FG_COL_1,
-                             STROKE_WIDTH,
-                             node->sort,
-                             global_ui_projection_matrix);
+            // NOTE(tbt): line break nodes don't actually do anything, just act
+            // NOTE(tbt): as a hint to the parent when handling layouting
 
             break;
         }

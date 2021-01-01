@@ -2,26 +2,38 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 enum
 {
-    ENTITY_FLAG_NONE,
-
-    ENTITY_FLAG_PLAYER_MOVEMENT,
-    ENTITY_FLAG_RENDER_TEXTURE,
-    ENTITY_FLAG_COLOURED,
-    ENTITY_FLAG_ANIMATED,
-    ENTITY_FLAG_DYNAMIC,
-    ENTITY_FLAG_CAMERA_FOLLOW,
-    ENTITY_FLAG_DELETED,
-    ENTITY_FLAG_TELEPORT_PLAYER,
-    ENTITY_FLAG_RENDER_GRADIENT,
+    ENTITY_FLAG_PLAYER_MOVEMENT, // NOTE(tbt): movement with WASD and directional animation
+    ENTITY_FLAG_RENDER_TEXTURE,  // NOTE(tbt): draws a texture, sorted by the y coordinate of the bottom of `bounds`
+    ENTITY_FLAG_TRIGGER_SOUND,   // NOTE(tbt): plays a sounds while an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
+    ENTITY_FLAG_ANIMATED,        // NOTE(tbt): increments `frame` every `animation_speed` frames - constrained between `animation_start` and `animation_end`
+    ENTITY_FLAG_DYNAMIC,         // NOTE(tbt): integrates velocity to the position of `bounds`
+    ENTITY_FLAG_CAMERA_FOLLOW,   // NOTE(tbt): update the camera position to keep in the centre of the screen
+    ENTITY_FLAG_DELETED,         // NOTE(tbt): will be removed next frame
+    ENTITY_FLAG_TELEPORT_PLAYER, // NOTE(tbt): loads the map referenced by `level_transport` when an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
+    ENTITY_FLAG_RENDER_GRADIENT, // NOTE(tbt): draws a gradient
+    ENTITY_FLAG_AUDIO_FALLOFF,   // NOTE(tbt): sets the volume of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
+    ENTITY_FLAG_AUDIO_3D_PAN,    // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
 
     ENTITY_FLAG_COUNT
 };
+
+#define ENTITY_FLAG_TO_STRING(_flag) ((_flag) == ENTITY_FLAG_PLAYER_MOVEMENT  ? "player movement"  : \
+                                      (_flag) == ENTITY_FLAG_RENDER_TEXTURE   ? "render texture"   : \
+                                      (_flag) == ENTITY_FLAG_TRIGGER_SOUND    ? "trigger sound"    : \
+                                      (_flag) == ENTITY_FLAG_ANIMATED         ? "animated"         : \
+                                      (_flag) == ENTITY_FLAG_DYNAMIC          ? "dynamic"          : \
+                                      (_flag) == ENTITY_FLAG_CAMERA_FOLLOW    ? "camera follow"    : \
+                                      (_flag) == ENTITY_FLAG_DELETED          ? "deleted"          : \
+                                      (_flag) == ENTITY_FLAG_TELEPORT_PLAYER  ? "teleport player"  : \
+                                      (_flag) == ENTITY_FLAG_RENDER_GRADIENT  ? "render gradient"  : \
+                                      (_flag) == ENTITY_FLAG_AUDIO_FALLOFF    ? "audio falloff"    : \
+                                      (_flag) == ENTITY_FLAG_AUDIO_3D_PAN     ? "audio 3d pan"    : NULL)
 
 struct GameEntity
 {
@@ -29,6 +41,7 @@ struct GameEntity
     U64 flags;
     Rectangle bounds;
     Asset *texture;
+    Asset *sound;
     SubTexture *sub_texture;
     Colour colour;
     F32 speed;
@@ -77,6 +90,19 @@ create_player(OpenGLFunctions *gl,
     result->animation_length = 16;
     result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
 
+    result->next = global_map.entities;
+    global_map.entities = result;
+
+    return result;
+}
+
+internal GameEntity *
+create_empty_entity(Rectangle rectangle)
+{
+    GameEntity *result = arena_allocate(&global_level_memory, sizeof(*result));
+    ++(global_map.entity_count);
+
+    result->bounds = rectangle;
     result->next = global_map.entities;
     global_map.entities = result;
 
@@ -196,20 +222,50 @@ process_entities(OpenGLFunctions *gl,
             }
         }
 
-        if (entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER))
+        if (entity->flags & BIT(ENTITY_FLAG_AUDIO_FALLOFF) ||
+            entity->flags & BIT(ENTITY_FLAG_AUDIO_3D_PAN) &&
+            entity->sound)
         {
-            for (GameEntity *b = global_map.entities;
-                 b;
-                 b = b->next)
+            I32 screen_centre_x = global_camera_x + (global_renderer_window_w >> 1);
+            I32 screen_centre_y = global_camera_y + (global_renderer_window_h >> 1);
+            I32 bounds_centre_x = entity->bounds.x + entity->bounds.w / 2.0f;
+            I32 bounds_centre_y = entity->bounds.y + entity->bounds.h / 2.0f;
+
+            I32 x_offset = screen_centre_x - bounds_centre_x;
+            I32 y_offset = screen_centre_y - bounds_centre_y;
+
+            if (entity->flags & BIT(ENTITY_FLAG_AUDIO_FALLOFF))
             {
-                if (b->flags & BIT(ENTITY_FLAG_PLAYER_MOVEMENT) &&
-                    rectangles_are_intersecting(b->bounds, entity->bounds))
+                F32 level = 1.0f / (x_offset * x_offset + y_offset * y_offset) * global_renderer_window_w;
+                set_audio_source_level(entity->sound, clamp_f(level, 0.0f, 1.0f));
+            }
+
+            if (entity->flags & BIT(ENTITY_FLAG_AUDIO_3D_PAN))
+            {
+                F32 pan = ((F32)x_offset / (F32)(global_renderer_window_w >> 1));
+                pan /= 4.0f;
+                pan += 0.5f;
+                set_audio_source_pan(entity->sound, 1.0f - pan);
+            }
+        }
+
+        for (GameEntity *b = global_map.entities;
+             b;
+             b = b->next)
+        {
+            if (b->flags & BIT(ENTITY_FLAG_PLAYER_MOVEMENT) &&
+                rectangles_are_intersecting(b->bounds, entity->bounds))
+            {
+                if (entity->flags & BIT(ENTITY_FLAG_TRIGGER_SOUND))
                 {
-                    /* NOTE(tbt): set editor selected entity to NULL to prevent
-                                  it pointing to an entity which no longer
-                                  exists
-                    */
+                    play_audio_source(entity->sound);
+                }
+                if (entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER))
+                {
+                    // NOTE(tbt): set editor selected entity to NULL to prevent it
+                    //            pointing to an entity which no longer exists
                     global_editor_selected_entity = NULL;
+
                     load_map(gl, entity->level_transport);
 
                     return;
@@ -276,11 +332,12 @@ process_entities(OpenGLFunctions *gl,
             Tile *tile; 
             Rectangle r;
             
-            /* NOTE(tbt): only checks each corner, so doesn't work for entities
-                          larger than TILE_SIZE
-            */
+            // HACK(tbt): only checks each corner, so doesn't work for entities
+            //            larger than `TILE_SIZE`
+            // TODO(tbt): step through each edge in intervals of TILE_SIZE and
+            //            check for collisions
 
-            /* NOTE(tbt): x-axis collision check */
+            // NOTE(tbt): x-axis collision check
             colliding = false;
             r = entity->bounds;
             r.x += entity->x_vel;
@@ -296,7 +353,7 @@ process_entities(OpenGLFunctions *gl,
 
             if (!colliding) { entity->bounds.x += entity->x_vel; }
 
-            /* NOTE(tbt): y-axis collision check */
+            // NOTE(tbt): y-axis collision check
             colliding = false;
             r = entity->bounds;
             r.y += entity->y_vel;
@@ -343,10 +400,15 @@ process_entities(OpenGLFunctions *gl,
 
             if (entity->animation_clock == entity->animation_speed)
             {
-                entity->frame = (entity->frame + 1) %
-                                (entity->animation_end -
-                                 entity->animation_start) +
-                                entity->animation_start;
+                I32 animation_length = entity->animation_end -
+                                       entity->animation_start;
+                if (animation_length > 0)
+                {
+                    entity->frame = (entity->frame + 1) %
+                                    (entity->animation_end -
+                                     entity->animation_start) +
+                                    entity->animation_start;
+                }
                 entity->animation_clock = 0;
             }
 
@@ -369,23 +431,19 @@ process_entities(OpenGLFunctions *gl,
         {
             if (!entity->texture) { continue; }
 
-            Colour colour;
-            if (entity->flags & BIT(ENTITY_FLAG_COLOURED))
-            {
-                colour = entity->colour;
-            }
-            else
-            {
-                colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
-            }
+            U32 sort_depth = (I32)(entity->bounds.y + entity->bounds.h) % // NOTE(tbt): sort by the y-coordinate of the bottom of the entity
+                             (UI_SORT_DEPTH - 1);                         // NOTE(tbt): keep below the UI render layer
+            sort_depth += 1;                                              // NOTE(tbt): allow a a layer to draw the tilemap
 
-            world_draw_sub_texture(gl,
-                                   entity->bounds,
-                                   colour,
-                                   entity->texture,
-                                   entity->sub_texture ?
-                                   entity->sub_texture[entity->frame] :
-                                   ENTIRE_TEXTURE);
+            draw_sub_texture(gl,
+                             entity->bounds,
+                             COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                             entity->texture,
+                             entity->sub_texture ?
+                             entity->sub_texture[entity->frame] :
+                             ENTIRE_TEXTURE,
+                             sort_depth,
+                             global_projection_matrix);
         }
 
         previous = entity;
@@ -432,9 +490,9 @@ render_tiles(OpenGLFunctions *gl,
                                                  (F32)y * TILE_SIZE,
                                                  (F32)TILE_SIZE,
                                                  (F32)TILE_SIZE),
-                                        COLOUR(1.0f, 0.7f, 0.7f, 1.0f),
-                                        tile.texture,
-                                        tile.sub_texture);
+                                       COLOUR(1.0f, 0.7f, 0.7f, 1.0f),
+                                       tile.texture,
+                                       tile.sub_texture);
             }
             else
             {
@@ -443,9 +501,9 @@ render_tiles(OpenGLFunctions *gl,
                                                  (F32)y * TILE_SIZE,
                                                  (F32)TILE_SIZE,
                                                  (F32)TILE_SIZE),
-                                        COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                                        tile.texture,
-                                        tile.sub_texture);
+                                       COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                                       tile.texture,
+                                       tile.sub_texture);
             }
         }
     }

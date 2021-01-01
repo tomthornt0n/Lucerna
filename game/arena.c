@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -31,11 +31,10 @@
 
 struct MemoryArena
 {
-    U8 *buffer;
-    U64 buffer_size;
-    U64 current_offset;
-    /* NOTE(tbt): for temporary memory API */
-    U64 saved_offset;
+    U8 *buffer;         // NOTE(tbt): backing memory
+    U64 buffer_size;    // NOTE(tbt): size of the backing memory in bytes
+    U64 current_offset; // NOTE(tbt): index to allocate from
+    U64 saved_offset;   // NOTE(tbt): 'checkpoint' to return to when the temporary memory scope exits
 
 #ifdef LUCERNA_DEBUG
     I8 name[ARENA_NAME_MAX];

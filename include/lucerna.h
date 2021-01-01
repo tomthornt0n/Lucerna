@@ -356,13 +356,16 @@ typedef struct PlatformTimer PlatformTimer;
 typedef void ( *GameInit) (OpenGLFunctions *gl);
 typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, U64 timestep_in_ns);
 typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);
-typedef void ( *GameCleanup) (OpenGLFunctions *OpeNGLFunctions);
+typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);
+
+typedef void ( *WorkFunction) (void);
 
 void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
 void platform_set_vsync(B32 enabled);
 PlatformTimer *platform_start_timer(MemoryArena *arena);
 U64 platform_end_timer(PlatformTimer *timer);
+void platform_enqueue_work(WorkFunction work);
 
 #endif
 

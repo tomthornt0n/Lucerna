@@ -32,7 +32,7 @@ void wav_read(char *path,
               int *bits_per_sample,
               int *channels, 
               int *data_size,
-              unsigned char *data);
+              void *data);
 
 #ifdef __cplusplus
 }
@@ -78,7 +78,7 @@ wav_read(char *filename,
          int *bits_per_sample,
          int *channels,
          int *data_size,
-         unsigned char *data)
+         void *data)
 {
     FILE *file;
     int bytes_read;

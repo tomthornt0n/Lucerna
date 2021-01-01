@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -367,6 +367,77 @@ platform_set_vsync(B32 enabled)
                     enabled);
 }
 
+MemoryArena global_platform_static_memory;
+
+typedef struct WorkUnit WorkUnit;
+struct WorkUnit
+{
+    WorkUnit *next;
+    WorkFunction function;
+};
+
+#define THREAD_POOL_SIZE 6
+pthread_t global_work_queue_thread_pool[THREAD_POOL_SIZE];
+pthread_mutex_t global_work_queue_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t global_work_queue_cond = PTHREAD_COND_INITIALIZER;
+
+internal WorkUnit *global_work_queue_start = NULL, *global_work_queue_end = NULL;
+
+void platform_enqueue_work(WorkFunction function)
+{
+    WorkUnit *work = arena_allocate(&global_platform_static_memory, sizeof(*work));
+    work->next = NULL;
+    work->function = function;
+
+    pthread_mutex_lock(&global_work_queue_lock);
+    if (global_work_queue_end)
+    {
+        global_work_queue_end->next = work;
+    }
+    else
+    {
+        global_work_queue_start = work;
+    }
+    global_work_queue_end = work;
+    pthread_cond_signal(&global_work_queue_cond);
+    pthread_mutex_unlock(&global_work_queue_lock);
+}
+
+internal WorkUnit *
+dequeue_work(void)
+{
+    WorkUnit *result = global_work_queue_start;
+
+    if (global_work_queue_start)
+    {
+        global_work_queue_start = global_work_queue_start->next;
+    }
+
+    return result;
+}
+
+internal void *
+process_work_queue(void *arg)
+{
+    while (global_running)
+    {
+        WorkUnit *work;
+
+        pthread_mutex_lock(&global_work_queue_lock);
+        if (NULL == (work = dequeue_work()))
+        {
+            pthread_cond_wait(&global_work_queue_cond, &global_work_queue_lock);
+            work = dequeue_work();
+        }
+        pthread_mutex_unlock(&global_work_queue_lock);
+
+        if (work)
+        {
+            work->function();
+        }
+    }
+}
+
 I32
 main(int argc,
      char **argv)
@@ -378,6 +449,7 @@ main(int argc,
 
     MemoryArena platform_layer_frame_memory;
     initialise_arena_with_new_memory(&platform_layer_frame_memory, ONE_MB);
+    initialise_arena_with_new_memory(&global_platform_static_memory, 2 * ONE_MB);
 
     PlatformState input;
     OpenGLFunctions gl;
@@ -426,7 +498,7 @@ main(int argc,
     I32 visual_id;
     LinuxEventQueue event_queue;
 
-    pthread_t audio_thread, renderer_thread;
+    pthread_t audio_thread;
 
     void *game_library;
     GameInit game_init;
@@ -598,6 +670,17 @@ main(int argc,
     assert(game_cleanup);
     assert(game_update_and_render);
     assert(global_game_audio_callback);
+
+    I32 thread_index;
+    for (thread_index = 0;
+         thread_index < THREAD_POOL_SIZE;
+         ++thread_index)
+    {
+        pthread_create(&global_work_queue_thread_pool[thread_index],
+                       NULL,
+                       process_work_queue,
+                       NULL);
+    }
 
     pthread_create(&audio_thread,
                    NULL,

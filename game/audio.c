@@ -2,40 +2,9 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 23 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-#define SOURCE_HAS_FLAG(source, flag) (source->flags & flag)
-
-/* NOTE(tbt): be careful of arguments with side effects */
-#define CLAMP(a, x, y) (a < x ? x : a > y ? y : a)
-
-enum
-{
-    SOURCE_FLAG_NO_FLAGS = 0,
-
-    SOURCE_FLAG_ACTIVE  = 1 << 0,
-    SOURCE_FLAG_REWIND  = 1 << 1,
-    SOURCE_FLAG_LOOPING = 1 << 2
-};
-
-typedef struct AudioSource AudioSource;
-struct AudioSource
-{
-    AudioSource *next;
-    U8 *stream;
-    U32 stream_size;
-    U32 playhead;
-    U8  flags;
-    F32 l_gain;
-    F32 r_gain;
-
-    F32 level;
-    F32 pan;
-};
-
-AudioSource *global_playing_sources;
 
 internal void
 process_source(AudioSource *source,
@@ -44,43 +13,39 @@ process_source(AudioSource *source,
 {
     I32 i;
     I32 mix;
-    I16 *source_buffer = (I16 *)(source->stream + source->playhead);
+    I16 *source_buffer = source->buffer + source->playhead;
 
-    if (SOURCE_HAS_FLAG(source, SOURCE_FLAG_REWIND))
+    if (source->flags & SOURCE_FLAG_REWIND)
     {
         source->playhead = 0;
         source->flags &= ~SOURCE_FLAG_REWIND;
     }
 
     for (i = 0;
-         i < (buffer_size >> 1);
+         i < (buffer_size >> 1) &&
+         source->playhead < source->buffer_size >> 1;
          ++i)
     {
-        /* left channel */
-        mix = (I32)buffer[i];
+        // NOTE(tbt): mix left channel
+        mix = buffer[i];
         mix += source_buffer[i] * source->l_gain;
-        buffer[i] = (I16)CLAMP(mix, -32768, 32767);
+        buffer[i] = (I16)clamp_f(mix, -32768, 32767);
+        ++source->playhead;
 
         ++i;
 
-        /* right channel */
+        // NOTE(tbt): mix right channel
         mix = (I32)buffer[i];
         mix += source_buffer[i] * source->r_gain;
-        buffer[i] = (I16)CLAMP(mix, -32768, 32767);
-
-        if ((i << 2) + source->playhead > source->stream_size)
-        {
-            break;
-        }
+        buffer[i] = (I16)clamp_f(mix, -32768, 32767);
+        ++source->playhead;
     }
 
-    source->playhead += buffer_size;
-
-    if (source->playhead >= source->stream_size)
+    if (source->playhead >= source->buffer_size >> 1)
     {
         source->playhead = 0;
 
-        if (!SOURCE_HAS_FLAG(source, SOURCE_FLAG_LOOPING))
+        if (!(source->flags & SOURCE_FLAG_LOOPING))
         {
             source->flags &= ~SOURCE_FLAG_ACTIVE;
         }
@@ -102,8 +67,8 @@ game_audio_callback(void *buffer,
     {
         process_source(*indirect, buffer, buffer_size);
 
-        if (!SOURCE_HAS_FLAG((*indirect), SOURCE_FLAG_ACTIVE))
-        /* NOTE(tbt): Remove source from list if it is not playing */
+        if (!(*indirect)->flags & SOURCE_FLAG_ACTIVE)
+        // NOTE(tbt): Remove source from list if it is not playing
         {
             *indirect = (*indirect)->next;
         }
@@ -116,47 +81,58 @@ game_audio_callback(void *buffer,
 }
 
 internal void
-play_audio_source(AudioSource *source)
+play_audio_source(Asset *source)
 {
+    if (!source) { return; }
+
+    load_audio(source);
+    assert(source->loaded);
+
     platform_get_audio_lock();
-    if (!SOURCE_HAS_FLAG(source, SOURCE_FLAG_ACTIVE))
+    if (!(source->audio.flags & SOURCE_FLAG_ACTIVE))
     {
-        source->next = global_playing_sources;
-        global_playing_sources = source;
-        source->flags |= SOURCE_FLAG_ACTIVE;
+        source->audio.next = global_playing_sources;
+        global_playing_sources = &source->audio;
+        source->audio.flags |= SOURCE_FLAG_ACTIVE;
     }
     platform_release_audio_lock();
 }
 
 internal void
-pause_audio_source(AudioSource *source)
+pause_audio_source(Asset *source)
 {
+    if (!source) { return; }
+
     platform_get_audio_lock();
-    source->flags &= ~SOURCE_FLAG_ACTIVE;
+    source->audio.flags &= ~SOURCE_FLAG_ACTIVE;
     platform_release_audio_lock();
 }
 
 internal void
-stop_audio_source(AudioSource *source)
+stop_audio_source(Asset *source)
 {
+    if (!source) { return; }
+
     platform_get_audio_lock();
-    source->flags |= SOURCE_FLAG_REWIND;
-    source->flags &= ~SOURCE_FLAG_ACTIVE;
+    source->audio.flags |= SOURCE_FLAG_REWIND;
+    source->audio.flags &= ~SOURCE_FLAG_ACTIVE;
     platform_release_audio_lock();
 }
 
 internal void
-set_audio_source_looping(AudioSource *source,
+set_audio_source_looping(Asset *source,
                          B32 looping)
 {
+    if (!source) { return; }
+
     platform_get_audio_lock();
     if (looping)
     {
-        source->flags |= SOURCE_FLAG_LOOPING;
+        source->audio.flags |= SOURCE_FLAG_LOOPING;
     }
     else
     {
-        source->flags &= ~SOURCE_FLAG_LOOPING;
+        source->audio.flags &= ~SOURCE_FLAG_LOOPING;
     }
     platform_release_audio_lock();
 }
@@ -171,18 +147,24 @@ recalculate_audio_source_gain(AudioSource *source)
 }
 
 internal void
-set_audio_source_level(AudioSource *source,
+set_audio_source_level(Asset *source,
                        F32 level)
 {
-    source->level = level;
-    recalculate_audio_source_gain(source);
+    if (!source) { return; }
+
+    source->audio.level = level;
+    recalculate_audio_source_gain(&source->audio);
 }
 
 internal void
-set_audio_source_pan(AudioSource *source,
+set_audio_source_pan(Asset *source,
                      F32 pan)
 {
-    source->pan = CLAMP(pan, 0.0f, 1.0f);
-    recalculate_audio_source_gain(source);
+    if (!source) { return; }
+
+    // NOTE(tbt): clamp between far-left(0.0) and far-right(1.0) -
+    //            0.5 is central
+    source->audio.pan = clamp_f(pan, 0.0f, 1.0f);
+    recalculate_audio_source_gain(&source->audio);
 }
 

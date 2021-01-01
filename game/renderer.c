@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -92,8 +92,7 @@ internal F32 global_camera_x = 0.0f, global_camera_y = 0.0f;
 internal F32 global_projection_matrix[16];
 internal F32 global_ui_projection_matrix[16];
 
-#define BLUR_TEXTURE_SCALE 4 /* NOTE(tbt): divide window dimensions by this to
-                                           get size of blur texture */
+#define BLUR_TEXTURE_SCALE 4 // NOTE(tbt): bitshift window dimensions right by this much to get size of blur texture
 internal U32 global_blur_target_a;
 internal U32 global_blur_target_b;
 internal TextureID global_blur_texture_a;
@@ -109,7 +108,7 @@ initialise_renderer(OpenGLFunctions *gl)
 
     U32 flat_colour_texture_data = 0xffffffff;
 
-    /* NOTE(tbt): setup vao, vbo and ibo */
+    // NOTE(tbt): setup vao, vbo and ibo
     gl->GenVertexArrays(1, &global_vao_id);
     gl->BindVertexArray(global_vao_id);
 
@@ -166,7 +165,7 @@ initialise_renderer(OpenGLFunctions *gl)
                    NULL,
                    GL_DYNAMIC_DRAW);
 
-    /* NOTE(tbt): setup 1x1 white texture for rendering flat colours */
+    // NOTE(tbt): setup 1x1 white texture for rendering flat colours
     global_flat_colour_texture.width = 1;
     global_flat_colour_texture.height = 1;
 
@@ -188,7 +187,7 @@ initialise_renderer(OpenGLFunctions *gl)
                    GL_UNSIGNED_BYTE,
                    &flat_colour_texture_data);
 
-    /* NOTE(tbt): compile shaders */
+    // NOTE(tbt): compile shaders
     I32 status;
 #define SHADER_INFO_LOG_MAX_LEN 128
 
@@ -209,7 +208,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->ShaderSource(vertex_shader, 1, (const I8 * const *)&shader_src, NULL);
     gl->CompileShader(vertex_shader);
 
-    /* NOTE(tbt): check for vertex shader compilation errors */
+    // NOTE(tbt): check for vertex shader compilation errors
     gl->GetShaderiv(vertex_shader, GL_COMPILE_STATUS, &status);
     if (status == GL_FALSE)
     {
@@ -225,12 +224,12 @@ initialise_renderer(OpenGLFunctions *gl)
         exit(-1);
     }
 
-    /* NOTE(tbt): attach vertex shader to all shader programs */
+    // NOTE(tbt): attach vertex shader to all shader programs
     gl->AttachShader(global_default_shader, vertex_shader);
     gl->AttachShader(global_blur_shader, vertex_shader);
     gl->AttachShader(global_text_shader, vertex_shader);
 
-    /* NOTE(tbt): compile default fragment shader */
+    // NOTE(tbt): compile default fragment shader
     shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("default.frag"));
     assert(shader_src);
@@ -254,7 +253,7 @@ initialise_renderer(OpenGLFunctions *gl)
     }
     gl->AttachShader(global_default_shader, fragment_shader);
 
-    /* NOTE(tbt): link default shader */
+    // NOTE(tbt): link default shader
     gl->LinkProgram(global_default_shader);
 
     gl->GetProgramiv(global_default_shader, GL_LINK_STATUS, &status);
@@ -278,7 +277,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DetachShader(global_default_shader, fragment_shader);
     gl->DeleteShader(fragment_shader);
 
-    /* NOTE(tbt): compile blur fragment shader */
+    // NOTE(tbt): compile blur fragment shader
     shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("blur.frag"));
     assert(shader_src);
@@ -302,7 +301,7 @@ initialise_renderer(OpenGLFunctions *gl)
     }
     gl->AttachShader(global_blur_shader, fragment_shader);
 
-    /* NOTE(tbt): link blur shader */
+    // NOTE(tbt): link blur shader
     gl->LinkProgram(global_blur_shader);
 
     gl->GetProgramiv(global_blur_shader, GL_LINK_STATUS, &status);
@@ -326,7 +325,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DetachShader(global_blur_shader, fragment_shader);
     gl->DeleteShader(fragment_shader);
 
-    /* NOTE(tbt): compile text fragment shader */
+    // NOTE(tbt): compile text fragment shader
     shader_src = read_entire_file(&global_static_memory,
                                   SHADER_PATH("text.frag"));
     assert(shader_src);
@@ -350,7 +349,7 @@ initialise_renderer(OpenGLFunctions *gl)
     }
     gl->AttachShader(global_text_shader, fragment_shader);
 
-    /* NOTE(tbt): link text shader */
+    // NOTE(tbt): link text shader
     gl->LinkProgram(global_text_shader);
 
     gl->GetProgramiv(global_text_shader, GL_LINK_STATUS, &status);
@@ -374,11 +373,11 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DetachShader(global_text_shader, fragment_shader);
     gl->DeleteShader(fragment_shader);
 
-    /* NOTE(tbt): cleanup vertex shader */
+    // NOTE(tbt): cleanup vertex shader
     gl->DeleteShader(vertex_shader);
     temporary_memory_end(&global_static_memory);
 
-    /* NOTE(tbt): cache uniform locations */
+    // NOTE(tbt): cache uniform locations
     global_projection_matrix_locations[global_default_shader] =
         gl->GetUniformLocation(global_default_shader,
                                "u_projection_matrix");
@@ -401,13 +400,13 @@ initialise_renderer(OpenGLFunctions *gl)
 
     gl->UseProgram(global_currently_bound_shader);
 
-    /* NOTE(tbt): setup some OpenGL state */
+    // NOTE(tbt): setup some OpenGL state
     gl->ClearColor(0.92f, 0.88f, 0.9f, 1.0f);
 
     gl->Enable(GL_BLEND);
     gl->BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    /* NOTE(tbt): generate framebuffer for first blur pass */
+    // NOTE(tbt): generate framebuffer for first blur pass
     gl->GenFramebuffers(1, &global_blur_target_a);
     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_a);
 
@@ -433,7 +432,7 @@ initialise_renderer(OpenGLFunctions *gl)
                              global_blur_texture_a,
                              0);
 
-    /* NOTE(tbt): generate framebuffer for second blur pass */
+    // NOTE(tbt): generate framebuffer for second blur pass
     gl->GenFramebuffers(1, &global_blur_target_b);
     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
 
@@ -497,8 +496,11 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
-#define ui_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), 5, global_ui_projection_matrix)
-#define world_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), 2, global_projection_matrix)
+#define UI_SORT_DEPTH    1080
+#define WORLD_SORT_DEPTH 0
+
+#define ui_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
 draw_sub_texture(OpenGLFunctions *gl,
                  Rectangle rectangle,
@@ -528,8 +530,8 @@ draw_sub_texture(OpenGLFunctions *gl,
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), 5, global_ui_projection_matrix)
-#define world_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), 2, global_projection_matrix)
+#define ui_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
 draw_texture(OpenGLFunctions *gl,
              Rectangle rectangle,
@@ -547,8 +549,8 @@ draw_texture(OpenGLFunctions *gl,
                      projection_matrix);
 }
 
-#define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 5, global_ui_projection_matrix)
-#define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), 2, global_projection_matrix)
+#define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
 fill_rectangle(Rectangle rectangle,
                Colour colour,
@@ -568,8 +570,8 @@ fill_rectangle(Rectangle rectangle,
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 5, global_ui_projection_matrix)
-#define world_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), 2, global_projection_matrix)
+#define ui_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_stroke_rectangle(_rectangle, _colour, _stroke_width) stroke_rectangle((_rectangle), (_colour), (_stroke_width), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
 stroke_rectangle(Rectangle rectangle,
                  Colour colour,
@@ -590,8 +592,8 @@ stroke_rectangle(Rectangle rectangle,
     enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 5, global_ui_projection_matrix) 
-#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), 2, global_projection_matrix) 
+#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), UI_SORT_DEPTH, global_ui_projection_matrix) 
+#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), WORLD_SORT_DEPTH, global_projection_matrix) 
 internal void
 draw_text(Font *font,
           F32 x, F32 y,
@@ -623,8 +625,8 @@ typedef struct
     Colour tl, tr, bl, br;
 } Gradient;
 
-#define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 5, global_ui_projection_matrix)
-#define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), 2, global_projection_matrix)
+#define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
 draw_gradient(Rectangle rectangle,
               Gradient gradient,
@@ -667,7 +669,7 @@ end_rectangle_mask(U32 sort)
     enqueue_render_message(&global_render_queue, message);
 }
 
-/* NOTE(tbt): be careful - _sort is evaluated twice! */
+// NOTE(tbt): be careful - _sort is evaluated twice!
 #define mask_rectangular_region(_region, _sort) for (I32 i = (begin_rectangle_mask((_region), (_sort)), 0); !i; (++i, end_rectangle_mask((_sort))))
 
 internal void
@@ -701,8 +703,8 @@ set_renderer_window_size(OpenGLFunctions *gl,
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_RGBA8,
-                   width / BLUR_TEXTURE_SCALE,
-                   height / BLUR_TEXTURE_SCALE,
+                   width >> BLUR_TEXTURE_SCALE,
+                   height >> BLUR_TEXTURE_SCALE,
                    0,
                    GL_RGBA,
                    GL_UNSIGNED_BYTE,
@@ -713,8 +715,8 @@ set_renderer_window_size(OpenGLFunctions *gl,
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_RGBA8,
-                   width / BLUR_TEXTURE_SCALE,
-                   height / BLUR_TEXTURE_SCALE,
+                   width >> BLUR_TEXTURE_SCALE,
+                   height >> BLUR_TEXTURE_SCALE,
                    0,
                    GL_RGBA,
                    GL_UNSIGNED_BYTE,
@@ -925,8 +927,8 @@ internal void
 sort_render_queue(RenderQueue *queue)
 {
     render_queue_merge_sort(&(queue->start));
-    /* NOTE(tbt): does not update the end pointer of the queue */
-    /* NOTE(tbt): fine for now because only sorted at the end of every frame*/
+    // NOTE(tbt): does not update the end pointer of the queue
+    // NOTE(tbt): fine for now because only sorted at the end of every frame
     queue->end = NULL;
 }
 
@@ -1124,14 +1126,14 @@ process_render_queue(OpenGLFunctions *gl)
             {
                 flush_batch(gl, &batch);
 
-                /* NOTE(tbt): blit screen to framebuffer */
+                // NOTE(tbt): blit screen to framebuffer
                 gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                 gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_blur_target_a);
 
                 gl->Viewport(0,
                              0,
-                             global_renderer_window_w / BLUR_TEXTURE_SCALE,
-                             global_renderer_window_h / BLUR_TEXTURE_SCALE);
+                             global_renderer_window_w >> BLUR_TEXTURE_SCALE,
+                             global_renderer_window_h >> BLUR_TEXTURE_SCALE);
 
                 gl->Clear(GL_COLOR_BUFFER_BIT);
 
@@ -1141,19 +1143,19 @@ process_render_queue(OpenGLFunctions *gl)
                                     global_renderer_window_h,
                                     0,
                                     0,
-                                    global_renderer_window_w / BLUR_TEXTURE_SCALE,
-                                    global_renderer_window_h / BLUR_TEXTURE_SCALE,
+                                    global_renderer_window_w >> BLUR_TEXTURE_SCALE,
+                                    global_renderer_window_h >> BLUR_TEXTURE_SCALE,
                                     GL_COLOR_BUFFER_BIT,
                                     GL_LINEAR);
 
 
-                /* NOTE(tbt): apply first (horizontal) blur pass */
+                // NOTE(tbt): apply first (horizontal) blur pass
                 gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
 
                 gl->Viewport(0,
                              0,
-                             global_renderer_window_w / BLUR_TEXTURE_SCALE,
-                             global_renderer_window_h / BLUR_TEXTURE_SCALE);
+                             global_renderer_window_w >> BLUR_TEXTURE_SCALE,
+                             global_renderer_window_h >> BLUR_TEXTURE_SCALE);
 
                 gl->Clear(GL_COLOR_BUFFER_BIT);
 
@@ -1180,7 +1182,7 @@ process_render_queue(OpenGLFunctions *gl)
                              global_renderer_window_w,
                              global_renderer_window_h);
 
-                /* NOTE(tbt): render back to screen, applying second blur pass */
+                // NOTE(tbt): render back to screen, applying second blur pass
                 gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
 
                 batch.texture = global_blur_texture_b;

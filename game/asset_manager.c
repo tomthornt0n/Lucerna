@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 29 Dec 2020
+  Updated : 01 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -61,12 +61,37 @@ typedef struct
 
 enum
 {
+    SOURCE_FLAG_NO_FLAGS = 0,
+
+    SOURCE_FLAG_ACTIVE  = 1 << 0,
+    SOURCE_FLAG_REWIND  = 1 << 1,
+    SOURCE_FLAG_LOOPING = 1 << 2
+};
+
+typedef struct AudioSource AudioSource;
+struct AudioSource
+{
+    AudioSource *next; // NOTE(tbt): keep a list of sources to be processed
+    I16 *buffer;       // NOTE(tbt): actual PCM data - 16 bit signed integer
+    U32 buffer_size;   // NOTE(tbt): size of `buffer` in bytes
+    U32 playhead;      // NOTE(tbt): index into `buffer` where data is read from to fill the master buffer
+    U8  flags;         // NOTE(tbt): bit field of source properties - see the enum above
+    F32 l_gain;        // NOTE(tbt): left channel is multiplied by this before mixing
+    F32 r_gain;        // NOTE(tbt): right channel is multiplied by this before mixing
+
+    F32 level;         // NOTE(tbt): as set by `set_audio_source_level()`
+    F32 pan;           // NOTE(tbt): as set by `set_audio source_pan`
+};
+
+#define AUDIO_BUFFER_SIZE 512
+
+enum
+{
     ASSET_TYPE_NONE,
 
     ASSET_TYPE_TEXTURE,
+    ASSET_TYPE_AUDIO,
 };
-
-#define ASSET_HASH_TABLE_SIZE (512)
 
 #define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
 
@@ -81,10 +106,11 @@ struct Asset
     union
     {
         Texture texture;
-        /* TODO(tbt): audio assets */
+        AudioSource audio;
     };
 };
 
+#define ASSET_HASH_TABLE_SIZE (512)
 internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
 
 Asset *global_loaded_assets = NULL;
@@ -115,7 +141,7 @@ new_asset:
     if (global_assets_dict[index].path &&
         strcmp(global_assets_dict[index].path, path))
     {
-        /* NOTE(tbt): hash collision */
+        // NOTE(tbt): hash collision
         Asset *tail;
 
         result = arena_allocate(&global_static_memory, sizeof(*result));
@@ -334,17 +360,18 @@ load_font(OpenGLFunctions *gl,
     return result;
 }
 
-/* TODO(tbt): audio streaming */
-/* TODO(tbt): represent audio streams as assets */
-internal AudioSource
-load_wav(I8 *path)
+AudioSource *global_playing_sources;
+
+// TODO(tbt): audio streaming
+internal void
+load_audio(Asset *asset)
 {
-    AudioSource result;
-
     I32 data_rate, bits_per_sample, channels, data_size;
-    U8 *data;
 
-    wav_read(path,
+    if (!asset) { return; }
+    if (asset->loaded || !asset->path) { return; }
+
+    wav_read(asset->path,
              &data_rate,
              &bits_per_sample,
              &channels,
@@ -355,17 +382,42 @@ load_wav(I8 *path)
     assert(bits_per_sample == 16);
     assert(channels == 2);
 
-    data = arena_allocate(&global_static_memory, data_size);
+    asset->audio.buffer = arena_allocate(&global_level_memory, data_size);
+    wav_read(asset->path, NULL, NULL, NULL, NULL, asset->audio.buffer);
 
-    wav_read(path, NULL, NULL, NULL, NULL, data);
+    asset->audio.buffer_size = data_size;
+    asset->audio.l_gain = 0.5f;
+    asset->audio.r_gain = 0.5f;
+    asset->audio.level = 1.0f;
+    asset->audio.pan = 0.5f;
 
-    result.stream = data;
-    result.stream_size = data_size;
-    result.l_gain = 0.5f;
-    result.r_gain = 0.5f;
-    result.level = 1.0f;
-    result.pan = 0.5f;
+    asset->type = ASSET_TYPE_AUDIO;
+    asset->loaded = true;
+    asset->next_loaded = global_loaded_assets;
+    global_loaded_assets = asset;
+}
 
-    return result;
+internal void
+unload_audio(Asset *asset)
+{
+    // NOTE(tbt): remove source from list of playing sources
+    if (asset->audio.flags & SOURCE_FLAG_ACTIVE)
+    {
+        AudioSource **indirect_source = &global_playing_sources;
+        while (*indirect_source != &asset->audio) { indirect_source = &(*indirect_source)->next; }
+        *indirect_source = (*indirect_source)->next;
+
+        asset->audio.flags &= ~SOURCE_FLAG_ACTIVE;
+        asset->audio.flags |= SOURCE_FLAG_REWIND;
+    }
+
+    asset->loaded = false;
+    // NOTE(tbt): audio data is in memory with level duration so will be freed when the
+    //            map is unloaded
+    asset->audio.buffer = NULL;
+
+    Asset **indirect_asset = &global_loaded_assets;
+    while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
+    *indirect_asset = (*indirect_asset)->next_loaded;
 }
 
