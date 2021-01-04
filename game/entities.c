@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 03 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -39,6 +39,7 @@ struct GameEntity
 {
     GameEntity *next;
     U64 flags;
+
     Rectangle bounds;
     Asset *texture;
     Asset *sound;
@@ -156,25 +157,33 @@ enum
     ORIENT_W,
 };
 
+Gradient global_teleport_gradients[] = {
+    { .tl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .tr = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .bl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .br = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f} },
+
+    { .tl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .tr = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .bl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .br = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f} },
+
+    { .tl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .tr = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .bl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .br = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f} },
+
+    { .tl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .tr = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f}, 
+      .bl = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 1.0f}, 
+      .br = { .r = 0.92f, .g = 0.88f, .b = 0.90f, .a = 0.0f} }
+};
+
 internal GameEntity *
 create_teleport(Rectangle rectangle,
                 I32 orient,
                 I8 *level)
 {
-    Gradient teleport_gradients[] = {
-        GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f),
-                 COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f)),
-    
-        GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f),
-                 COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f)),
-    
-        GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f),
-                 COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f)),
-    
-        GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f),
-                 COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f))
-    };
-
     GameEntity *result = arena_allocate(&global_level_memory, sizeof(*result));
     ++(global_map.entity_count);
 
@@ -182,7 +191,7 @@ create_teleport(Rectangle rectangle,
                     BIT(ENTITY_FLAG_TELEPORT_PLAYER);
     result->bounds = rectangle;
     result->level_transport = level;
-    result->gradient = teleport_gradients[orient];
+    result->gradient = global_teleport_gradients[orient];
     result->next = global_map.entities;
     global_map.entities = result;
 
@@ -236,13 +245,13 @@ process_entities(OpenGLFunctions *gl,
 
             if (entity->flags & BIT(ENTITY_FLAG_AUDIO_FALLOFF))
             {
-                F32 level = 1.0f / (x_offset * x_offset + y_offset * y_offset) * global_renderer_window_w;
+                F32 level = 1.0f / (x_offset * x_offset + y_offset * y_offset) * entity->bounds.w;
                 set_audio_source_level(entity->sound, clamp_f(level, 0.0f, 1.0f));
             }
 
             if (entity->flags & BIT(ENTITY_FLAG_AUDIO_3D_PAN))
             {
-                F32 pan = ((F32)x_offset / (F32)(global_renderer_window_w >> 1));
+                F32 pan = ((F32)x_offset / entity->bounds.w / 2.0f);
                 pan /= 4.0f;
                 pan += 0.5f;
                 set_audio_source_pan(entity->sound, 1.0f - pan);

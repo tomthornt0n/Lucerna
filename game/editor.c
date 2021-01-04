@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 02 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -439,29 +439,17 @@ do_editor(OpenGLFunctions *gl,
                 do_slider_u(input, "entity animation speed slider", 0.0f, 60.0f, 1.0f, 200.0f, &global_editor_selected_entity->animation_speed);
             }
 
-            if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER))
+            if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER) &&
+                global_editor_selected_entity->flags & BIT(ENTITY_FLAG_RENDER_GRADIENT))
             {
                 do_line_break();
-                Gradient teleport_gradients[] = {
-                    GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f),
-                             COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f)),
-                
-                    GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f),
-                             COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f)),
-                
-                    GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.0f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f),
-                             COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.7f)),
-                
-                    GRADIENT(COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f),
-                             COLOUR(0.0f, 0.0f, 0.0f, 0.7f), COLOUR(0.0f, 0.0f, 0.0f, 0.0f))
-                };
 
                 do_dropdown(input, "gradient direction", 200.0f)
                 {
-                    if (do_button(input, "north", 200.0f)) { global_editor_selected_entity->gradient = teleport_gradients[ORIENT_N]; }
-                    if (do_button(input, "east", 200.0f))  { global_editor_selected_entity->gradient = teleport_gradients[ORIENT_E]; }
-                    if (do_button(input, "south", 200.0f)) { global_editor_selected_entity->gradient = teleport_gradients[ORIENT_S]; }
-                    if (do_button(input, "west", 200.0f))  { global_editor_selected_entity->gradient = teleport_gradients[ORIENT_W]; }
+                    if (do_button(input, "north", 200.0f)) { global_editor_selected_entity->gradient = global_teleport_gradients[ORIENT_N]; }
+                    if (do_button(input, "east", 200.0f))  { global_editor_selected_entity->gradient = global_teleport_gradients[ORIENT_E]; }
+                    if (do_button(input, "south", 200.0f)) { global_editor_selected_entity->gradient = global_teleport_gradients[ORIENT_S]; }
+                    if (do_button(input, "west", 200.0f))  { global_editor_selected_entity->gradient = global_teleport_gradients[ORIENT_W]; }
                 }
                 do_line_break();
 

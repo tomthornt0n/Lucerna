@@ -35,6 +35,7 @@ typedef struct
 enum
 {
     RENDER_MESSAGE_DRAW_RECTANGLE,
+    RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE,
     RENDER_MESSAGE_STROKE_RECTANGLE,
     RENDER_MESSAGE_DRAW_TEXT,
     RENDER_MESSAGE_BLUR_SCREEN_REGION,
@@ -54,6 +55,7 @@ struct RenderMessage
     SubTexture sub_texture;
     Colour colour;
     Rectangle rectangle;
+    F32 angle;
     F32 *projection_matrix;
     void *data;
 };
@@ -97,6 +99,23 @@ internal U32 global_blur_target_a;
 internal U32 global_blur_target_b;
 internal TextureID global_blur_texture_a;
 internal TextureID global_blur_texture_b;
+
+internal void
+generate_orthographic_projection_matrix(F32 *matrix,
+                                        F32 left,
+                                        F32 right,
+                                        F32 top,
+                                        F32 bottom)
+{
+    memset(matrix, 0, 16 * sizeof(F32));
+    matrix[0]  = 2.0f / (right - left);
+    matrix[5]  = 2.0f / (top - bottom);
+    matrix[10] = -1.0f;
+    matrix[12] = -(right + left) / (right - left);
+    matrix[13] = -(top + bottom) / (top - bottom);
+    matrix[14] = 0.0f;
+    matrix[15] = 1.0f;
+}
 
 internal void
 initialise_renderer(OpenGLFunctions *gl)
@@ -530,6 +549,39 @@ draw_sub_texture(OpenGLFunctions *gl,
     enqueue_render_message(&global_render_queue, message);
 }
 
+#define ui_draw_rotated_sub_texture(_gl, _rectangle, _angle, _colour, _texture, _sub_texture) draw_rotated_sub_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), (_sub_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_rotated_sub_texture(_gl, _rectangle, _angle, _colour, _texture, _sub_texture) draw_rotated_sub_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), (_sub_texture), WORLD_SORT_DEPTH, global_projection_matrix)
+internal void
+draw_rotated_sub_texture(OpenGLFunctions *gl,
+                         Rectangle rectangle,
+                         F32 angle,
+                         Colour colour,
+                         Asset *texture,
+                         SubTexture sub_texture,
+                         U32 sort,
+                         F32 *projection_matrix)
+{
+    RenderMessage message = {0};
+
+    if (texture)
+    {
+        load_texture(gl, texture);
+        assert(texture->loaded);
+    }
+
+    message.type = RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE;
+    message.rectangle = rectangle;
+    message.angle = angle;
+    message.colour = colour;
+    message.texture = texture != NULL ? texture->texture :
+                                        global_flat_colour_texture;
+    message.sub_texture = sub_texture;
+    message.projection_matrix = projection_matrix;
+    message.sort = sort;
+
+    enqueue_render_message(&global_render_queue, message);
+}
+
 #define ui_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
 #define world_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
@@ -549,6 +601,27 @@ draw_texture(OpenGLFunctions *gl,
                      projection_matrix);
 }
 
+#define ui_draw_rotated_texture(_gl, _rectangle, _angle, _colour, _texture) draw_rotated_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_rotated_texture(_gl, _rectangle, _angle, _colour, _texture) draw_rotated_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), WORLD_SORT_DEPTH, global_projection_matrix)
+internal void
+draw_rotated_texture(OpenGLFunctions *gl,
+                     Rectangle rectangle,
+                     F32 angle,
+                     Colour colour,
+                     Asset *texture,
+                     U32 sort,
+                     F32 *projection_matrix)
+{
+    draw_rotated_sub_texture(gl,
+                             rectangle,
+                             angle,
+                             colour,
+                             texture,
+                             ENTIRE_TEXTURE,
+                             sort,
+                             projection_matrix);
+}
+
 #define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), UI_SORT_DEPTH, global_ui_projection_matrix)
 #define world_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
@@ -561,6 +634,29 @@ fill_rectangle(Rectangle rectangle,
 
     message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
     message.rectangle = rectangle;
+    message.colour = colour;
+    message.texture = global_flat_colour_texture;
+    message.sub_texture = ENTIRE_TEXTURE;
+    message.projection_matrix = projection_matrix;
+    message.sort = sort;
+
+    enqueue_render_message(&global_render_queue, message);
+}
+
+#define ui_fill_rotated_rectangle(_rectangle, _angle, _colour) fill_rotated_rectangle((_rectangle), (_angle), (_colour), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_fill_rotated_rectangle(_rectangle, _angle, _colour) fill_rotated_rectangle((_rectangle), (_angle), (_colour), WORLD_SORT_DEPTH, global_projection_matrix)
+internal void
+fill_rotated_rectangle(Rectangle rectangle,
+                       F32 angle,
+                       Colour colour,
+                       U32 sort,
+                       F32 *projection_matrix)
+{
+    RenderMessage message = {0};
+
+    message.type = RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE;
+    message.rectangle = rectangle;
+    message.angle = angle;
     message.colour = colour;
     message.texture = global_flat_colour_texture;
     message.sub_texture = ENTIRE_TEXTURE;
@@ -860,6 +956,51 @@ generate_quad(Rectangle rectangle,
     return result;
 }
 
+Quad
+generate_rotated_quad(Rectangle rectangle,
+                      F32 angle,
+                      Colour colour,
+                      SubTexture sub_texture)
+{
+    Quad result;
+
+    angle *= 3.1415926535f / 180.0f; // NOTE(tbt): convert degress to radians
+
+    //
+    // NOTE(tbt): we want to rotate about the centre of the quad, not the
+    //            coordinates (0, 0) in the world, so first a quad is generated
+    //            with it's centre at the origin, a rotation matrix is applied
+    //            and it is then translated to be at the intended position.
+    //
+
+    F32 x = -(rectangle.w / 2.0f), y = -(rectangle.h / 2.0f);
+    F32 x_offset = rectangle.x - x, y_offset = rectangle.y - y;
+
+    Rectangle centre_at_origin = RECTANGLE(x, y, rectangle.w, rectangle.h);
+
+    result = generate_quad(centre_at_origin, colour, sub_texture);
+
+
+    // NOTE(tbt): cast the quad to a vertex pointer, so we can iterate through
+    //            each vertex
+    Vertex *vertices = (Vertex *)(&result);
+
+    for (I32 i = 0; i < 4; ++i)
+    {
+        // NOTE(tbt): matrix generation are combined into one step
+        Vertex vertex = vertices[i];
+        vertices[i].x = vertex.x * cos(angle) - vertex.y * sin(angle);
+        vertices[i].y = vertex.x * sin(angle) + vertex.y * cos(angle);
+
+        // NOTE(tbt): once a vertex has been rotated it can be translated to the
+        //            intended position
+        vertices[i].x += x_offset;
+        vertices[i].y += y_offset;
+    }
+
+    return result;
+}
+
 internal RenderMessage *
 render_queue_sorted_merge(RenderMessage *a, RenderMessage *b)
 {
@@ -974,6 +1115,31 @@ process_render_queue(OpenGLFunctions *gl)
                     generate_quad(message.rectangle,
                                   message.colour,
                                   message.sub_texture);
+        
+                break;
+            }
+            case RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE:
+            {
+                if (batch.texture != message.texture.id                  ||
+                    batch.shader != global_default_shader                ||
+                    batch.quad_count >= BATCH_SIZE                       ||
+                    batch.projection_matrix != message.projection_matrix ||
+                    !(batch.in_use))
+                {
+                    flush_batch(gl, &batch);
+        
+                    batch.shader = global_default_shader;
+                    batch.texture = message.texture.id;
+                    batch.projection_matrix = message.projection_matrix;
+                }
+
+                batch.in_use = true;
+        
+                batch.buffer[batch.quad_count++] =
+                    generate_rotated_quad(message.rectangle,
+                                          message.angle,
+                                          message.colour,
+                                          message.sub_texture);
         
                 break;
             }

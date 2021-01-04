@@ -369,21 +369,31 @@ void platform_release_audio_lock(void);
 // NOTE(tbt): I don't think this works... :(
 void platform_set_vsync(B32 enabled);
 
-// NOTE(tbt): opaque structure which implementations varies depending on platform
+// NOTE(tbt): representation of high resolution clock varies depending on platform
 typedef struct PlatformTimer PlatformTimer;
+
 // NOTE(tbt): returns the current time in the opaque `PlatformTimer` format,
 //            which can be compared against by `platform_end_timer()` to get
 //            the interval since the timer was 'began'
 PlatformTimer *platform_start_timer(MemoryArena *arena);
 U64 platform_end_timer(PlatformTimer *timer); // NOTE(tbt): returns the elapsed time in ns since the timer was 'began'
 
-typedef void ( *WorkFunction) (void *arg); // NOTE(tbt): prototype for functions which can be pushed to a queue to be executed by a thread pool
-// NOTE(tbt): `arg_size` is first copied from `arg_buffer` on the main thread
-//            before `work` is called on the helper thread with a pointer to the
-//            copy as an argument
-void platform_enqueue_work(WorkFunction work, void *arg_buffer, U32 arg_size);
+typedef struct Job PlatformJobHandle; // NOTE(tbt): enqueueing work returns a handle to the job which allows you to wait untill it has finished
 
-// NOTE(tbt): mutex locks for if data needs to be shared with commands in the work queue
+typedef void ( *JobFunction) (void *arg, U64 memory_size, void *memory); // NOTE(tbt): prototype for functions which can be pushed to a queue to be executed by a thread pool
+
+//
+// NOTE(tbt): `arg_size` bytes are first copied from `arg_buffer` on the main thread
+//            before `work()` is called on the worker thread with a pointer to the
+//            copy as an argument
+//
+PlatformJobHandle *platform_enqueue_job(JobFunction work, void *arg_buffer, U32 arg_size);
+// NOTE(tbt): when the job terminates, it's memory is returned to the main thread
+PlatformJobHandle *platform_enqueue_job_with_memory(JobFunction work, void *arg_buffer, U32 arg_size, U64 size);
+// NOTE(tbt): halts the thread untill the job terminates, and returns it's memory if any was allocated
+void *platform_wait_for_job(PlatformJobHandle *handle);
+
+// NOTE(tbt): mutex locks in case global state needs to be shared with jobs in the work queue
 typedef struct MutexLock MutexLock;
 MutexLock *platform_allocate_mutex(void);
 void platform_lock_mutex(MutexLock *lock);

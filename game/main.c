@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 03 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -24,7 +24,6 @@ internal MemoryArena global_level_memory;
 
 #include "asset_manager.c"
 #include "audio.c"
-#include "math.c"
 
 internal Font *global_ui_font;
 
@@ -42,19 +41,29 @@ struct GameMap
     Tile *tilemap;
 } global_map = {{0}};
 #include "entities.c"
+#include "serialisation.c"
 #include "maps.c"
 
 #include "editor.c"
 
-MutexLock *global_message_lock;
+void
+test_job_1(void *arg,
+           U64 memory_size, void *memory)
+{
+    // NOTE(tbt): test jobs without memory
+    assert(!memory && !memory_size);
+
+    fprintf(stderr, "this was printed by another thread\n");
+}
 
 void
-print_message(void *arg)
+test_job_2(void *arg,
+           U64 memory_size, void *memory)
 {
-    platform_lock_mutex(global_message_lock);
-    I8 *buffer = *((I8 **)arg);
-    snprintf(buffer, 64, "\n\n\x1b[32mthis message was written by another thread\x1b[0m\n\n\n\n");
-    platform_unlock_mutex(global_message_lock);
+    // NOTE(tbt): test jobs with memory
+    assert(memory && memory_size);
+
+    snprintf(memory, memory_size, "msg from another thread: %s", arg);
 }
 
 void
@@ -66,21 +75,17 @@ game_init(OpenGLFunctions *gl)
 
     initialise_renderer(gl);
 
-    global_message_lock = platform_allocate_mutex();
-
-    //
-    // NOTE(tbt): write message into buffer while main thread loads font to
-    //            verify `MutexLock` works
-    //
-
-    I8 *message = arena_allocate(&global_static_memory, 64);
-    platform_enqueue_work(print_message, &message, sizeof(&message));
-
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
 
-    platform_lock_mutex(global_message_lock);
-    fprintf(stderr, message);
-    platform_unlock_mutex(global_message_lock);
+    I8 msg[] = "hello from another thread!\n";
+    PlatformJobHandle *job_1 = platform_enqueue_job(test_job_1, NULL, 0);
+    PlatformJobHandle *job_2 = platform_enqueue_job_with_memory(test_job_2, msg, strlen(msg) + 1, 64);
+
+    platform_wait_for_job(job_1);
+    I8 *msg_from_thread = platform_wait_for_job(job_2);
+
+    fprintf(stderr, msg_from_thread);
+    free(msg_from_thread);
 }
 
 internal I32 global_game_state = GAME_STATE_PLAYING;
@@ -115,7 +120,7 @@ game_update_and_render(OpenGLFunctions *gl,
         }
         else if (global_game_state == GAME_STATE_PLAYING)
         {
-            load_map(gl, global_map.path); // NOTE(tbt): reload map to reset level
+            load_map(gl, global_map.path); // NOTE(tbt): reload map when entering the editor
             global_game_state = GAME_STATE_EDITOR;
         }
     }
@@ -138,6 +143,7 @@ game_update_and_render(OpenGLFunctions *gl,
         if (global_map.tilemap) { render_tiles(gl, false); }
         process_entities(gl, input);
     }
+
 
     process_render_queue(gl);
 

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 03 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -369,12 +369,16 @@ platform_set_vsync(B32 enabled)
 
 MemoryArena global_platform_static_memory;
 
-typedef struct WorkUnit WorkUnit;
-struct WorkUnit
+typedef struct Job Job;
+struct Job
 {
-    WorkUnit *next;
+    Job *next;
+    pthread_mutex_t lock;
+
     void *arg;
-    WorkFunction function;
+    JobFunction function;
+    void *memory;
+    U32 memory_size;
 };
 
 #define THREAD_POOL_SIZE 6
@@ -382,29 +386,40 @@ pthread_t global_work_queue_thread_pool[THREAD_POOL_SIZE];
 pthread_mutex_t global_work_queue_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t global_work_queue_cond = PTHREAD_COND_INITIALIZER;
 
-internal WorkUnit *global_work_queue_start = NULL, *global_work_queue_end = NULL;
+internal Job *global_work_queue_start = NULL, *global_work_queue_end = NULL;
 
-void platform_enqueue_work(WorkFunction function,
-                           void *arg_buffer, U32 arg_size)
+Job *
+platform_enqueue_job_with_memory(JobFunction function,
+                                 void *arg_buffer, U32 arg_size,
+                                 U64 size)
 {
-    WorkUnit *work = arena_allocate(&global_platform_static_memory, sizeof(*work));
-    work->next = NULL;
+    Job *work = malloc(sizeof(*work)); // NOTE(tbt): malloc is used because if
+                                       //            a job was called every
+                                       //            frame, then an arena would
+                                       //            eventually fill up.
+    work->next     = NULL;
     work->function = function;
+    pthread_mutex_t dummy = PTHREAD_MUTEX_INITIALIZER;
+    work->lock     = dummy; // NOTE(tbt): PTHREAD_MUTEX_INITIALIZER can only be
+                            //            used in declarations
 
-    //
-    // NOTE(tbt): arguments passed to commands will remain allocated forever,
-    //            which could quickly add up if a command is being pushed every
-    //            frame. are arena's the right thing to use here?
-    //            perhaps I just use `malloc()` and allow the command to
-    //            `free()` the argument?
-    //
-
-    work->arg = arena_allocate(&global_platform_static_memory, arg_size);
+    work->arg      = malloc(arg_size);
     memcpy(work->arg, arg_buffer, arg_size); // NOTE(tbt): make a copy of the
                                              // argument to prevent the main
                                              // thread and worker threads
                                              // reading/writing to/from the same
                                              // memory
+    pthread_mutex_lock(&work->lock);
+    
+    work->memory_size = size;
+    if (size)
+    {
+        work->memory = calloc(1, size);
+    }
+    else
+    {
+        work->memory = NULL;
+    }
 
     pthread_mutex_lock(&global_work_queue_lock);
     if (global_work_queue_end)
@@ -416,14 +431,24 @@ void platform_enqueue_work(WorkFunction function,
         global_work_queue_start = work;
     }
     global_work_queue_end = work;
+
     pthread_cond_signal(&global_work_queue_cond);
     pthread_mutex_unlock(&global_work_queue_lock);
+
+    return work;
 }
 
-internal WorkUnit *
-dequeue_work(void)
+Job *
+platform_enqueue_job(JobFunction function,
+                     void *arg_buffer, U32 arg_size)
 {
-    WorkUnit *result = global_work_queue_start;
+    platform_enqueue_job_with_memory(function, arg_buffer, arg_size, 0);
+}
+
+internal Job *
+dequeue_job(void)
+{
+    Job *result = global_work_queue_start;
 
     if (global_work_queue_start)
     {
@@ -434,25 +459,41 @@ dequeue_work(void)
 }
 
 internal void *
-process_work_queue(void *arg)
+process_job_queue(void *arg)
 {
     while (global_running)
     {
-        WorkUnit *work;
+        Job *work;
 
         pthread_mutex_lock(&global_work_queue_lock);
-        if (NULL == (work = dequeue_work()))
+        if (NULL == (work = dequeue_job()))
         {
             pthread_cond_wait(&global_work_queue_cond, &global_work_queue_lock);
-            work = dequeue_work();
+            work = dequeue_job();
         }
         pthread_mutex_unlock(&global_work_queue_lock);
 
         if (work)
         {
-            work->function(work->arg);
+            work->function(work->arg, work->memory_size, work->memory);
+
+            free(work->arg);
+            pthread_mutex_unlock(&work->lock);
         }
     }
+}
+
+void *
+platform_wait_for_job(Job *work)
+{
+    pthread_mutex_lock(&work->lock);
+
+    void *memory = work->memory;
+    free(work);
+
+    pthread_mutex_unlock(&work->lock);
+
+    return memory;
 }
 
 struct MutexLock
@@ -465,8 +506,8 @@ platform_allocate_mutex(void)
 {
     MutexLock *result = arena_allocate(&global_platform_static_memory, sizeof(*result));
 
-    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    result->mutex = mutex;
+    pthread_mutex_t dummy = PTHREAD_MUTEX_INITIALIZER;
+    result->mutex = dummy;
 
     return result;
 }
@@ -723,7 +764,7 @@ main(int argc,
     {
         pthread_create(&global_work_queue_thread_pool[thread_index],
                        NULL,
-                       process_work_queue,
+                       process_job_queue,
                        NULL);
     }
 

@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 02 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -419,5 +419,35 @@ unload_audio(Asset *asset)
     Asset **indirect_asset = &global_loaded_assets;
     while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
     *indirect_asset = (*indirect_asset)->next_loaded;
+}
+
+internal void
+unload_all_assets(OpenGLFunctions *gl)
+{
+    Asset *loaded_asset = global_loaded_assets;
+    while (loaded_asset)
+    {
+        switch (loaded_asset->type)
+        {
+            case ASSET_TYPE_TEXTURE:
+            {
+                unload_texture(gl, loaded_asset);
+                break;
+            }
+            case ASSET_TYPE_AUDIO:
+            {
+                unload_audio(loaded_asset);
+                break;
+            }
+            default:
+            {
+                fprintf(stderr,
+                        "skipping unloading asset '%s'...\n",
+                        loaded_asset->path);
+                break;
+            }
+        }
+        loaded_asset = loaded_asset->next_loaded;
+    }
 }
 
