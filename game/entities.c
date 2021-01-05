@@ -2,60 +2,69 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 03 Jan 2021
+  Updated : 04 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 enum
 {
-    ENTITY_FLAG_PLAYER_MOVEMENT, // NOTE(tbt): movement with WASD and directional animation
-    ENTITY_FLAG_RENDER_TEXTURE,  // NOTE(tbt): draws a texture, sorted by the y coordinate of the bottom of `bounds`
-    ENTITY_FLAG_TRIGGER_SOUND,   // NOTE(tbt): plays a sounds while an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
-    ENTITY_FLAG_ANIMATED,        // NOTE(tbt): increments `frame` every `animation_speed` frames - constrained between `animation_start` and `animation_end`
-    ENTITY_FLAG_DYNAMIC,         // NOTE(tbt): integrates velocity to the position of `bounds`
-    ENTITY_FLAG_CAMERA_FOLLOW,   // NOTE(tbt): update the camera position to keep in the centre of the screen
-    ENTITY_FLAG_DELETED,         // NOTE(tbt): will be removed next frame
-    ENTITY_FLAG_TELEPORT_PLAYER, // NOTE(tbt): loads the map referenced by `level_transport` when an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
-    ENTITY_FLAG_RENDER_GRADIENT, // NOTE(tbt): draws a gradient
-    ENTITY_FLAG_AUDIO_FALLOFF,   // NOTE(tbt): sets the volume of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
-    ENTITY_FLAG_AUDIO_3D_PAN,    // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
+    ENTITY_FLAG_PLAYER_MOVEMENT,     // NOTE(tbt): movement with WASD and directional animation
+    ENTITY_FLAG_RENDER_TEXTURE,      // NOTE(tbt): draws a texture, sorted by the y coordinate of the bottom of `bounds`
+    ENTITY_FLAG_TRIGGER_SOUND,       // NOTE(tbt): plays a sounds while an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
+    ENTITY_FLAG_ANIMATED,            // NOTE(tbt): increments `frame` every `animation_speed` frames - constrained between `animation_start` and `animation_end`
+    ENTITY_FLAG_DYNAMIC,             // NOTE(tbt): integrates velocity to the position of `bounds`
+    ENTITY_FLAG_CAMERA_FOLLOW,       // NOTE(tbt): update the camera position to keep in the centre of the screen
+    ENTITY_FLAG_DELETED,             // NOTE(tbt): will be removed next frame
+    ENTITY_FLAG_TELEPORT_PLAYER,     // NOTE(tbt): loads the map referenced by `level_transport` when an entity with `ENTITY_FLAG_PLAYER_MOVEMENT`'s `bounds` intersects it's `bounds`
+    ENTITY_FLAG_RENDER_GRADIENT,     // NOTE(tbt): draws a gradient
+    ENTITY_FLAG_AUDIO_FALLOFF,       // NOTE(tbt): sets the volume of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
+    ENTITY_FLAG_AUDIO_3D_PAN,        // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
+    ENTITY_FLAG_RENDER_RECTANGLE,    // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
+    ENTITY_FLAG_DESTROY_ON_CONTANCT, // NOTE(tbt): sets the deleted flag if it comes into contact with a solid tile
 
     ENTITY_FLAG_COUNT
 };
 
-#define ENTITY_FLAG_TO_STRING(_flag) ((_flag) == ENTITY_FLAG_PLAYER_MOVEMENT  ? "player movement"  : \
-                                      (_flag) == ENTITY_FLAG_RENDER_TEXTURE   ? "render texture"   : \
-                                      (_flag) == ENTITY_FLAG_TRIGGER_SOUND    ? "trigger sound"    : \
-                                      (_flag) == ENTITY_FLAG_ANIMATED         ? "animated"         : \
-                                      (_flag) == ENTITY_FLAG_DYNAMIC          ? "dynamic"          : \
-                                      (_flag) == ENTITY_FLAG_CAMERA_FOLLOW    ? "camera follow"    : \
-                                      (_flag) == ENTITY_FLAG_DELETED          ? "deleted"          : \
-                                      (_flag) == ENTITY_FLAG_TELEPORT_PLAYER  ? "teleport player"  : \
-                                      (_flag) == ENTITY_FLAG_RENDER_GRADIENT  ? "render gradient"  : \
-                                      (_flag) == ENTITY_FLAG_AUDIO_FALLOFF    ? "audio falloff"    : \
-                                      (_flag) == ENTITY_FLAG_AUDIO_3D_PAN     ? "audio 3d pan"    : NULL)
+#define ENTITY_FLAG_TO_STRING(_flag) ((_flag) == ENTITY_FLAG_PLAYER_MOVEMENT     ? "player movement"    : \
+                                      (_flag) == ENTITY_FLAG_RENDER_TEXTURE      ? "render texture"     : \
+                                      (_flag) == ENTITY_FLAG_TRIGGER_SOUND       ? "trigger sound"      : \
+                                      (_flag) == ENTITY_FLAG_ANIMATED            ? "animated"           : \
+                                      (_flag) == ENTITY_FLAG_DYNAMIC             ? "dynamic"            : \
+                                      (_flag) == ENTITY_FLAG_CAMERA_FOLLOW       ? "camera follow"      : \
+                                      (_flag) == ENTITY_FLAG_DELETED             ? "deleted"            : \
+                                      (_flag) == ENTITY_FLAG_TELEPORT_PLAYER     ? "teleport player"    : \
+                                      (_flag) == ENTITY_FLAG_RENDER_GRADIENT     ? "render gradient"    : \
+                                      (_flag) == ENTITY_FLAG_AUDIO_FALLOFF       ? "audio falloff"      : \
+                                      (_flag) == ENTITY_FLAG_AUDIO_3D_PAN        ? "audio 3d pan"       : \
+                                      (_flag) == ENTITY_FLAG_RENDER_RECTANGLE    ? "render rectangle"   : \
+                                      (_flag) == ENTITY_FLAG_DESTROY_ON_CONTANCT ? "destroy on contact" : NULL)
 
 struct GameEntity
 {
     GameEntity *next;
     U64 flags;
 
-    Rectangle bounds;
+    Rectangle bounds;        // NOTE(tbt): used for collision checks and rendering
     Asset *texture;
     Asset *sound;
-    SubTexture *sub_texture;
-    Colour colour;
+    SubTexture *sub_texture; // NOTE(tbt): an array of SubTextures. ENTITY_FLAG_RENDER_TEXTURE uses *sub_texture by default, or sub_texture[frame] if ENTITY_FLAG_ANIMATED is set
+    Colour colour;           // NOTE(tbt): used by ENTITY_FLAG_RENDER_RECTANGLE, ignored by ENTITY_FLAG_RENDER_TEXTURE
     F32 speed;
-    F32 x_vel, y_vel;
-    U32 frame, animation_length, animation_start, animation_end;
+    F32 x_vel, y_vel;        // NOTE(tbt): added to bounds.x and bounds.y respectively if ENTITY_FLAG_DYNAMIC is set
+    F32 rotation;            // NOTE(tbt): angle in radians to render at. ignored by collision checks
+    U32 frame;
+    U32 animation_length;    // NOTE(tbt): number of elements in the sub_texture array
+    U32 animation_start, animation_end; // NOTE(tbt): loop within this range
     U64 animation_speed, animation_clock;
-    I8 *level_transport;
+    I8 *level_transport;     // NOTE(tbt): map with this path is loaded if bounds intersects an entity with ENTITY_FLAG_PLAYER_MOVEMENT
     Gradient gradient;
+    U32 cooldown;            // NOTE(tbt): cooldown for weapons
 };
 
 internal GameEntity *global_editor_selected_entity;
 
 #define TILE_SIZE 64
+internal F32 one_over_tile_size = 1.0f / TILE_SIZE;
 
 struct Tile
 {
@@ -65,6 +74,7 @@ struct Tile
     B32 visible;
 };
 
+#define PLAYER_FIRE_RATE 30
 internal GameEntity *
 create_player(OpenGLFunctions *gl,
               F32 x, F32 y)
@@ -78,6 +88,10 @@ create_player(OpenGLFunctions *gl,
                     BIT(ENTITY_FLAG_ANIMATED)        |
                     BIT(ENTITY_FLAG_CAMERA_FOLLOW);
     result->bounds = RECTANGLE(x, y, TILE_SIZE, TILE_SIZE);
+    result->speed = 8.0f;
+    result->animation_speed = 10;
+    result->animation_length = 16;
+    result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
 
     result->texture = asset_from_path(TEXTURE_PATH("spritesheet.png"));
     load_texture(gl, result->texture);
@@ -85,11 +99,6 @@ create_player(OpenGLFunctions *gl,
     result->sub_texture = slice_animation(result->texture->texture,
                                           48.0f, 0.0f, 16.0f, 16.0f,
                                           4, 4);
-
-    result->speed = 8.0f;
-    result->animation_speed = 10;
-    result->animation_length = 16;
-    result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
 
     result->next = global_map.entities;
     global_map.entities = result;
@@ -104,6 +113,7 @@ create_empty_entity(Rectangle rectangle)
     ++(global_map.entity_count);
 
     result->bounds = rectangle;
+
     result->next = global_map.entities;
     global_map.entities = result;
 
@@ -120,12 +130,50 @@ create_static_object(Rectangle rectangle,
 
     result->flags = BIT(ENTITY_FLAG_RENDER_TEXTURE);
     result->bounds = rectangle;
+    result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
     result->texture = asset_from_path(texture);
     result->sub_texture = arena_allocate(&global_static_memory,
                                          sizeof(*result->sub_texture));
     *result->sub_texture = sub_texture;
-    result->animation_length = 1;
-    result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
+
+    result->next = global_map.entities;
+    global_map.entities = result;
+
+    return result;
+}
+
+internal GameEntity *
+create_laser_projectile(F32 x, F32 y,
+                        F32 target_x, F32 target_y,
+                        F32 speed)
+{
+    // TODO(tbt): projectiles should probably be pooled and not just a normal entity
+    // TODO(tbt): remove projectiles after a range has been exceeded
+
+    GameEntity *result = arena_allocate(&global_level_memory, sizeof(*result));
+    ++(global_map.entity_count);
+
+    result->flags = BIT(ENTITY_FLAG_RENDER_RECTANGLE) |
+                    BIT(ENTITY_FLAG_TRIGGER_SOUND)    |
+                    BIT(ENTITY_FLAG_DYNAMIC)          |
+                    BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT);
+    result->colour = COLOUR(1.0f, 0.0f, 0.0f, 0.5f);
+
+    F32 x_offset = target_x - x;
+    F32 y_offset = target_y - y;
+
+    F32 length_squared = x_offset * x_offset + y_offset * y_offset;
+
+    result->x_vel = x_offset * reciprocal_sqrt_f(length_squared) * speed;
+    result->y_vel = y_offset * reciprocal_sqrt_f(length_squared) * speed;
+
+    result->rotation = atan(y_offset / x_offset) + 1.5707963268; // NOTE(tbt): offset by 90°
+
+    result->bounds = RECTANGLE(x + result->x_vel,
+                               y + result->y_vel,
+                               4.0f, 32.0f);
+
+    result->sound = asset_from_path(AUDIO_PATH("laser.wav"));
 
     result->next = global_map.entities;
     global_map.entities = result;
@@ -144,7 +192,7 @@ get_tile_at_position(F32 x, F32 y)
         return NULL;
     }
 
-    I32 index = floor(y / TILE_SIZE) * global_map.tilemap_width + floor(x / TILE_SIZE);
+    I32 index = floor(y * one_over_tile_size) * global_map.tilemap_width + floor(x * one_over_tile_size);
 
     return global_map.tilemap + index;
 }
@@ -237,8 +285,8 @@ process_entities(OpenGLFunctions *gl,
         {
             I32 screen_centre_x = global_camera_x + (global_renderer_window_w >> 1);
             I32 screen_centre_y = global_camera_y + (global_renderer_window_h >> 1);
-            I32 bounds_centre_x = entity->bounds.x + entity->bounds.w / 2.0f;
-            I32 bounds_centre_y = entity->bounds.y + entity->bounds.h / 2.0f;
+            I32 bounds_centre_x = entity->bounds.x + entity->bounds.w * 0.5f;
+            I32 bounds_centre_y = entity->bounds.y + entity->bounds.h * 0.5f;
 
             I32 x_offset = screen_centre_x - bounds_centre_x;
             I32 y_offset = screen_centre_y - bounds_centre_y;
@@ -251,7 +299,7 @@ process_entities(OpenGLFunctions *gl,
 
             if (entity->flags & BIT(ENTITY_FLAG_AUDIO_3D_PAN))
             {
-                F32 pan = ((F32)x_offset / entity->bounds.w / 2.0f);
+                F32 pan = ((F32)x_offset / entity->bounds.w * 0.5f);
                 pan /= 4.0f;
                 pan += 0.5f;
                 set_audio_source_pan(entity->sound, 1.0f - pan);
@@ -333,6 +381,25 @@ process_entities(OpenGLFunctions *gl,
                 entity->flags &= ~BIT(ENTITY_FLAG_ANIMATED);
                 entity->frame = 0;
             }
+
+            // HACK(tbt): entities other than the player will be able to shoot
+            // TODO(tbt): give shooting it's own flag
+            if (entity->cooldown < 1)
+            {
+                if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+                {
+                    create_laser_projectile(entity->bounds.x + entity->bounds.w * 0.5f + entity->x_vel,
+                                            entity->bounds.y + entity->bounds.w * 0.5f + entity->y_vel,
+                                            input->mouse_x + global_camera_x,
+                                            input->mouse_y + global_camera_y,
+                                            12.0f);
+                    entity->cooldown = PLAYER_FIRE_RATE;
+                }
+            }
+            else
+            {
+                entity->cooldown -= 1;
+            }
         }
 
         if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC))
@@ -361,6 +428,10 @@ process_entities(OpenGLFunctions *gl,
             if (!tile || tile->solid) { colliding = true; }
 
             if (!colliding) { entity->bounds.x += entity->x_vel; }
+            else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
+            {
+                entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            }
 
             // NOTE(tbt): y-axis collision check
             colliding = false;
@@ -377,20 +448,24 @@ process_entities(OpenGLFunctions *gl,
             if (!tile || tile->solid) { colliding = true; }
 
             if (!colliding) { entity->bounds.y += entity->y_vel; }
+            else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
+            {
+                entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            }
         }
 
         if (entity->flags & BIT(ENTITY_FLAG_CAMERA_FOLLOW))
         {
             F32 camera_centre_x = global_camera_x +
-                                  global_renderer_window_w / 2.0f;
+                                  global_renderer_window_w * 0.5f;
             F32 camera_centre_y = global_camera_y +
-                                  global_renderer_window_h / 2.0f;
+                                  global_renderer_window_h * 0.5f;
 
-            F32 camera_to_entity_x_vel = (entity->bounds.x + entity->bounds.w / 2.0f - camera_centre_x) / 2.0f;
-            F32 camera_to_entity_y_vel = (entity->bounds.y + entity->bounds.h / 2.0f - camera_centre_y) / 2.0f;
+            F32 camera_to_entity_x_vel = (entity->bounds.x + entity->bounds.w * 0.5f - camera_centre_x) * 0.5f;
+            F32 camera_to_entity_y_vel = (entity->bounds.y + entity->bounds.h * 0.5f - camera_centre_y) * 0.5f;
 
-            F32 camera_to_mouse_x_vel = ((input->mouse_x + global_camera_x) - camera_centre_x) / 2;
-            F32 camera_to_mouse_y_vel = ((input->mouse_y + global_camera_y) - camera_centre_y) / 2;
+            F32 camera_to_mouse_x_vel = ((input->mouse_x + global_camera_x) - camera_centre_x) * 0.5f;
+            F32 camera_to_mouse_y_vel = ((input->mouse_y + global_camera_y) - camera_centre_y) * 0.5f;
 
             F32 camera_x_vel = (camera_to_entity_x_vel * 1.8f +
                                 camera_to_mouse_x_vel * 0.2f) /
@@ -436,6 +511,21 @@ process_entities(OpenGLFunctions *gl,
             world_draw_gradient(entity->bounds, entity->gradient);
         }
 
+        if (entity->flags & BIT(ENTITY_FLAG_RENDER_RECTANGLE))
+        {
+            if (entity->rotation > -0.003f &&
+                entity->rotation <  0.003f)
+            {
+                world_fill_rectangle(entity->bounds, entity->colour);
+            }
+            else
+            {
+                world_fill_rotated_rectangle(entity->bounds,
+                                             entity->rotation,
+                                             entity->colour);
+            }
+        }
+
         if (entity->flags & BIT(ENTITY_FLAG_RENDER_TEXTURE))
         {
             if (!entity->texture) { continue; }
@@ -444,15 +534,36 @@ process_entities(OpenGLFunctions *gl,
                              (UI_SORT_DEPTH - 1);                         // NOTE(tbt): keep below the UI render layer
             sort_depth += 1;                                              // NOTE(tbt): allow a a layer to draw the tilemap
 
-            draw_sub_texture(gl,
-                             entity->bounds,
-                             COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                             entity->texture,
-                             entity->sub_texture ?
-                             entity->sub_texture[entity->frame] :
-                             ENTIRE_TEXTURE,
-                             sort_depth,
-                             global_projection_matrix);
+            if (entity->rotation > -0.003f &&
+                entity->rotation <  0.003f)
+            {
+                draw_sub_texture(gl,
+                                 entity->bounds,
+                                 COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                                 entity->texture,
+                                 entity->sub_texture ?
+                                 entity->sub_texture[entity->flags &
+                                                     BIT(ENTITY_FLAG_ANIMATED) ?
+                                                     entity->frame : 0] :
+                                 ENTIRE_TEXTURE,
+                                 sort_depth,
+                                 global_projection_matrix);
+            }
+            else
+            {
+                draw_rotated_sub_texture(gl,
+                                         entity->bounds,
+                                         entity->rotation,
+                                         COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                                         entity->texture,
+                                         entity->sub_texture ?
+                                         entity->sub_texture[entity->flags &
+                                                             BIT(ENTITY_FLAG_ANIMATED) ?
+                                                             entity->frame : 0] :
+                                         ENTIRE_TEXTURE,
+                                         sort_depth,
+                                         global_projection_matrix);
+            }
         }
 
         previous = entity;
@@ -469,10 +580,10 @@ render_tiles(OpenGLFunctions *gl,
                                    global_renderer_window_w,
                                    global_renderer_window_h);
 
-    I32 min_x = viewport.x / TILE_SIZE - 2;
-    I32 min_y = viewport.y / TILE_SIZE - 2;
-    I32 max_x = min_i((viewport.x + viewport.w) / TILE_SIZE + 2, global_map.tilemap_width);
-    I32 max_y = min_i((viewport.y + viewport.h) / TILE_SIZE + 2, global_map.tilemap_height);
+    I32 min_x = viewport.x * one_over_tile_size - 2;
+    I32 min_y = viewport.y * one_over_tile_size - 2;
+    I32 max_x = min_i((viewport.x + viewport.w) * one_over_tile_size + 2, global_map.tilemap_width);
+    I32 max_y = min_i((viewport.y + viewport.h) * one_over_tile_size + 2, global_map.tilemap_height);
 
     for (x = min_x;
          x < max_x;

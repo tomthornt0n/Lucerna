@@ -43,7 +43,7 @@ free_for_stb(void *p)
 #include "stb_truetype.h"
 
 #define SHADER_PATH(_path) ("../assets/shaders/" _path)
-#define SOUND_PATH(_path) ("../assets/audio/" _path)
+#define AUDIO_PATH(_path) ("../assets/audio/" _path)
 #define TEXTURE_PATH(_path) ("../assets/textures/" _path)
 #define FONT_PATH(_path) ("../assets/fonts/" _path)
 

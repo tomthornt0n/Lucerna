@@ -48,6 +48,18 @@ clamp_f(F64 n,
     return max_f(min, min_f(n, max));
 }
 
+internal F32
+reciprocal_sqrt_f(F32 n)
+{
+    union FloatAsInt { F32 f; I32 i; } i;
+
+    i.f = n;
+    i.i = 0x5f375a86 - (i.i >> 1);
+    i.f *= 1.5f - (i.f * 0.5f * i.f * i.f);
+
+    return i.f;
+}
+
 internal I64
 min_i(I64 a,
       I64 b)

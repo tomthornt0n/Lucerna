@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 01 Jan 2021
+  Updated : 04 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -964,7 +964,8 @@ generate_rotated_quad(Rectangle rectangle,
 {
     Quad result;
 
-    angle *= 3.1415926535f / 180.0f; // NOTE(tbt): convert degress to radians
+    // NOTE(tbt): undecided as to whether it should be converted or not
+    // angle *= 3.1415926535f / 180.0f; // NOTE(tbt): convert degress to radians
 
     //
     // NOTE(tbt): we want to rotate about the centre of the quad, not the
@@ -973,7 +974,7 @@ generate_rotated_quad(Rectangle rectangle,
     //            and it is then translated to be at the intended position.
     //
 
-    F32 x = -(rectangle.w / 2.0f), y = -(rectangle.h / 2.0f);
+    F32 x = -(rectangle.w * 0.5f), y = -(rectangle.h * 0.5f);
     F32 x_offset = rectangle.x - x, y_offset = rectangle.y - y;
 
     Rectangle centre_at_origin = RECTANGLE(x, y, rectangle.w, rectangle.h);

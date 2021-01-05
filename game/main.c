@@ -2,7 +2,7 @@
   Lucerna
 
   Author  : Tom Thornton
-  Updated : 03 Jan 2021
+  Updated : 04 Jan 2021
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -123,12 +123,6 @@ game_update_and_render(OpenGLFunctions *gl,
             load_map(gl, global_map.path); // NOTE(tbt): reload map when entering the editor
             global_game_state = GAME_STATE_EDITOR;
         }
-    }
-
-    if (input->is_key_pressed[KEY_P]            &&
-        input->is_key_pressed[KEY_LEFT_CONTROL])
-    {
-        play_audio_source(asset_from_path(SOUND_PATH("testSound.wav")));
     }
 
     if (global_game_state == GAME_STATE_EDITOR)

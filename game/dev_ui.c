@@ -280,8 +280,8 @@ begin_window(PlatformState *input,
 
     if (node->dragging)
     {
-        node->drag_x = clamp_f(floor(input->mouse_x - node->interactable.w / 2), 0.0f, global_renderer_window_w - PADDING);
-        node->drag_y = clamp_f(floor(input->mouse_y - node->interactable.h / 2), 0.0f, global_renderer_window_h - PADDING);
+        node->drag_x = clamp_f(floor(input->mouse_x - node->interactable.w * 0.5f), 0.0f, global_renderer_window_w - PADDING);
+        node->drag_y = clamp_f(floor(input->mouse_y - node->interactable.h * 0.5f), 0.0f, global_renderer_window_h - PADDING);
 
         if (!global_hot_widget)
         {
@@ -804,7 +804,7 @@ begin_scroll_panel(PlatformState *input,
         if (node->dragging)
         {
             node->drag_y = input->mouse_y - node->bg.y -
-                            node->interactable.h / 2.0f;
+                            node->interactable.h * 0.5f;
 
             if (!global_hot_widget)
             {
