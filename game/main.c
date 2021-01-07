@@ -30,19 +30,26 @@ internal Font *global_ui_font;
 #include "renderer.c"
 #include "dev_ui.c"
 
+#define MAP_PATH_BUFFER_SIZE 64
+
 typedef struct GameEntity GameEntity;
 typedef struct Tile Tile;
 struct GameMap
 {
-    I8 path[64];
+    I8 path[MAP_PATH_BUFFER_SIZE];
     U64 entity_count;
     GameEntity *entities;
     U32 tilemap_width, tilemap_height;
     Tile *tilemap;
 } global_map = {{0}};
+
+internal I32 load_most_recent_save_for_current_map(OpenGLFunctions *gl);
+internal B32 save_game(void);
+
 #include "entities.c"
 #include "serialisation.c"
 #include "maps.c"
+#include "save_game.c"
 
 #include "editor.c"
 
@@ -56,6 +63,15 @@ game_init(OpenGLFunctions *gl)
     initialise_renderer(gl);
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
+
+    // NOTE(tbt): initialise the free list of projectiles
+    for (I32 i = 0;
+         i < PROJECTILE_POOL_SIZE;
+         ++i)
+    {
+        global_projectile_pool[i].next = global_projectile_free_list;
+        global_projectile_free_list = global_projectile_pool + i;
+    }
 }
 
 internal I32 global_game_state = GAME_STATE_PLAYING;

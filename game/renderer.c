@@ -77,15 +77,15 @@ internal U32 global_vertex_buffer_id;
 internal I32 global_projection_matrix_locations[MAX_SHADERS];
 
 internal ShaderID global_default_shader;
-
 internal ShaderID global_text_shader;
-
-internal I32 global_blur_shader_direction_location;
 internal ShaderID global_blur_shader;
 
-internal Texture global_flat_colour_texture;
-
 internal ShaderID global_currently_bound_shader = 0;
+
+internal I32 global_blur_shader_direction_location;
+internal I32 global_lights_uniform_location;
+
+internal Texture global_flat_colour_texture;
 
 internal U32 global_renderer_window_w = 0;
 internal U32 global_renderer_window_h = 0;
@@ -206,7 +206,9 @@ initialise_renderer(OpenGLFunctions *gl)
                    GL_UNSIGNED_BYTE,
                    &flat_colour_texture_data);
 
+    //
     // NOTE(tbt): compile shaders
+    //
     I32 status;
 #define SHADER_INFO_LOG_MAX_LEN 128
 
@@ -244,9 +246,9 @@ initialise_renderer(OpenGLFunctions *gl)
     }
 
     // NOTE(tbt): attach vertex shader to all shader programs
-    gl->AttachShader(global_default_shader, vertex_shader);
-    gl->AttachShader(global_blur_shader, vertex_shader);
-    gl->AttachShader(global_text_shader, vertex_shader);
+    gl->AttachShader(global_default_shader,  vertex_shader);
+    gl->AttachShader(global_blur_shader,     vertex_shader);
+    gl->AttachShader(global_text_shader,     vertex_shader);
 
     // NOTE(tbt): compile default fragment shader
     shader_src = read_entire_file(&global_static_memory,
@@ -396,7 +398,7 @@ initialise_renderer(OpenGLFunctions *gl)
     gl->DeleteShader(vertex_shader);
     temporary_memory_end(&global_static_memory);
 
-    // NOTE(tbt): cache uniform locations
+    // NOTE(tbt): cache projection matrix locations
     global_projection_matrix_locations[global_default_shader] =
         gl->GetUniformLocation(global_default_shader,
                                "u_projection_matrix");
@@ -412,11 +414,13 @@ initialise_renderer(OpenGLFunctions *gl)
                                "u_projection_matrix");
     assert(global_projection_matrix_locations[global_blur_shader] != -1);
 
+    // NOTE(tbt): special uniforms
     global_blur_shader_direction_location = 
         gl->GetUniformLocation(global_blur_shader,
                                "u_direction");
     assert(global_blur_shader_direction_location != -1);
 
+    // NOTE(tbt): reset currently bounds shader
     gl->UseProgram(global_currently_bound_shader);
 
     // NOTE(tbt): setup some OpenGL state
@@ -580,46 +584,6 @@ draw_rotated_sub_texture(OpenGLFunctions *gl,
     message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
-}
-
-#define ui_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
-#define world_draw_texture(_gl, _rectangle, _colour, _texture) draw_texture((_gl), (_rectangle), (_colour), (_texture), WORLD_SORT_DEPTH, global_projection_matrix)
-internal void
-draw_texture(OpenGLFunctions *gl,
-             Rectangle rectangle,
-             Colour colour,
-             Asset *texture,
-             U32 sort,
-             F32 *projection_matrix)
-{
-    draw_sub_texture(gl,
-                     rectangle,
-                     colour,
-                     texture,
-                     ENTIRE_TEXTURE,
-                     sort,
-                     projection_matrix);
-}
-
-#define ui_draw_rotated_texture(_gl, _rectangle, _angle, _colour, _texture) draw_rotated_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
-#define world_draw_rotated_texture(_gl, _rectangle, _angle, _colour, _texture) draw_rotated_texture((_gl), (_rectangle), (_angle), (_colour), (_texture), WORLD_SORT_DEPTH, global_projection_matrix)
-internal void
-draw_rotated_texture(OpenGLFunctions *gl,
-                     Rectangle rectangle,
-                     F32 angle,
-                     Colour colour,
-                     Asset *texture,
-                     U32 sort,
-                     F32 *projection_matrix)
-{
-    draw_rotated_sub_texture(gl,
-                             rectangle,
-                             angle,
-                             colour,
-                             texture,
-                             ENTIRE_TEXTURE,
-                             sort,
-                             projection_matrix);
 }
 
 #define ui_fill_rectangle(_rectangle, _colour) fill_rectangle((_rectangle), (_colour), UI_SORT_DEPTH, global_ui_projection_matrix)

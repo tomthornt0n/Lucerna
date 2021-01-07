@@ -27,7 +27,7 @@ save_map(void)
     {
         fprintf(stderr,
                 "error saving map: could not open path '%s' - %s\n",
-                global_map.path,
+                temp_path,
                 strerror(errno));
         return false;
     }

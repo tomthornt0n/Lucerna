@@ -352,6 +352,8 @@ do_editor(OpenGLFunctions *gl,
             {
                 for (I32 i = 0; i < ENTITY_FLAG_COUNT; ++i)
                 {
+                    if (i == ENTITY_FLAG_PROJECTILE) { continue; }
+
                     do_bit_toggle_button(input,
                                          ENTITY_FLAG_TO_STRING(i),
                                          &global_editor_selected_entity->flags,

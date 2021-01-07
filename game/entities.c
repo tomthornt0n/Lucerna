@@ -20,7 +20,10 @@ enum
     ENTITY_FLAG_AUDIO_FALLOFF,       // NOTE(tbt): sets the volume of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
     ENTITY_FLAG_AUDIO_3D_PAN,        // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
     ENTITY_FLAG_RENDER_RECTANGLE,    // NOTE(tbt): sets the pan of it's audio source based on the distance to the centre of `bounds` from the centre of the screen
-    ENTITY_FLAG_DESTROY_ON_CONTANCT, // NOTE(tbt): sets the deleted flag if it comes into contact with a solid tile
+    ENTITY_FLAG_DESTROY_ON_CONTACT,  // NOTE(tbt): sets the deleted flag if it comes into contact with a solid tile
+    ENTITY_FLAG_LIMIT_RANGE,         // NOTE(tbt): sets the deleted flag once a specific range from it's initial position has been exceeded
+    ENTITY_FLAG_CHECKPOINT,          // NOTE(tbt): saves the game when the player comes into contact with it
+    ENTITY_FLAG_PROJECTILE,          // NOTE(tbt): set if it is allocated from the projectile pool
 
     ENTITY_FLAG_COUNT
 };
@@ -37,31 +40,43 @@ enum
                                       (_flag) == ENTITY_FLAG_AUDIO_FALLOFF       ? "audio falloff"      : \
                                       (_flag) == ENTITY_FLAG_AUDIO_3D_PAN        ? "audio 3d pan"       : \
                                       (_flag) == ENTITY_FLAG_RENDER_RECTANGLE    ? "render rectangle"   : \
-                                      (_flag) == ENTITY_FLAG_DESTROY_ON_CONTANCT ? "destroy on contact" : NULL)
+                                      (_flag) == ENTITY_FLAG_DESTROY_ON_CONTACT  ? "destroy on contact" : \
+                                      (_flag) == ENTITY_FLAG_LIMIT_RANGE         ? "limit range"        : \
+                                      (_flag) == ENTITY_FLAG_CHECKPOINT          ? "checkpoint"         : NULL)
 
 struct GameEntity
 {
     GameEntity *next;
     U64 flags;
 
-    Rectangle bounds;        // NOTE(tbt): used for collision checks and rendering
+    Rectangle bounds;         // NOTE(tbt): used for collision checks and rendering
     Asset *texture;
     Asset *sound;
-    SubTexture *sub_texture; // NOTE(tbt): an array of SubTextures. ENTITY_FLAG_RENDER_TEXTURE uses *sub_texture by default, or sub_texture[frame] if ENTITY_FLAG_ANIMATED is set
-    Colour colour;           // NOTE(tbt): used by ENTITY_FLAG_RENDER_RECTANGLE, ignored by ENTITY_FLAG_RENDER_TEXTURE
+    SubTexture *sub_texture;  // NOTE(tbt): an array of SubTextures. ENTITY_FLAG_RENDER_TEXTURE uses *sub_texture by default, or sub_texture[frame] if ENTITY_FLAG_ANIMATED is set
+    Colour colour;            // NOTE(tbt): used by ENTITY_FLAG_RENDER_RECTANGLE, ignored by ENTITY_FLAG_RENDER_TEXTURE
     F32 speed;
-    F32 x_vel, y_vel;        // NOTE(tbt): added to bounds.x and bounds.y respectively if ENTITY_FLAG_DYNAMIC is set
-    F32 rotation;            // NOTE(tbt): angle in radians to render at. ignored by collision checks
+    F32 x_vel, y_vel;         // NOTE(tbt): added to bounds.x and bounds.y respectively if ENTITY_FLAG_DYNAMIC is set
+    F32 rotation;             // NOTE(tbt): angle in radians to render at. ignored by collision checks
     U32 frame;
-    U32 animation_length;    // NOTE(tbt): number of elements in the sub_texture array
+    U32 animation_length;     // NOTE(tbt): number of elements in the sub_texture array
     U32 animation_start, animation_end; // NOTE(tbt): loop within this range
     F64 animation_speed, animation_clock;
-    I8 *level_transport;     // NOTE(tbt): map with this path is loaded if bounds intersects an entity with ENTITY_FLAG_PLAYER_MOVEMENT
+    I8 *level_transport;      // NOTE(tbt): map with this path is loaded if bounds intersects an entity with ENTITY_FLAG_PLAYER_MOVEMENT
     Gradient gradient;
-    U32 cooldown;            // NOTE(tbt): cooldown for weapons
+    F32 cooldown;             // NOTE(tbt): cooldown for weapons
+
+    // NOTE(tbt): remove entity when the distance between `bounds.xy` and the initial position exceeds `range`
+    F32 range; // NOTE(tbt): range does not need to be serialised as it is only used on projectiles
+    F32 initial_x, initial_y;
+
+    B32 colliding_with_player;
 };
 
 internal GameEntity *global_editor_selected_entity;
+
+#define PROJECTILE_POOL_SIZE 4
+internal GameEntity global_projectile_pool[PROJECTILE_POOL_SIZE];
+internal GameEntity *global_projectile_free_list = NULL;
 
 #define TILE_SIZE 64
 internal F32 one_over_tile_size = 1.0f / TILE_SIZE;
@@ -74,7 +89,7 @@ struct Tile
     B32 visible;
 };
 
-#define PLAYER_FIRE_RATE 30
+#define PLAYER_FIRE_RATE 0.5f
 internal GameEntity *
 create_player(OpenGLFunctions *gl,
               F32 x, F32 y)
@@ -88,8 +103,8 @@ create_player(OpenGLFunctions *gl,
                     BIT(ENTITY_FLAG_ANIMATED)        |
                     BIT(ENTITY_FLAG_CAMERA_FOLLOW);
     result->bounds = RECTANGLE(x, y, TILE_SIZE, TILE_SIZE);
-    result->speed = 256.0f;
-    result->animation_speed = 0.2;
+    result->speed = 300.0f;
+    result->animation_speed = 0.18;
     result->animation_length = 16;
     result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -147,19 +162,23 @@ create_laser_projectile(F32 x, F32 y,
                         F32 target_x, F32 target_y,
                         F32 speed)
 {
-    // TODO(tbt): projectiles should probably be pooled and not just a normal entity
-    // TODO(tbt): remove projectiles after a range has been exceeded
-
-    GameEntity *result = arena_allocate(&global_level_memory, sizeof(*result));
+    if (!global_projectile_free_list) { return NULL; }
+    GameEntity *result = global_projectile_free_list;
+    global_projectile_free_list = global_projectile_free_list->next;
     ++(global_map.entity_count);
 
-    result->flags = BIT(ENTITY_FLAG_RENDER_RECTANGLE) |
-                    BIT(ENTITY_FLAG_TRIGGER_SOUND)    |
-                    BIT(ENTITY_FLAG_DYNAMIC)          |
-                    BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT);
+    result->flags = BIT(ENTITY_FLAG_RENDER_RECTANGLE)   |
+                    BIT(ENTITY_FLAG_TRIGGER_SOUND)      |
+                    BIT(ENTITY_FLAG_DYNAMIC)            |
+                    BIT(ENTITY_FLAG_DESTROY_ON_CONTACT) |
+                    BIT(ENTITY_FLAG_LIMIT_RANGE)        |
+                    BIT(ENTITY_FLAG_PROJECTILE);
     result->bounds = RECTANGLE(x, y, 4.0f, 32.0f);
     result->colour = COLOUR(1.0f, 0.0f, 0.0f, 0.5f);
     result->sound = asset_from_path(AUDIO_PATH("laser.wav"));
+    result->initial_x = x;
+    result->initial_y = y;
+    result->range = 256.0f;
 
     F32 x_offset = target_x - x;
     F32 y_offset = target_y - y;
@@ -274,6 +293,13 @@ process_entities(OpenGLFunctions *gl,
             {
                 global_map.entities = entity->next;
             }
+
+            // NOTE(tbt): return deleted projectiles to the free list
+            if (entity->flags & BIT(ENTITY_FLAG_PROJECTILE))
+            {
+                entity->next = global_projectile_free_list;
+                global_projectile_free_list = entity;
+            }
         }
 
         if (entity->flags & BIT(ENTITY_FLAG_AUDIO_FALLOFF) ||
@@ -303,6 +329,8 @@ process_entities(OpenGLFunctions *gl,
             }
         }
 
+        B32 colliding_with_player = false;
+
         for (GameEntity *b = global_map.entities;
              b;
              b = b->next)
@@ -314,6 +342,7 @@ process_entities(OpenGLFunctions *gl,
                 {
                     play_audio_source(entity->sound);
                 }
+
                 if (entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER))
                 {
                     // NOTE(tbt): set editor selected entity to NULL to prevent it
@@ -321,11 +350,22 @@ process_entities(OpenGLFunctions *gl,
                     global_editor_selected_entity = NULL;
 
                     load_map(gl, entity->level_transport);
+                    load_most_recent_save_for_current_map(gl);
 
                     return;
                 }
+
+                if (entity->flags & BIT(ENTITY_FLAG_CHECKPOINT) &&
+                    !entity->colliding_with_player)
+                {
+                    save_game();
+                }
+
+                colliding_with_player = true;
+                break;
             }
         }
+        entity->colliding_with_player = colliding_with_player;
 
         if (entity->flags & BIT(ENTITY_FLAG_PLAYER_MOVEMENT))
         {
@@ -381,12 +421,12 @@ process_entities(OpenGLFunctions *gl,
 
             // HACK(tbt): entities other than the player will be able to shoot
             // TODO(tbt): give shooting it's own flag
-            if (entity->cooldown < 1)
+            if (entity->cooldown < 0.0f)
             {
                 if (input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
                 {
-                    create_laser_projectile(entity->bounds.x + entity->bounds.w * 0.5f + entity->x_vel,
-                                            entity->bounds.y + entity->bounds.w * 0.5f + entity->y_vel,
+                    create_laser_projectile(entity->bounds.x + entity->bounds.w * 0.5f + entity->x_vel * frametime_in_s,
+                                            entity->bounds.y + entity->bounds.w * 0.5f + entity->y_vel * frametime_in_s,
                                             input->mouse_x + global_camera_x,
                                             input->mouse_y + global_camera_y,
                                             512.0f);
@@ -395,61 +435,65 @@ process_entities(OpenGLFunctions *gl,
             }
             else
             {
-                entity->cooldown -= 1;
+                entity->cooldown -= frametime_in_s;
             }
         }
 
-        if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC))
+        // BUG(tbt): only checks each corner, so doesn't work for entities
+        //           larger than `TILE_SIZE`
+        // TODO(tbt): step through each edge in intervals of TILE_SIZE and
+        //            check for collisions
+
+        B32 colliding;
+        Tile *tile; 
+        Rectangle new_bounds;
+
+        // NOTE(tbt): x-axis collision check
+        colliding = false;
+        new_bounds = entity->bounds;
+        new_bounds.x += entity->x_vel * frametime_in_s;
+
+        tile = get_tile_at_position(new_bounds.x, new_bounds.y);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x + new_bounds.w, new_bounds.y);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x, new_bounds.y + new_bounds.h);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x + new_bounds.w, new_bounds.y + new_bounds.h);
+        if (!tile || tile->solid) { colliding = true; }
+
+        if (!colliding)
         {
-            B32 colliding;
-            Tile *tile; 
-            Rectangle r;
-            
-            // BUG(tbt): only checks each corner, so doesn't work for entities
-            //           larger than `TILE_SIZE`
-            // TODO(tbt): step through each edge in intervals of TILE_SIZE and
-            //            check for collisions
-
-            // NOTE(tbt): x-axis collision check
-            colliding = false;
-            r = entity->bounds;
-            r.x += entity->x_vel * frametime_in_s;
-
-            tile = get_tile_at_position(r.x, r.y);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x + r.w, r.y);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x, r.y + r.h);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x + r.w, r.y + r.h);
-            if (!tile || tile->solid) { colliding = true; }
-
-            if (!colliding) { entity->bounds.x = r.x; }
-            else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
-            {
-                entity->flags |= BIT(ENTITY_FLAG_DELETED);
-            }
-
-            // NOTE(tbt): y-axis collision check
-            colliding = false;
-            r = entity->bounds;
-            r.y += entity->y_vel * frametime_in_s;
-
-            tile = get_tile_at_position(r.x, r.y);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x + r.w, r.y);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x, r.y + r.h);
-            if (!tile || tile->solid) { colliding = true; }
-            tile = get_tile_at_position(r.x + r.w, r.y + r.h);
-            if (!tile || tile->solid) { colliding = true; }
-
-            if (!colliding) { entity->bounds.y = r.y; }
-            else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
-            {
-                entity->flags |= BIT(ENTITY_FLAG_DELETED);
-            }
+            if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC)) { entity->bounds.x = new_bounds.x; }
         }
+        else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+        {
+            entity->flags |= BIT(ENTITY_FLAG_DELETED);
+        }
+
+        // NOTE(tbt): y-axis collision check
+        colliding = false;
+        new_bounds = entity->bounds;
+        new_bounds.y += entity->y_vel * frametime_in_s;
+
+        tile = get_tile_at_position(new_bounds.x, new_bounds.y);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x + new_bounds.w, new_bounds.y);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x, new_bounds.y + new_bounds.h);
+        if (!tile || tile->solid) { colliding = true; }
+        tile = get_tile_at_position(new_bounds.x + new_bounds.w, new_bounds.y + new_bounds.h);
+        if (!tile || tile->solid) { colliding = true; }
+
+        if (!colliding)
+        {
+            if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC)) { entity->bounds.y = new_bounds.y; }
+        }
+        else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+        {
+            entity->flags |= BIT(ENTITY_FLAG_DELETED);
+        }
+        
 
         if (entity->flags & BIT(ENTITY_FLAG_CAMERA_FOLLOW))
         {
@@ -473,6 +517,18 @@ process_entities(OpenGLFunctions *gl,
 
             set_camera_position(global_camera_x + camera_x_vel,
                                 global_camera_y + camera_y_vel);
+        }
+
+        if (entity->flags & BIT(ENTITY_FLAG_LIMIT_RANGE))
+        {
+            F32 x_offset = entity->bounds.x - entity->initial_x;
+            F32 y_offset = entity->bounds.y - entity->initial_y;
+
+            F32 range_squared = x_offset * x_offset + y_offset * y_offset;
+            if (range_squared > entity->range * entity->range)
+            {
+                entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            }
         }
 
         if (entity->flags & BIT(ENTITY_FLAG_ANIMATED))

@@ -1788,12 +1788,13 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
                            node->sort,
                            global_ui_projection_matrix);
 
-            draw_texture(gl,
-                         node->bounds,
-                         COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
-                         node->texture,
-                         node->sort,
-                         global_ui_projection_matrix);
+            draw_sub_texture(gl,
+                             node->bounds,
+                             COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                             node->texture,
+                             ENTIRE_TEXTURE,
+                             node->sort,
+                             global_ui_projection_matrix);
 
             stroke_rectangle(node->bg,
                              FG_COL_1,
