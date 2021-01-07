@@ -68,6 +68,100 @@ get_text_bounds(Font *font,
                 max_y = q.y1;
             }
 
+            // NOTE(tbt): need to check against the current position as well as
+            //            some characters don't have any width, just advance the
+            //            current position
+            if (x > max_x)
+            {
+                max_x = x;
+            }
+            if (y > max_y)
+            {
+                max_y = y;
+            }
+
+
+            if (wrap_width && isspace(*string))
+            {
+                if (x + (q.x1 - q.x0) * 2 >
+                    line_start + wrap_width)
+                {
+                    y += font->size;
+                    x = line_start;
+                }
+            }
+        }
+        else if (*string == '\n')
+        {
+            y += font->size;
+            x = line_start;
+        }
+
+        ++string;
+    }
+
+    result = RECTANGLE(min_x, min_y, max_x - min_x, max_y - min_y);
+    return result;
+}
+
+internal Rectangle
+n_get_text_bounds(Font *font,
+                  F32 x, F32 y,
+                  U32 wrap_width,
+                  I8 *string,
+                  I32 n)
+{
+    Rectangle result;
+    stbtt_aligned_quad q;
+    F32 line_start = x;
+
+    F32 min_x = x, min_y = y, max_x = 0.0f, max_y = 0.0f;
+
+    while (*string && n--)
+    {
+        if (*string >=32 &&
+            *string < 128)
+        {
+            F32 char_width, char_height;
+    
+            stbtt_GetBakedQuad(font->char_data,
+                               font->texture.width,
+                               font->texture.height,
+                               *string - 32,
+                               &x,
+                               &y,
+                               &q,
+                               1);
+
+            if (q.x0 < min_x)
+            {
+                min_x = q.x0;
+            }
+            if (q.y0 < min_y)
+            {
+                min_y = q.y0;
+            }
+            if (q.x1 > max_x)
+            {
+                max_x = q.x1;
+            }
+            if (q.y1 > max_y)
+            {
+                max_y = q.y1;
+            }
+
+            // NOTE(tbt): need to check against the current position as well as
+            //            some characters don't have any width, just advance the
+            //            current position
+            if (x > max_x)
+            {
+                max_x = x;
+            }
+            if (y > max_y)
+            {
+                max_y = y;
+            }
+
             if (wrap_width && isspace(*string))
             {
                 if (x + (q.x1 - q.x0) * 2 >
@@ -116,6 +210,7 @@ struct UINode
     B32 hidden;
     F32 min, max;
     Asset *texture;
+    U32 cursor;
 };
 
 #define UI_HASH_TABLE_SIZE (1024)
@@ -926,10 +1021,9 @@ internal void
 do_text_entry(PlatformState *input,
               I8 *name,
               I8 *buffer,
-              U32 buffer_size)
+              U32 buffer_size,
+              I8 *button) // NOTE(tbt): the identifier of a button can be passed, which whill be set to toggled when the return is typed
 {
-    // TODO(tbt): proper cursor
-
     UINode *node;
 
     // NOTE(tbt): approximate width of one character on average by taking the width of 'e'
@@ -989,15 +1083,63 @@ do_text_entry(PlatformState *input,
             KeyTyped *key = input->keys_typed;
             while (key)
             {
-                if (key->key == 8 && len > 0)
+                if (key->key == 8 &&
+                    len > 0       &&
+                    node->cursor-- > 0)
                 {
-                    node->label[--len] = 0;
+                    memcpy(&node->label[node->cursor],
+                           &node->label[node->cursor + 1],
+                           len - node->cursor);
+                    --len;
                 }
-                else if (isprint(key->key) && len < buffer_size)
+                else if (isprint(key->key) &&
+                         len < buffer_size &&
+                         node->cursor < buffer_size)
                 {
-                    node->label[len++] = key->key;
+                    memcpy(&node->label[node->cursor + 1],
+                           &node->label[node->cursor],
+                           len - node->cursor);
+                    node->label[node->cursor++] = key->key;
+                    ++len;
                 }
+                else if (key->key == '\n' ||
+                         key->key == '\r' &&
+                         button)
+                {
+                    UINode *button_node = widget_state_from_string(button);
+                    if (button_node &&
+                        button_node->type == UI_NODE_TYPE_BUTTON)
+                    {
+                        button_node->toggled = true;
+                        global_active_widget = button_node;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "could not find button '%s'\n", button);
+                    }
+                }
+
                 key = key->next;
+            }
+            static U32 cursor_cooldown = 4;
+            if (cursor_cooldown >= 4)
+            {
+                if (input->is_key_pressed[KEY_LEFT] &&
+                    node->cursor > 0)
+                {
+                    --node->cursor;
+                    cursor_cooldown = 0;
+                }
+                else if (input->is_key_pressed[KEY_RIGHT] &&
+                         node->cursor < len)
+                {
+                    ++node->cursor;
+                    cursor_cooldown = 0;
+                }
+            }
+            else
+            {
+                ++cursor_cooldown;
             }
         }
         else
@@ -1719,17 +1861,16 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
                                node->sort,
                                global_ui_projection_matrix);
 
-                Rectangle text_bounds = get_text_bounds(global_ui_font,
-                                                        x + PADDING,
-                                                        y + global_ui_font->size,
-                                                        node->max_width,
-                                                        node->label);
+                F32 cursor_x = x + PADDING + n_get_text_bounds(global_ui_font,
+                                                               0.0f, 0.0f,
+                                                               node->max_width,
+                                                               node->label,
+                                                               node->cursor).w;
 
                 if (strlen(node->label))
                 {
-                    fill_rectangle(RECTANGLE(text_bounds.x +
-                                             text_bounds.w + CURSOR_THICKNESS,
-                                             text_bounds.y,
+                    fill_rectangle(RECTANGLE(cursor_x,
+                                             y + PADDING * 0.5f,
                                              CURSOR_THICKNESS,
                                              global_ui_font->size),
                                    FG_COL_1,

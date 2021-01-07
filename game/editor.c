@@ -500,7 +500,7 @@ do_editor(OpenGLFunctions *gl,
                   input->window_height / 2,
                   512.0f)
         {
-            do_text_entry(input, "level path", level_path, PATH_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "level path", level_path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
             
@@ -546,17 +546,17 @@ do_editor(OpenGLFunctions *gl,
         {
             static I8 tilemap_width_str[NUMBER_ENTRY_BUFFER_SIZE];
             static I8 tilemap_height_str[NUMBER_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "map path", level_path, PATH_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "map path", level_path, PATH_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 
             do_label("tmw", "tilemap width: ", 100.0f);
-            do_text_entry(input, "tmw e", tilemap_width_str, NUMBER_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "tmw e", tilemap_width_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 
             do_label("tmh", "tilemap height: ", 100.0f);
-            do_text_entry(input, "tmh e", tilemap_height_str, NUMBER_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "tmh e", tilemap_height_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 
@@ -587,7 +587,7 @@ do_editor(OpenGLFunctions *gl,
                   512.0f)
         {
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "texture path", path, PATH_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "texture path", path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
 
@@ -621,7 +621,7 @@ do_editor(OpenGLFunctions *gl,
                   512.0f)
         {
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "sound path", path, PATH_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "sound path", path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
 
@@ -666,7 +666,7 @@ do_editor(OpenGLFunctions *gl,
             do_line_break();
 
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "level path", path, PATH_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "level path", path, PATH_ENTRY_BUFFER_SIZE, "create");
             
             do_line_break();
 
@@ -735,8 +735,8 @@ do_editor(OpenGLFunctions *gl,
             static I8 frame_h_str[NUMBER_ENTRY_BUFFER_SIZE];
 
             do_label("animation frame size", "frame size: ", 256.0f);
-            do_text_entry(input, "afswe", frame_w_str, NUMBER_ENTRY_BUFFER_SIZE);
-            do_text_entry(input, "afshe", frame_h_str, NUMBER_ENTRY_BUFFER_SIZE);
+            do_text_entry(input, "afswe", frame_w_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
+            do_text_entry(input, "afshe", frame_h_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 

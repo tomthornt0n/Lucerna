@@ -6,49 +6,41 @@
   License : N/A
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-enum
-{
-    LOAD_SAVE_GAME_STATUS_SUCCESS =  1,
-    LOAD_SAVE_GAME_STATUS_FAILURE =  0,
-    LOAD_SAVE_GAME_STATUS_NO_MAP  = -1,
-    LOAD_SAVE_GAME_STATUS_NO_SAVE = -2,
-};
-
+// NOTE(tbt): returns 1 on succes, 0 on failure, -1 if there is not a save for the current map
 internal I32
-load_map_and_get_most_recent_save(OpenGLFunctions *gl,
-                                  I8 *path)
+load_most_recent_save_for_current_map(OpenGLFunctions *gl)
 {
     FILE *f, *save_file;
     U32 err;
 
     // NOTE(tbt): 'validate' path
-    if (!path) { return 0; }
-    if (!(*path))
+    if (!global_map.path) { return 0; }
+    if (!(*global_map.path))
     {
         fprintf(stderr, "loading save game: could not load map - empty path.\n");
-        return LOAD_SAVE_GAME_STATUS_NO_MAP;
+        return -1;
     }
 
     // NOTE(tbt): generate path for save game
     I8 *save_path = arena_allocate(&global_frame_memory,
-                                   strlen(path) + 6);
-    strcpy(save_path, path);
+                                   strlen(global_map.path) + 6);
+    strcpy(save_path, global_map.path);
     strcat(save_path, ".save");
 
     // NOTE(tbt): open the save file and ensure it exists
     save_file = fopen(save_path, "rb");
     if (!save_file)
     {
-        fprintf(stderr, "could not find a save for '%s'.\n", path);
-        return LOAD_SAVE_GAME_STATUS_NO_SAVE;
+        fprintf(stderr, "could not find a save for '%s'.\n", global_map.path);
+        return -1;
     }
 
     // NOTE(tbt): open the map file
-    f = fopen(path, "rb");
+    f = fopen(global_map.path, "rb");
     if (!f)
     {
-        fprintf(stderr, "could not load save game - map at path '%s' does not exist.\n", path);
-        return LOAD_SAVE_GAME_STATUS_NO_MAP;
+        fprintf(stderr, "could not load save game - '%s' does not exist.\n", global_map.path);
+        return -1;
     }
 
     // NOTE(tbt): clear state left from previous loaded map
@@ -63,7 +55,7 @@ load_map_and_get_most_recent_save(OpenGLFunctions *gl,
     {
         fprintf(stderr, "error loading save game - failure reading map header.\n");
         fclose(f);
-        return LOAD_SAVE_GAME_STATUS_FAILURE;
+        return 0;
     }
 
     // NOTE(tbt): read tiles
@@ -87,7 +79,7 @@ load_map_and_get_most_recent_save(OpenGLFunctions *gl,
         {
             fprintf(stderr, "error loading save game - failure reading tiles.\n");
             fclose(f);
-            return LOAD_SAVE_GAME_STATUS_FAILURE;
+            return 0;
         }
 
         // NOTE(tbt): read asset path
@@ -152,7 +144,7 @@ load_map_and_get_most_recent_save(OpenGLFunctions *gl,
             {
                 fprintf(stderr, "error loading save game - unrecognised file version.\n");
                 fclose(f);
-                return LOAD_SAVE_GAME_STATUS_FAILURE;
+                return 0;
             }
         }
 
@@ -164,7 +156,7 @@ load_map_and_get_most_recent_save(OpenGLFunctions *gl,
                     entity_index,
                     global_map.entity_count);
             fclose(f);
-            return LOAD_SAVE_GAME_STATUS_FAILURE;
+            return 0;
         }
 
         if (last_entity) { last_entity->next = entity; }
@@ -176,18 +168,12 @@ load_map_and_get_most_recent_save(OpenGLFunctions *gl,
             "loading save game: successfully read %u entities, %u tiles from map '%s'.\n",
             header.entity_count,
             header.tilemap_width * header.tilemap_height,
-            path);
+            global_map.path);
 
     fclose(f);
     fclose(save_file);
 
-    return LOAD_SAVE_GAME_STATUS_SUCCESS;
-}
-
-internal I32
-load_most_recent_save_for_current_map(OpenGLFunctions *gl)
-{
-    load_map_and_get_most_recent_save(gl, global_map.path);
+    return 1;
 }
 
 internal B32
