@@ -47,26 +47,6 @@ struct GameMap
 #include "editor.c"
 
 void
-test_job_1(void *arg,
-           U64 memory_size, void *memory)
-{
-    // NOTE(tbt): test jobs without memory
-    assert(!memory && !memory_size);
-
-    fprintf(stderr, "this was printed by another thread\n");
-}
-
-void
-test_job_2(void *arg,
-           U64 memory_size, void *memory)
-{
-    // NOTE(tbt): test jobs with memory
-    assert(memory && memory_size);
-
-    snprintf(memory, memory_size, "msg from another thread: %s", arg);
-}
-
-void
 game_init(OpenGLFunctions *gl)
 {
     initialise_arena_with_new_memory(&global_static_memory, 10 * ONE_MB);
@@ -76,16 +56,6 @@ game_init(OpenGLFunctions *gl)
     initialise_renderer(gl);
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
-
-    I8 msg[] = "hello from another thread!\n";
-    PlatformJobHandle *job_1 = platform_enqueue_job(test_job_1, NULL, 0);
-    PlatformJobHandle *job_2 = platform_enqueue_job_with_memory(test_job_2, msg, strlen(msg) + 1, 64);
-
-    platform_wait_for_job(job_1);
-    I8 *msg_from_thread = platform_wait_for_job(job_2);
-
-    fprintf(stderr, msg_from_thread);
-    free(msg_from_thread);
 }
 
 internal I32 global_game_state = GAME_STATE_PLAYING;
@@ -93,11 +63,14 @@ internal I32 global_game_state = GAME_STATE_PLAYING;
 void
 game_update_and_render(OpenGLFunctions *gl,
                        PlatformState *input,
-                       U64 timestep_in_ns)
+                       F64 frametime_in_s)
 {
-    static U32 previous_width = 0, previous_height = 0;
-    static U32 editor_mode_toggle_cooldown_timer = 500;
+    //
+    // NOTE(tbt): recalculate projection matrix, set viewport, etc. when window
+    //            size changes
+    //
 
+    static U32 previous_width = 0, previous_height = 0;
     if (input->window_width != previous_width ||
         input->window_height != previous_height)
     {
@@ -105,12 +78,17 @@ game_update_and_render(OpenGLFunctions *gl,
                                      input->window_height);
     }
 
-    ++editor_mode_toggle_cooldown_timer;
+    //
+    // NOTE(tbt): toggle between the game and the editor
+    //
+
+    static F64 editor_mode_toggle_cooldown_timer = 1.0f;
+    editor_mode_toggle_cooldown_timer += frametime_in_s;
     if (input->is_key_pressed[KEY_E]            &&
         input->is_key_pressed[KEY_LEFT_CONTROL] &&
-        editor_mode_toggle_cooldown_timer > 15)
+        editor_mode_toggle_cooldown_timer > 1.0f)
     {
-        editor_mode_toggle_cooldown_timer = 0;
+        editor_mode_toggle_cooldown_timer = 0.0f;
 
         if (global_game_state == GAME_STATE_EDITOR)
         {
@@ -125,25 +103,58 @@ game_update_and_render(OpenGLFunctions *gl,
         }
     }
 
+    //
+    // NOTE(tbt): update and render the editor when in editor mode
+    //
+
     if (global_game_state == GAME_STATE_EDITOR)
     {
         do_ui(gl, input)
         {
-            do_editor(gl, input);
+            do_editor(gl, input, frametime_in_s);
         }
     }
+
+    //
+    // NOTE(tbt): draw the tilemap, update and draw entities while the game is
+    //            being played
+    //
+
     else if (global_game_state == GAME_STATE_PLAYING)
     {
         if (global_map.tilemap) { render_tiles(gl, false); }
-        process_entities(gl, input);
+        process_entities(gl, input, frametime_in_s);
     }
 
+    //
+    // NOTE(tbt): debug stuff - fps display and keybindings for enabling and
+    //            disbling v-sync
+    //
+
+    I8 fps_str[16];
+    gcvt(1.0 / frametime_in_s, 14, fps_str);
+    ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, BG_COL_2, fps_str);
+
+    if (input->is_key_pressed[KEY_LEFT_CONTROL])
+    {
+        if (input->is_key_pressed[KEY_V])
+        {
+            platform_set_vsync(true);
+        }
+        else if (input->is_key_pressed[KEY_D])
+        {
+            platform_set_vsync(false);
+        }
+    }
+
+    //
+    // NOTE(tbt): actually draw everything
+    //
 
     process_render_queue(gl);
 
     previous_width = input->window_width;
     previous_height = input->window_height;
-
 }
 
 void
@@ -156,5 +167,6 @@ game_cleanup(OpenGLFunctions *gl)
 
     free(global_static_memory.buffer);
     free(global_frame_memory.buffer);
+    free(global_level_memory.buffer);
 }
 

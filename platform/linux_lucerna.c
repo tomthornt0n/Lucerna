@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <math.h>
 #include <assert.h>
 #include <dlfcn.h>
@@ -220,21 +220,18 @@ linux_set_vsync(Display *display,
                                           "GLX_EXT_swap_control"))
     {
         glX.SwapIntervalEXT(display, drawable, enabled);
-        fprintf(stderr, "GLX_EXT_swap_control\n");
     }
     else if (linux_is_opengl_extension_present(display,
                                                screen_id,
                                                "GLX_SGI_swap_control"))
     {
         glX.SwapIntervalSGI(enabled);
-        fprintf(stderr, "GLX_SGI_swap_control\n");
     }
     else if (linux_is_opengl_extension_present(display,
                                                screen_id,
                                                "GLX_MESA_swap_control"))
     {
         glX.SwapIntervalMESA(enabled);
-        fprintf(stderr, "GLX_MESA_swap_control\n");
     }
     else
     {
@@ -319,36 +316,6 @@ linux_audio_thread_main(void *arg)
     snd_pcm_close(handle);
 
     return NULL;
-}
-
-struct PlatformTimer
-{
-    struct timespec start_time;
-};
-
-PlatformTimer *
-platform_start_timer(MemoryArena *arena)
-{
-    PlatformTimer *result = arena_allocate(arena, sizeof(*result));
-
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &(result->start_time));
-
-    return result;
-}
-
-U64
-platform_end_timer(PlatformTimer *timer)
-{
-    struct timespec end_time;
-
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-    U64 difference_in_nanoseconds = ((end_time.tv_sec -
-                                      timer->start_time.tv_sec) *
-                                     1e9l) +
-                                    (end_time.tv_nsec -
-                                     timer->start_time.tv_nsec);
-
-    return difference_in_nanoseconds;
 }
 
 Display *global_display;
@@ -529,9 +496,6 @@ main(int argc,
      char **argv)
 {
     I32 i;
-
-    struct timespec start_time, end_time;
-    U64 ts = 0;
 
     MemoryArena platform_layer_frame_memory;
     initialise_arena_with_new_memory(&platform_layer_frame_memory, ONE_MB);
@@ -779,14 +743,17 @@ main(int argc,
     event_queue.current = NULL;
     event_queue.next = NULL;
 
+    struct timeval start_time, end_time;
+    F64 frametime_in_s = 0.0f;
+
     while (global_running)
     {
         xcb_generic_event_t *event;
 
+        gettimeofday(&start_time, NULL);
+
         input.mouse_scroll = 0;
         input.keys_typed = NULL;
-
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 
         linux_update_event_queue(global_connection, &event_queue);
         event = event_queue.current;
@@ -961,16 +928,17 @@ main(int argc,
         }
 
         glX.SwapBuffers(global_display, global_drawable);
-        game_update_and_render(&gl, &input, ts);
+        game_update_and_render(&gl,
+                               &input,
+                               frametime_in_s);
 
         arena_free_all(&platform_layer_frame_memory);
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-        ts = ((end_time.tv_sec -
-               start_time.tv_sec) *
-              1e9l) +
-             (end_time.tv_nsec -
-              start_time.tv_nsec);
+        gettimeofday(&end_time, NULL);
+
+        frametime_in_s = (F64)((end_time.tv_sec * 1000000   + end_time.tv_usec) -
+                               (start_time.tv_sec * 1000000 + start_time.tv_usec)) *
+                         1e-6;
     }
 
     game_cleanup(&gl);

@@ -55,7 +55,7 @@ struct GameEntity
     U32 frame;
     U32 animation_length;    // NOTE(tbt): number of elements in the sub_texture array
     U32 animation_start, animation_end; // NOTE(tbt): loop within this range
-    U64 animation_speed, animation_clock;
+    F64 animation_speed, animation_clock;
     I8 *level_transport;     // NOTE(tbt): map with this path is loaded if bounds intersects an entity with ENTITY_FLAG_PLAYER_MOVEMENT
     Gradient gradient;
     U32 cooldown;            // NOTE(tbt): cooldown for weapons
@@ -88,8 +88,8 @@ create_player(OpenGLFunctions *gl,
                     BIT(ENTITY_FLAG_ANIMATED)        |
                     BIT(ENTITY_FLAG_CAMERA_FOLLOW);
     result->bounds = RECTANGLE(x, y, TILE_SIZE, TILE_SIZE);
-    result->speed = 8.0f;
-    result->animation_speed = 10;
+    result->speed = 256.0f;
+    result->animation_speed = 0.2;
     result->animation_length = 16;
     result->colour = COLOUR(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -157,7 +157,9 @@ create_laser_projectile(F32 x, F32 y,
                     BIT(ENTITY_FLAG_TRIGGER_SOUND)    |
                     BIT(ENTITY_FLAG_DYNAMIC)          |
                     BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT);
+    result->bounds = RECTANGLE(x, y, 4.0f, 32.0f);
     result->colour = COLOUR(1.0f, 0.0f, 0.0f, 0.5f);
+    result->sound = asset_from_path(AUDIO_PATH("laser.wav"));
 
     F32 x_offset = target_x - x;
     F32 y_offset = target_y - y;
@@ -168,12 +170,6 @@ create_laser_projectile(F32 x, F32 y,
     result->y_vel = y_offset * reciprocal_sqrt_f(length_squared) * speed;
 
     result->rotation = atan(y_offset / x_offset) + 1.5707963268; // NOTE(tbt): offset by 90°
-
-    result->bounds = RECTANGLE(x + result->x_vel,
-                               y + result->y_vel,
-                               4.0f, 32.0f);
-
-    result->sound = asset_from_path(AUDIO_PATH("laser.wav"));
 
     result->next = global_map.entities;
     global_map.entities = result;
@@ -258,7 +254,8 @@ internal I32 load_map(OpenGLFunctions *gl, I8 *path);
 
 internal void
 process_entities(OpenGLFunctions *gl,
-                 PlatformState *input)
+                 PlatformState *input,
+                 F64 frametime_in_s)
 {
     GameEntity *entity, *previous = NULL;
     for (entity = global_map.entities;
@@ -392,7 +389,7 @@ process_entities(OpenGLFunctions *gl,
                                             entity->bounds.y + entity->bounds.w * 0.5f + entity->y_vel,
                                             input->mouse_x + global_camera_x,
                                             input->mouse_y + global_camera_y,
-                                            12.0f);
+                                            512.0f);
                     entity->cooldown = PLAYER_FIRE_RATE;
                 }
             }
@@ -416,7 +413,7 @@ process_entities(OpenGLFunctions *gl,
             // NOTE(tbt): x-axis collision check
             colliding = false;
             r = entity->bounds;
-            r.x += entity->x_vel;
+            r.x += entity->x_vel * frametime_in_s;
 
             tile = get_tile_at_position(r.x, r.y);
             if (!tile || tile->solid) { colliding = true; }
@@ -427,7 +424,7 @@ process_entities(OpenGLFunctions *gl,
             tile = get_tile_at_position(r.x + r.w, r.y + r.h);
             if (!tile || tile->solid) { colliding = true; }
 
-            if (!colliding) { entity->bounds.x += entity->x_vel; }
+            if (!colliding) { entity->bounds.x = r.x; }
             else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
             {
                 entity->flags |= BIT(ENTITY_FLAG_DELETED);
@@ -436,7 +433,7 @@ process_entities(OpenGLFunctions *gl,
             // NOTE(tbt): y-axis collision check
             colliding = false;
             r = entity->bounds;
-            r.y += entity->y_vel;
+            r.y += entity->y_vel * frametime_in_s;
 
             tile = get_tile_at_position(r.x, r.y);
             if (!tile || tile->solid) { colliding = true; }
@@ -447,7 +444,7 @@ process_entities(OpenGLFunctions *gl,
             tile = get_tile_at_position(r.x + r.w, r.y + r.h);
             if (!tile || tile->solid) { colliding = true; }
 
-            if (!colliding) { entity->bounds.y += entity->y_vel; }
+            if (!colliding) { entity->bounds.y = r.y; }
             else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTANCT))
             {
                 entity->flags |= BIT(ENTITY_FLAG_DELETED);
@@ -480,9 +477,9 @@ process_entities(OpenGLFunctions *gl,
 
         if (entity->flags & BIT(ENTITY_FLAG_ANIMATED))
         {
-            ++entity->animation_clock;
+            entity->animation_clock += frametime_in_s;
 
-            if (entity->animation_clock == entity->animation_speed)
+            if (entity->animation_clock >= entity->animation_speed)
             {
                 I32 animation_length = entity->animation_end -
                                        entity->animation_start;

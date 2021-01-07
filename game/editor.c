@@ -23,6 +23,7 @@ enum
 internal void
 editor_proccess_entities(OpenGLFunctions *gl,
                          PlatformState *input,
+                         F64 frametime_in_s,
                          U64 editor_flags)
 {
     static GameEntity *active = NULL, *dragging = NULL;
@@ -180,19 +181,20 @@ editor_proccess_entities(OpenGLFunctions *gl,
 
 internal void
 do_editor(OpenGLFunctions *gl,
-          PlatformState *input)
+          PlatformState *input,
+          F64 frametime_in_s)
 {
     static U64 editor_flags = 0;
 
     if (global_map.tilemap)
     {
         render_tiles(gl, editor_flags & EDITOR_FLAG_TILE_EDIT);
-        editor_proccess_entities(gl, input, editor_flags);
+        editor_proccess_entities(gl, input, frametime_in_s, editor_flags);
     }
 
     if (!global_keyboard_focus)
     {
-        F32 editor_camera_speed = 8.0f;
+        F32 editor_camera_speed = 256.0f * frametime_in_s;
 
         set_camera_position(global_camera_x +
                             input->is_key_pressed[KEY_D] * editor_camera_speed +
@@ -376,7 +378,7 @@ do_editor(OpenGLFunctions *gl,
                 snprintf(entity_speed_label, 64, "speed: (%.1f)", global_editor_selected_entity->speed);
                 do_label("entity speed", entity_speed_label, 200.0f);
                 do_line_break();
-                do_slider_f(input, "entity speed slider", 0.0f, 32.0f, 1.0f, 200.0f, &(global_editor_selected_entity->speed));
+                do_slider_f(input, "entity speed slider", 64.0f, 1024.0f, 1.0f, 200.0f, &(global_editor_selected_entity->speed));
             }
     
             if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_RENDER_TEXTURE) &&
@@ -433,10 +435,10 @@ do_editor(OpenGLFunctions *gl,
                 do_line_break();
 
                 I8 entity_anim_speed_label[64] = {0};
-                snprintf(entity_anim_speed_label, 64, "animation speed: (%u)", global_editor_selected_entity->animation_speed);
+                snprintf(entity_anim_speed_label, 64, "animation speed: (%f)", global_editor_selected_entity->animation_speed);
                 do_label("entity animation speed", entity_anim_speed_label, 200.0f);
                 do_line_break();
-                do_slider_u(input, "entity animation speed slider", 0.0f, 60.0f, 1.0f, 200.0f, &global_editor_selected_entity->animation_speed);
+                do_slider_lf(input, "entity animation speed slider", 0.0f, 1.0f, -1.0, 200.0f, &global_editor_selected_entity->animation_speed);
             }
 
             if (global_editor_selected_entity->flags & BIT(ENTITY_FLAG_TELEPORT_PLAYER) &&

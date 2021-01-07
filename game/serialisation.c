@@ -20,7 +20,7 @@ typedef struct
     F32 r, g, b, a;
     F32 speed;
     U32 frame, animation_length, animation_start, animation_end;
-    U64 animation_speed;
+    F64 animation_speed;
     F32 gradient_tl_r;
     F32 gradient_tl_g;
     F32 gradient_tl_b;
@@ -49,7 +49,7 @@ typedef struct
     F32 r, g, b, a;
     F32 speed;
     U32 frame, animation_length, animation_start, animation_end;
-    U64 animation_speed;
+    F64 animation_speed;
     F32 gradient_tl_r;
     F32 gradient_tl_g;
     F32 gradient_tl_b;

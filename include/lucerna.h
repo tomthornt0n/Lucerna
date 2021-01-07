@@ -369,26 +369,16 @@ enum
 typedef struct MemoryArena MemoryArena;
 
 // NOTE(tbt): the functions called by the platform layer
-typedef void ( *GameInit) (OpenGLFunctions *gl);                                                      // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
-typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, U64 timestep_in_ns); // NOTE(tbt): called every frame
-typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);                                   // NOTE(tbt): called from the audio thread when the buffer needs refilling
-typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);                                     // NOTE(tbt): called when the window is closed and the main loop exits
+typedef void ( *GameInit) (OpenGLFunctions *gl);                                                       // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
+typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, F64 frametime_in_s);  // NOTE(tbt): called every frame
+typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);                                    // NOTE(tbt): called from the audio thread when the buffer needs refilling
+typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);                                      // NOTE(tbt): called when the window is closed and the main loop exits
 
 // NOTE(tbt): control for a lock to be used with the audio thread
 void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
 
-// NOTE(tbt): I don't think this works... :(
 void platform_set_vsync(B32 enabled);
-
-// NOTE(tbt): representation of high resolution clock varies depending on platform
-typedef struct PlatformTimer PlatformTimer;
-
-// NOTE(tbt): returns the current time in the opaque `PlatformTimer` format,
-//            which can be compared against by `platform_end_timer()` to get
-//            the interval since the timer was 'began'
-PlatformTimer *platform_start_timer(MemoryArena *arena);
-U64 platform_end_timer(PlatformTimer *timer); // NOTE(tbt): returns the elapsed time in ns since the timer was 'began'
 
 typedef struct Job PlatformJobHandle; // NOTE(tbt): enqueueing work returns a handle to the job which allows you to wait untill it has finished
 

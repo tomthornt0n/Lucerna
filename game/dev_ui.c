@@ -110,8 +110,8 @@ struct UINode
     B32 toggled;
     B32 dragging;
     I8 *label;
-    F32 value_f;
-    I64 value_u;
+    F64 value_f;
+    I64 value_i;
     F32 scroll;
     B32 hidden;
     F32 min, max;
@@ -185,7 +185,7 @@ enum
     UI_NODE_TYPE_BUTTON,
     UI_NODE_TYPE_DROPDOWN,
     UI_NODE_TYPE_SLIDER_F,
-    UI_NODE_TYPE_SLIDER_U,
+    UI_NODE_TYPE_SLIDER_I,
     UI_NODE_TYPE_LABEL,
     UI_NODE_TYPE_LINE_BREAK,
     UI_NODE_TYPE_SCROLL_PANEL,
@@ -524,7 +524,7 @@ end_dropdown(void)
 #define do_dropdown(_input, _name, _width) for (I32 i = (begin_dropdown((_input), (_name), (_width)), 0); !i; (++i, end_dropdown()))
 
 internal void
-do_slider_u(PlatformState *input,
+do_slider_i(PlatformState *input,
             I8 *name,
             F32 min, F32 max,
             F32 snap,
@@ -532,6 +532,8 @@ do_slider_u(PlatformState *input,
             I64 *value)
 {
     UINode *node;
+    
+    *value = clamp_i(*value, min, max);
 
     if (!(node = widget_state_from_string(name)))
     {
@@ -554,7 +556,7 @@ do_slider_u(PlatformState *input,
     node->next_sibling = NULL;
     node->next_under_mouse = NULL;
 
-    node->type = UI_NODE_TYPE_SLIDER_U;
+    node->type = UI_NODE_TYPE_SLIDER_I;
     node->min = min;
     node->max = max;
     node->max_width = width;
@@ -600,7 +602,90 @@ do_slider_u(PlatformState *input,
             }
         }
 
-        node->value_u = *value;
+        node->value_i = *value;
+    }
+}
+
+internal void
+do_slider_lf(PlatformState *input,
+             I8 *name,
+             F32 min, F32 max,
+             F32 snap,
+             F32 width,
+             F64 *value)
+{
+    UINode *node;
+
+    *value = clamp_f(*value, min, max);
+
+    if (!(node = widget_state_from_string(name)))
+    {
+        node = new_widget_state_from_string(&global_static_memory, name);
+    }
+
+    if (global_current_ui_parent->last_child)
+    {
+        global_current_ui_parent->last_child->next_sibling = node;
+        global_current_ui_parent->last_child = node;
+    }
+    else
+    {
+        global_current_ui_parent->first_child = node;
+        global_current_ui_parent->last_child = node;
+    }
+    node->parent = global_current_ui_parent;
+    node->first_child = NULL;
+    node->last_child = NULL;
+    node->next_sibling = NULL;
+    node->next_under_mouse = NULL;
+
+    node->type = UI_NODE_TYPE_SLIDER_F;
+    node->min = min;
+    node->max = max;
+    node->max_width = width;
+
+    if (!node->hidden)
+    {
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               node->interactable) &&
+            !global_active_widget)
+        {
+            node->next_under_mouse = global_widgets_under_mouse;
+            global_widgets_under_mouse = node;
+        }
+        if (global_hot_widget == node &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+        {
+            global_active_widget = node;
+            node->dragging = true;
+        }
+
+        if (node->dragging)
+        {
+            F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
+                                  0.0f, width - SLIDER_THUMB_SIZE);
+
+            *value = thumb_x / (width - SLIDER_THUMB_SIZE) *
+                                (node->max - node->min) + node->min;
+
+            if (snap > 0.0f)
+            {
+                *value = floor(*value / snap) * snap;
+            }
+
+            if (!global_hot_widget)
+            {
+                global_active_widget = node;
+            }
+
+            if (!input->is_mouse_button_pressed[MOUSE_BUTTON_LEFT])
+            {
+                node->dragging = false;
+            }
+        }
+
+        node->value_f = *value;
     }
 }
 
@@ -613,6 +698,8 @@ do_slider_f(PlatformState *input,
             F32 *value)
 {
     UINode *node;
+
+    *value = clamp_f(*value, min, max);
 
     if (!(node = widget_state_from_string(name)))
     {
@@ -1354,9 +1441,9 @@ layout_and_render_ui_node(OpenGLFunctions *gl,
 
             break;
         }
-        case UI_NODE_TYPE_SLIDER_U:
+        case UI_NODE_TYPE_SLIDER_I:
         {
-            F32 thumb_x = ((node->value_u - node->min) /
+            F32 thumb_x = ((node->value_i - node->min) /
                            (node->max - node->min)) *
                           (node->max_width - SLIDER_THUMB_SIZE);
 
