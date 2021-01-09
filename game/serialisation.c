@@ -72,9 +72,40 @@ typedef struct
     // NOTE(tbt): null terminated string for audio path here
 } EntityInFileV1;
 
+typedef struct
+{
+    U64 flags;
+    F32 x, y, w, h;
+    F32 r, g, b, a;
+    F32 speed;
+    U32 frame, animation_length, animation_start, animation_end;
+    F64 animation_speed;
+    F32 life;
+    F32 gradient_tl_r;
+    F32 gradient_tl_g;
+    F32 gradient_tl_b;
+    F32 gradient_tl_a;
+    F32 gradient_tr_r;
+    F32 gradient_tr_g;
+    F32 gradient_tr_b;
+    F32 gradient_tr_a;
+    F32 gradient_bl_r;
+    F32 gradient_bl_g;
+    F32 gradient_bl_b;
+    F32 gradient_bl_a;
+    F32 gradient_br_r;
+    F32 gradient_br_g;
+    F32 gradient_br_b;
+    F32 gradient_br_a;
+    // NOTE(tbt): animation_length * sizeof(SubTextureInFile) animation frames here
+    // NOTE(tbt): null terminated string for level transport here
+    // NOTE(tbt): null terminated string for texture path here
+    // NOTE(tbt): null terminated string for audio path here
+} EntityInFileV2;
+
 // NOTE(tbt): `EntityInFile` typedef'd to most recent version
-#define CURRENT_SAVE_FILE_VERSION 1
-typedef EntityInFileV1 EntityInFile;
+#define CURRENT_SAVE_FILE_VERSION 2
+typedef EntityInFileV2 EntityInFile;
 
 typedef struct
 {
@@ -465,6 +496,156 @@ deserialise_entity_v1(OpenGLFunctions *gl,
     entity->animation_speed = e.animation_speed;
     entity->animation_start = e.animation_start;
     entity->animation_end = e.animation_end;
+    entity->gradient.tl.r = e.gradient_tl_r;
+    entity->gradient.tl.g = e.gradient_tl_g;
+    entity->gradient.tl.b = e.gradient_tl_b;
+    entity->gradient.tl.a = e.gradient_tl_a;
+    entity->gradient.tr.r = e.gradient_tr_r;
+    entity->gradient.tr.g = e.gradient_tr_g;
+    entity->gradient.tr.b = e.gradient_tr_b;
+    entity->gradient.tr.a = e.gradient_tr_a;
+    entity->gradient.bl.r = e.gradient_bl_r;
+    entity->gradient.bl.g = e.gradient_bl_g;
+    entity->gradient.bl.b = e.gradient_bl_b;
+    entity->gradient.bl.a = e.gradient_bl_a;
+    entity->gradient.br.r = e.gradient_br_r;
+    entity->gradient.br.g = e.gradient_br_g;
+    entity->gradient.br.b = e.gradient_br_b;
+    entity->gradient.br.a = e.gradient_br_a;
+    if (texture_path[0])
+    {
+        entity->texture = asset_from_path(texture_path);
+    }
+    else
+    {
+        entity->texture = NULL;
+    }
+
+    if (sound_path[0])
+    {
+        entity->sound = asset_from_path(sound_path);
+        load_audio(entity->sound);
+    }
+    else
+    {
+        entity->sound = NULL;
+    }
+
+    if (map_path[0])
+    {
+        entity->level_transport = map_path;
+    }
+    else
+    {
+        entity->level_transport = NULL;
+    }
+
+    return entity;
+}
+
+internal GameEntity *
+deserialise_entity_v2(OpenGLFunctions *gl,
+                      FILE *f)
+{
+    U32 err;
+    GameEntity *entity = arena_allocate(&global_level_memory,
+                                        sizeof(*entity));
+
+    // NOTE(tbt): read main entity data
+    EntityInFileV2 e;
+    err = fread(&e, 1, sizeof(e), f);
+    if (err != sizeof(e))
+    {
+        return NULL;
+    }
+
+    // NOTE(tbt): read animation
+    entity->sub_texture = arena_allocate(&global_level_memory,
+                                         sizeof(*entity->sub_texture) *
+                                         e.animation_length);
+    temporary_memory_begin(&global_level_memory);
+    SubTextureInFile *ts = arena_allocate(&global_level_memory,
+                                          sizeof(*ts) * e.animation_length);
+
+    err = fread(ts, sizeof(*ts), e.animation_length, f);
+    if (err != e.animation_length)
+    {
+        temporary_memory_end(&global_level_memory);
+        return NULL;
+    }
+
+    for (I32 frame_index = 0;
+         frame_index < e.animation_length;
+         ++frame_index)
+    {
+        entity->sub_texture[frame_index].min_x = ts[frame_index].min_x;
+        entity->sub_texture[frame_index].min_y = ts[frame_index].min_y;
+        entity->sub_texture[frame_index].max_x = ts[frame_index].max_x;
+        entity->sub_texture[frame_index].max_y = ts[frame_index].max_y;
+    }
+    temporary_memory_end(&global_level_memory);
+
+    I8 *string;
+    U32 bytes_read;
+    U32 string_chunk_size = 32; // NOTE(tbt): allocate for string in chunks of 32 bytes
+
+    // NOTE(tbt): read level transport path
+    string = arena_allocate(&global_level_memory, string_chunk_size);
+    I8 *map_path = string;
+    bytes_read = 0;
+    while ((*string++ = fgetc(f)) != 0 &&
+           !feof(f))
+    {
+        if (!(++bytes_read % string_chunk_size))
+        {
+            arena_allocate_aligned(&global_level_memory,
+                                   string_chunk_size,
+                                   1);
+        }
+    }
+
+    // NOTE(tbt): read texture asset path
+    string = arena_allocate(&global_frame_memory, string_chunk_size);
+    I8 *texture_path = string;
+    bytes_read = 0;
+    while ((*string++ = fgetc(f)) != 0 &&
+           !feof(f))
+    {
+        if (!(++bytes_read % string_chunk_size))
+        {
+            arena_allocate_aligned(&global_frame_memory,
+                                   string_chunk_size,
+                                   1);
+        }
+    }
+
+    // NOTE(tbt): read sound asset path
+    string = arena_allocate(&global_frame_memory, string_chunk_size);
+    I8 *sound_path = string;
+    bytes_read = 0;
+    while ((*string++ = fgetc(f)) != 0 &&
+           !feof(f))
+    {
+        if (!(++bytes_read % string_chunk_size))
+        {
+            arena_allocate_aligned(&global_frame_memory,
+                                   string_chunk_size,
+                                   1);
+        }
+    }
+
+    // NOTE(tbt): reconstruct entity
+    entity->next = NULL;
+    entity->flags = e.flags;
+    entity->bounds = RECTANGLE(e.x, e.y, e.w, e.h);
+    entity->colour = COLOUR(e.r, e.g, e.b, e.a);
+    entity->speed = e.speed;
+    entity->frame = e.frame;
+    entity->animation_length = e.animation_length;
+    entity->animation_speed = e.animation_speed;
+    entity->animation_start = e.animation_start;
+    entity->animation_end = e.animation_end;
+    entity->life = e.life;
     entity->gradient.tl.r = e.gradient_tl_r;
     entity->gradient.tl.g = e.gradient_tl_g;
     entity->gradient.tl.b = e.gradient_tl_b;

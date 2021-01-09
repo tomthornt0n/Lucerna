@@ -140,6 +140,11 @@ load_most_recent_save_for_current_map(OpenGLFunctions *gl)
                 entity = deserialise_entity_v1(gl, save_file);
                 break;
             }
+            case 2:
+            {
+                entity = deserialise_entity_v2(gl, save_file);
+                break;
+            }
             default:
             {
                 fprintf(stderr, "error loading save game - unrecognised file version.\n");

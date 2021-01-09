@@ -64,13 +64,13 @@ game_init(OpenGLFunctions *gl)
 
     global_ui_font = load_font(gl, FONT_PATH("mononoki.ttf"), 19);
 
-    // NOTE(tbt): initialise the free list of projectiles
+    // NOTE(tbt): initialise the free list for pooled entities
     for (I32 i = 0;
-         i < PROJECTILE_POOL_SIZE;
+         i < ENTITY_POOL_SIZE;
          ++i)
     {
-        global_projectile_pool[i].next = global_projectile_free_list;
-        global_projectile_free_list = global_projectile_pool + i;
+        global_entity_pool[i].next = global_entity_free_list;
+        global_entity_free_list = global_entity_pool + i;
     }
 }
 

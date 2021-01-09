@@ -23,7 +23,9 @@ enum
     ENTITY_FLAG_DESTROY_ON_CONTACT,  // NOTE(tbt): sets the deleted flag if it comes into contact with a solid tile
     ENTITY_FLAG_LIMIT_RANGE,         // NOTE(tbt): sets the deleted flag once a specific range from it's initial position has been exceeded
     ENTITY_FLAG_CHECKPOINT,          // NOTE(tbt): saves the game when the player comes into contact with it
-    ENTITY_FLAG_PROJECTILE,          // NOTE(tbt): set if it is allocated from the projectile pool
+    ENTITY_FLAG_POOLED,              // NOTE(tbt): some special entities such as projectiles and particles are allocated from a pool. setting this flag will return it to the free list when it is deleted.
+    ENTITY_FLAG_EXPLOSIVE,           // NOTE(tbt): create some particles when colliding
+    ENTITY_FLAG_LIMIT_LIFE,          // NOTE(tbt): remove if `age` exceeds `life`
 
     ENTITY_FLAG_COUNT
 };
@@ -42,7 +44,8 @@ enum
                                       (_flag) == ENTITY_FLAG_RENDER_RECTANGLE    ? "render rectangle"   : \
                                       (_flag) == ENTITY_FLAG_DESTROY_ON_CONTACT  ? "destroy on contact" : \
                                       (_flag) == ENTITY_FLAG_LIMIT_RANGE         ? "limit range"        : \
-                                      (_flag) == ENTITY_FLAG_CHECKPOINT          ? "checkpoint"         : NULL)
+                                      (_flag) == ENTITY_FLAG_CHECKPOINT          ? "checkpoint"         : \
+                                      (_flag) == ENTITY_FLAG_EXPLOSIVE           ? "explosive"         : NULL)
 
 struct GameEntity
 {
@@ -64,6 +67,8 @@ struct GameEntity
     I8 *level_transport;      // NOTE(tbt): map with this path is loaded if bounds intersects an entity with ENTITY_FLAG_PLAYER_MOVEMENT
     Gradient gradient;
     F32 cooldown;             // NOTE(tbt): cooldown for weapons
+    F32 age;                  // NOTE(tbt): how long the entity has existed for in seconds
+    F32 life;
 
     // NOTE(tbt): remove entity when the distance between `bounds.xy` and the initial position exceeds `range`
     F32 range; // NOTE(tbt): range does not need to be serialised as it is only used on projectiles
@@ -74,9 +79,12 @@ struct GameEntity
 
 internal GameEntity *global_editor_selected_entity;
 
-#define PROJECTILE_POOL_SIZE 4
-internal GameEntity global_projectile_pool[PROJECTILE_POOL_SIZE];
-internal GameEntity *global_projectile_free_list = NULL;
+// NOTE(tbt): most entities are allocated on the level arena. only some special
+//            entities such as projectiles and particles which have very short
+//            lifetimes are pooled.
+#define ENTITY_POOL_SIZE 256
+internal GameEntity global_entity_pool[ENTITY_POOL_SIZE] = {{0}};
+internal GameEntity *global_entity_free_list = NULL;
 
 #define TILE_SIZE 64
 internal F32 one_over_tile_size = 1.0f / TILE_SIZE;
@@ -162,9 +170,9 @@ create_laser_projectile(F32 x, F32 y,
                         F32 target_x, F32 target_y,
                         F32 speed)
 {
-    if (!global_projectile_free_list) { return NULL; }
-    GameEntity *result = global_projectile_free_list;
-    global_projectile_free_list = global_projectile_free_list->next;
+    if (!global_entity_free_list) { return NULL; }
+    GameEntity *result = global_entity_free_list;
+    global_entity_free_list = global_entity_free_list->next;
     ++(global_map.entity_count);
 
     result->flags = BIT(ENTITY_FLAG_RENDER_RECTANGLE)   |
@@ -172,9 +180,10 @@ create_laser_projectile(F32 x, F32 y,
                     BIT(ENTITY_FLAG_DYNAMIC)            |
                     BIT(ENTITY_FLAG_DESTROY_ON_CONTACT) |
                     BIT(ENTITY_FLAG_LIMIT_RANGE)        |
-                    BIT(ENTITY_FLAG_PROJECTILE);
+                    BIT(ENTITY_FLAG_EXPLOSIVE)          |
+                    BIT(ENTITY_FLAG_POOLED);
     result->bounds = RECTANGLE(x, y, 4.0f, 32.0f);
-    result->colour = COLOUR(1.0f, 0.0f, 0.0f, 0.5f);
+    result->colour = COLOUR(1.0f, 0.2f, 0.3f, 0.6f);
     result->sound = asset_from_path(AUDIO_PATH("laser.wav"));
     result->initial_x = x;
     result->initial_y = y;
@@ -194,6 +203,38 @@ create_laser_projectile(F32 x, F32 y,
     global_map.entities = result;
 
     return result;
+}
+
+internal void
+create_sparks(F32 x, F32 y,
+              I32 count)
+{
+    F32 speed = 256.0f;
+
+    while (count--)
+    {
+        if (!global_entity_free_list) { return; }
+        GameEntity *spark = global_entity_free_list;
+        global_entity_free_list = global_entity_free_list->next;
+        ++(global_map.entity_count);
+
+        spark->flags = BIT(ENTITY_FLAG_RENDER_RECTANGLE) |
+                       BIT(ENTITY_FLAG_DYNAMIC)          |
+                       BIT(ENTITY_FLAG_LIMIT_RANGE)      |
+                       BIT(ENTITY_FLAG_LIMIT_LIFE)       |
+                       BIT(ENTITY_FLAG_POOLED);
+        spark->bounds = RECTANGLE(x, y, 4.0f, 4.0f);
+        spark->initial_x = x;
+        spark->initial_y = y;
+        spark->colour = COLOUR(1.0f, 0.2f, 0.3f, 0.2f);
+        spark->x_vel = ((F32)rand() / (F32)(RAND_MAX >> 1) - 1.0f) * speed;
+        spark->y_vel = ((F32)rand() / (F32)(RAND_MAX >> 1) - 1.0f) * speed;
+        spark->range = 48.0f;
+        spark->life = (F32)rand() / (F32)(RAND_MAX >> 1) - 0.5f;
+
+        spark->next = global_map.entities;
+        global_map.entities = spark;
+    }
 }
 
 internal Tile *
@@ -278,11 +319,20 @@ process_entities(OpenGLFunctions *gl,
 {
     GameEntity *entity, *previous = NULL;
     for (entity = global_map.entities;
-         entity;
+         NULL != entity;
          entity = entity->next)
     {
+        entity->age += frametime_in_s;
+
+        if (entity->flags & BIT(ENTITY_FLAG_LIMIT_LIFE) &&
+            entity->age > entity->life)
+        {
+            entity->flags |= BIT(ENTITY_FLAG_DELETED);
+        }
+
         if (entity->flags & BIT(ENTITY_FLAG_DELETED))
         {
+
             --global_map.entity_count;
 
             if (previous)
@@ -294,12 +344,16 @@ process_entities(OpenGLFunctions *gl,
                 global_map.entities = entity->next;
             }
 
+            GameEntity *old = entity;
+            entity = entity->next;
+
             // NOTE(tbt): return deleted projectiles to the free list
-            if (entity->flags & BIT(ENTITY_FLAG_PROJECTILE))
+            if (old->flags & BIT(ENTITY_FLAG_POOLED))
             {
-                entity->next = global_projectile_free_list;
-                global_projectile_free_list = entity;
+                old->next = global_entity_free_list;
+                global_entity_free_list = old;
             }
+
         }
 
         if (entity->flags & BIT(ENTITY_FLAG_AUDIO_FALLOFF) ||
@@ -466,10 +520,20 @@ process_entities(OpenGLFunctions *gl,
         {
             if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC)) { entity->bounds.x = new_bounds.x; }
         }
-        else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+        else
         {
-            entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+            {
+                entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            }
+            if (entity->flags & BIT(ENTITY_FLAG_EXPLOSIVE))
+            {
+                create_sparks(entity->bounds.x,
+                              entity->bounds.y,
+                              25);
+            }
         }
+
 
         // NOTE(tbt): y-axis collision check
         colliding = false;
@@ -489,9 +553,18 @@ process_entities(OpenGLFunctions *gl,
         {
             if (entity->flags & BIT(ENTITY_FLAG_DYNAMIC)) { entity->bounds.y = new_bounds.y; }
         }
-        else if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+        else
         {
-            entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            if (entity->flags & BIT(ENTITY_FLAG_DESTROY_ON_CONTACT))
+            {
+                entity->flags |= BIT(ENTITY_FLAG_DELETED);
+            }
+            if (entity->flags & BIT(ENTITY_FLAG_EXPLOSIVE))
+            {
+                create_sparks(entity->bounds.x,
+                              entity->bounds.y,
+                              25);
+            }
         }
         
 
@@ -566,8 +639,8 @@ process_entities(OpenGLFunctions *gl,
 
         if (entity->flags & BIT(ENTITY_FLAG_RENDER_RECTANGLE))
         {
-            if (entity->rotation > -0.003f &&
-                entity->rotation <  0.003f)
+            if (entity->rotation > -0.03f &&
+                entity->rotation <  0.03f)
             {
                 world_fill_rectangle(entity->bounds, entity->colour);
             }

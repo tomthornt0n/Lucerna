@@ -267,6 +267,11 @@ load_map(OpenGLFunctions *gl,
                 entity = deserialise_entity_v1(gl, f);
                 break;
             }
+            case 2:
+            {
+                entity = deserialise_entity_v2(gl, f);
+                break;
+            }
             default:
             {
                 fprintf(stderr, "error loading map - unrecognised file version.\n");
