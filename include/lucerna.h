@@ -290,6 +290,8 @@ point_is_in_region(F32 x, F32 y,
 #define MOUSE_BUTTON_7          6
 #define MOUSE_BUTTON_8          7
 
+#define CTRL(_char) ((_char) - 96)
+
 // NOTE(tbt): the platform layer constructs a linked list of the ASCII values relating
 //            to all of the key presses for a given frame
 typedef struct KeyTyped KeyTyped;

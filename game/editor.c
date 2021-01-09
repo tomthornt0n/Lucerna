@@ -202,6 +202,20 @@ do_editor(OpenGLFunctions *gl,
                             global_camera_y +
                             input->is_key_pressed[KEY_S] * editor_camera_speed +
                             input->is_key_pressed[KEY_W] * -editor_camera_speed);
+
+        for (KeyTyped *key = input->keys_typed;
+             NULL != key;
+             key = key->next)
+        {
+            if (key->key == CTRL('o'))
+            {
+                editor_flags |= EDITOR_FLAG_LOAD_LEVEL;
+            }
+            else if (key->key == CTRL('s'))
+            {
+                save_map();
+            }
+        }
     }
 
     do_window(input, "level editor", 0.0f, 32.0f, 600.0f)
@@ -500,7 +514,7 @@ do_editor(OpenGLFunctions *gl,
                   input->window_height / 2,
                   512.0f)
         {
-            do_text_entry(input, "level path", level_path, PATH_ENTRY_BUFFER_SIZE, "open");
+            do_text_entry(input, "lllp e", level_path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
             
@@ -546,7 +560,7 @@ do_editor(OpenGLFunctions *gl,
         {
             static I8 tilemap_width_str[NUMBER_ENTRY_BUFFER_SIZE];
             static I8 tilemap_height_str[NUMBER_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "map path", level_path, PATH_ENTRY_BUFFER_SIZE, NULL);
+            do_text_entry(input, "nmmp e", level_path, PATH_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 
@@ -587,7 +601,7 @@ do_editor(OpenGLFunctions *gl,
                   512.0f)
         {
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "texture path", path, PATH_ENTRY_BUFFER_SIZE, "open");
+            do_text_entry(input, "lttp e", path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
 
@@ -621,7 +635,7 @@ do_editor(OpenGLFunctions *gl,
                   512.0f)
         {
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "sound path", path, PATH_ENTRY_BUFFER_SIZE, "open");
+            do_text_entry(input, "lssp e", path, PATH_ENTRY_BUFFER_SIZE, "open");
             
             do_line_break();
 
@@ -666,7 +680,7 @@ do_editor(OpenGLFunctions *gl,
             do_line_break();
 
             static I8 path[PATH_ENTRY_BUFFER_SIZE];
-            do_text_entry(input, "level path", path, PATH_ENTRY_BUFFER_SIZE, "create");
+            do_text_entry(input, "ctlp e", path, PATH_ENTRY_BUFFER_SIZE, "create");
             
             do_line_break();
 
@@ -735,8 +749,8 @@ do_editor(OpenGLFunctions *gl,
             static I8 frame_h_str[NUMBER_ENTRY_BUFFER_SIZE];
 
             do_label("animation frame size", "frame size: ", 256.0f);
-            do_text_entry(input, "afswe", frame_w_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
-            do_text_entry(input, "afshe", frame_h_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
+            do_text_entry(input, "afsw e", frame_w_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
+            do_text_entry(input, "afsh e", frame_h_str, NUMBER_ENTRY_BUFFER_SIZE, NULL);
 
             do_line_break();
 

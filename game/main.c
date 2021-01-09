@@ -98,24 +98,24 @@ game_update_and_render(OpenGLFunctions *gl,
     // NOTE(tbt): toggle between the game and the editor
     //
 
-    static F64 editor_mode_toggle_cooldown_timer = 1.0f;
-    editor_mode_toggle_cooldown_timer += frametime_in_s;
-    if (input->is_key_pressed[KEY_E]            &&
-        input->is_key_pressed[KEY_LEFT_CONTROL] &&
-        editor_mode_toggle_cooldown_timer > 1.0f)
+    for (KeyTyped *key = input->keys_typed;
+         NULL != key;
+         key = key->next)
     {
-        editor_mode_toggle_cooldown_timer = 0.0f;
-
-        if (global_game_state == GAME_STATE_EDITOR)
+        if (key->key == CTRL('e'))
         {
-            save_map();
-            global_game_state = GAME_STATE_PLAYING;
-            global_editor_selected_entity = NULL;
-        }
-        else if (global_game_state == GAME_STATE_PLAYING)
-        {
-            load_map(gl, global_map.path); // NOTE(tbt): reload map when entering the editor
-            global_game_state = GAME_STATE_EDITOR;
+            if (global_game_state == GAME_STATE_EDITOR)
+            {
+                save_map();
+                global_game_state = GAME_STATE_PLAYING;
+                global_editor_selected_entity = NULL;
+            }
+            else if (global_game_state == GAME_STATE_PLAYING)
+            {
+                load_map(gl, global_map.path); // NOTE(tbt): reload map when entering the editor
+                global_game_state = GAME_STATE_EDITOR;
+                global_keyboard_focus = NULL;
+            }
         }
     }
 

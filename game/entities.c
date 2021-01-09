@@ -45,7 +45,8 @@ enum
                                       (_flag) == ENTITY_FLAG_DESTROY_ON_CONTACT  ? "destroy on contact" : \
                                       (_flag) == ENTITY_FLAG_LIMIT_RANGE         ? "limit range"        : \
                                       (_flag) == ENTITY_FLAG_CHECKPOINT          ? "checkpoint"         : \
-                                      (_flag) == ENTITY_FLAG_EXPLOSIVE           ? "explosive"         : NULL)
+                                      (_flag) == ENTITY_FLAG_EXPLOSIVE           ? "explosive"          : \
+                                      (_flag) == ENTITY_FLAG_LIMIT_LIFE          ? "limit life"         : NULL)
 
 struct GameEntity
 {
