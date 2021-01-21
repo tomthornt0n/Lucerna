@@ -102,35 +102,27 @@ clamp_u(U64 n,
     return max_f(min, min_f(n, max));
 }
 
-U64
-hash_string(I8 *string,
-            U32 bounds)
-{
-    U64 hash = 5381;
-    I32 c;
+#define bit(_n) (1 << (_n))
 
-    while (c = *string++)
-    {
-        hash = ((hash << 5) + hash) + c;
-    }
-
-    return hash % bounds;
-}
-
-#define BIT(n) (1 << n)
-
-#define RECTANGLE(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
+#define rectangle_literal(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
     F32 x, y;
     F32 w, h;
 } Rectangle;
 
-#define COLOUR(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
+#define colour_literal(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
 typedef struct
 {
     F32 r, g, b, a;
 } Colour;
+
+#define gradient_literal(_tl, _tr, _bl, _br) ((Gradient){ (_tl), (_tr), (_bl), (_br) })
+typedef struct
+{
+    Colour tl, tr, bl, br;
+} Gradient;
+
 
 internal B32
 rectangles_are_intersecting(Rectangle a,
@@ -155,34 +147,33 @@ point_is_in_region(F32 x, F32 y,
     return true;
 }
 
-
-#define KEY_NONE                0
-#define KEY_A                   4
-#define KEY_B                   5
-#define KEY_C                   6
-#define KEY_D                   7
-#define KEY_E                   8
-#define KEY_F                   9
-#define KEY_G                   10
-#define KEY_H                   11
-#define KEY_I                   12
-#define KEY_J                   13
-#define KEY_K                   14
-#define KEY_L                   15
-#define KEY_M                   16
-#define KEY_N                   17
-#define KEY_O                   18
-#define KEY_P                   19
-#define KEY_Q                   20
-#define KEY_R                   21
-#define KEY_S                   22
-#define KEY_T                   23
-#define KEY_U                   24
-#define KEY_V                   25
-#define KEY_W                   26
-#define KEY_X                   27
-#define KEY_Y                   28
-#define KEY_Z                   29
+#define KEY_none                0
+#define KEY_a                   4
+#define KEY_b                   5
+#define KEY_c                   6
+#define KEY_d                   7
+#define KEY_e                   8
+#define KEY_f                   9
+#define KEY_g                   10
+#define KEY_h                   11
+#define KEY_i                   12
+#define KEY_j                   13
+#define KEY_k                   14
+#define KEY_l                   15
+#define KEY_m                   16
+#define KEY_n                   17
+#define KEY_o                   18
+#define KEY_p                   19
+#define KEY_q                   20
+#define KEY_r                   21
+#define KEY_s                   22
+#define KEY_t                   23
+#define KEY_u                   24
+#define KEY_v                   25
+#define KEY_w                   26
+#define KEY_x                   27
+#define KEY_y                   28
+#define KEY_z                   29
 #define KEY_1                   30
 #define KEY_2                   31
 #define KEY_3                   32
@@ -193,104 +184,104 @@ point_is_in_region(F32 x, F32 y,
 #define KEY_8                   37
 #define KEY_9                   38
 #define KEY_0                   39
-#define KEY_ESCAPE              41
-#define KEY_DELETE              42
-#define KEY_TAB                 43
-#define KEY_SPACE               44
-#define KEY_MINUS               45
-#define KEY_EQUALS              46
-#define KEY_LEFT_BRACKET        47
-#define KEY_RIGHT_BRACKET       48
-#define KEY_BACKSLASH           49
-#define KEY_SEMICOLON           51
-#define KEY_QUOTE               52
-#define KEY_GRAVE               53
-#define KEY_COMMA               54
-#define KEY_PERIOD              55
-#define KEY_SLASH               56
-#define KEY_CAPS_LOCK           57
-#define KEY_F1                  58
-#define KEY_F2                  59
-#define KEY_F3                  60
-#define KEY_F4                  61
-#define KEY_F5                  62
-#define KEY_F6                  63
-#define KEY_F7                  64
-#define KEY_F8                  65
-#define KEY_F9                  66
-#define KEY_F10                 67
-#define KEY_F11                 68
-#define KEY_F12                 69
-#define KEY_PRINT_SCREEN        70
-#define KEY_SCROLL_LOCK         71
-#define KEY_PAUSE               72
-#define KEY_INSERT              73
-#define KEY_HOME                74
-#define KEY_PAGEUP              75
-#define KEY_DEL                 76
-#define KEY_END                 77
-#define KEY_PAGE_DOWN           78
-#define KEY_RIGHT               79
-#define KEY_LEFT                80
-#define KEY_DOWN                81
-#define KEY_UP                  82
-#define KEY_KP_NUM_LOCK         83
-#define KEY_KP_DIVIDE           84
-#define KEY_KP_MULTIPLY         85
-#define KEY_KP_SUBTRACT         86
-#define KEY_KP_ADD              87
-#define KEY_KP_ENTER            88
-#define KEY_KP_1                89
-#define KEY_KP_2                90
-#define KEY_KP_3                91
-#define KEY_KP_4                92
-#define KEY_KP_5                93
-#define KEY_KP_6                94
-#define KEY_KP_7                95
-#define KEY_KP_8                96
-#define KEY_KP_9                97
-#define KEY_KP_0                98
-#define KEY_KP_POINT            99
-#define KEY_NON_US_BACKSLASH    100
-#define KEY_KP_EQUALS           103
-#define KEY_F13                 104
-#define KEY_F14                 105
-#define KEY_F15                 106
-#define KEY_F16                 107
-#define KEY_F17                 108
-#define KEY_F18                 109
-#define KEY_F19                 110
-#define KEY_F20                 111
-#define KEY_F21                 112
-#define KEY_F22                 113
-#define KEY_F23                 114
-#define KEY_F24                 115
-#define KEY_HELP                117
-#define KEY_MENU                118
-#define KEY_MUTE                127
-#define KEY_SYS_REQ             154
-#define KEY_RETURN              158
-#define KEY_KP_CLEAR            216
-#define KEY_KP_DECIMAL          220
-#define KEY_LEFT_CONTROL        224
-#define KEY_LEFT_SHIFT          225
-#define KEY_LEFT_ALT            226
-#define KEY_LEFT_SUPER          227
-#define KEY_RIGHT_CONTROL       228
-#define KEY_RIGHT_SHIFT         229
-#define KEY_RIGHT_ALT           230
-#define KEY_RIGHT_SUPER         231
+#define KEY_escape              41
+#define KEY_delete              42
+#define KEY_tab                 43
+#define KEY_space               44
+#define KEY_minus               45
+#define KEY_equals              46
+#define KEY_left_bracket        47
+#define KEY_right_bracket       48
+#define KEY_backslash           49
+#define KEY_semicolon           51
+#define KEY_quote               52
+#define KEY_grave               53
+#define KEY_comma               54
+#define KEY_period              55
+#define KEY_slash               56
+#define KEY_caps_lock           57
+#define KEY_f1                  58
+#define KEY_f2                  59
+#define KEY_f3                  60
+#define KEY_f4                  61
+#define KEY_f5                  62
+#define KEY_f6                  63
+#define KEY_f7                  64
+#define KEY_f8                  65
+#define KEY_f9                  66
+#define KEY_f10                 67
+#define KEY_f11                 68
+#define KEY_f12                 69
+#define KEY_print_screen        70
+#define KEY_scroll_lock         71
+#define KEY_pause               72
+#define KEY_insert              73
+#define KEY_home                74
+#define KEY_pageup              75
+#define KEY_del                 76
+#define KEY_end                 77
+#define KEY_page_down           78
+#define KEY_right               79
+#define KEY_left                80
+#define KEY_down                81
+#define KEY_up                  82
+#define KEY_kp_num_lock         83
+#define KEY_kp_divide           84
+#define KEY_kp_multiply         85
+#define KEY_kp_subtract         86
+#define KEY_kp_add              87
+#define KEY_kp_enter            88
+#define KEY_kp_1                89
+#define KEY_kp_2                90
+#define KEY_kp_3                91
+#define KEY_kp_4                92
+#define KEY_kp_5                93
+#define KEY_kp_6                94
+#define KEY_kp_7                95
+#define KEY_kp_8                96
+#define KEY_kp_9                97
+#define KEY_kp_0                98
+#define KEY_kp_point            99
+#define KEY_non_us_backslash    100
+#define KEY_kp_equals           103
+#define KEY_f13                 104
+#define KEY_f14                 105
+#define KEY_f15                 106
+#define KEY_f16                 107
+#define KEY_f17                 108
+#define KEY_f18                 109
+#define KEY_f19                 110
+#define KEY_f20                 111
+#define KEY_f21                 112
+#define KEY_f22                 113
+#define KEY_f23                 114
+#define KEY_f24                 115
+#define KEY_help                117
+#define KEY_menu                118
+#define KEY_mute                127
+#define KEY_sys_req             154
+#define KEY_return              158
+#define KEY_kp_clear            216
+#define KEY_kp_decimal          220
+#define KEY_left_control        224
+#define KEY_left_shift          225
+#define KEY_left_alt            226
+#define KEY_left_super          227
+#define KEY_right_control       228
+#define KEY_right_shift         229
+#define KEY_right_alt           230
+#define KEY_right_super         231
 
-#define MOUSE_BUTTON_LEFT       0
-#define MOUSE_BUTTON_MIDDLE     1
-#define MOUSE_BUTTON_RIGHT      2
+#define MOUSE_BUTTON_left       0
+#define MOUSE_BUTTON_middle     1
+#define MOUSE_BUTTON_right      2
 #define MOUSE_BUTTON_4          3
 #define MOUSE_BUTTON_5          4
 #define MOUSE_BUTTON_6          5
 #define MOUSE_BUTTON_7          6
 #define MOUSE_BUTTON_8          7
 
-#define CTRL(_char) ((_char) - 96)
+#define control_and(_char) ((_char) - 96)
 
 // NOTE(tbt): the platform layer constructs a linked list of the ASCII values relating
 //            to all of the key presses for a given frame
@@ -361,12 +352,6 @@ typedef struct
     PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
 
-enum
-{
-    GAME_STATE_PLAYING,
-    GAME_STATE_EDITOR,
-};
-
 // NOTE(tbt): memory arenas are used by both the platform layer and the game
 typedef struct MemoryArena MemoryArena;
 
@@ -381,27 +366,6 @@ void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
 
 void platform_set_vsync(B32 enabled);
-
-typedef struct Job PlatformJobHandle; // NOTE(tbt): enqueueing work returns a handle to the job which allows you to wait untill it has finished
-
-typedef void ( *JobFunction) (void *arg, U64 memory_size, void *memory); // NOTE(tbt): prototype for functions which can be pushed to a queue to be executed by a thread pool
-
-//
-// NOTE(tbt): `arg_size` bytes are first copied from `arg_buffer` on the main thread
-//            before `work()` is called on the worker thread with a pointer to the
-//            copy as an argument
-//
-PlatformJobHandle *platform_enqueue_job(JobFunction work, void *arg_buffer, U32 arg_size);
-// NOTE(tbt): when the job terminates, it's memory is returned to the main thread
-PlatformJobHandle *platform_enqueue_job_with_memory(JobFunction work, void *arg_buffer, U32 arg_size, U64 size);
-// NOTE(tbt): halts the thread untill the job terminates, and returns it's memory if any was allocated
-void *platform_wait_for_job(PlatformJobHandle *handle);
-
-// NOTE(tbt): mutex locks in case global state needs to be shared with jobs in the work queue
-typedef struct MutexLock MutexLock;
-MutexLock *platform_allocate_mutex(void);
-void platform_lock_mutex(MutexLock *lock);
-void platform_unlock_mutex(MutexLock *lock);
 
 #endif
 

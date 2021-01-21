@@ -34,14 +34,14 @@ typedef struct
 
 enum
 {
-    RENDER_MESSAGE_DRAW_RECTANGLE,
-    RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE,
-    RENDER_MESSAGE_STROKE_RECTANGLE,
-    RENDER_MESSAGE_DRAW_TEXT,
-    RENDER_MESSAGE_BLUR_SCREEN_REGION,
-    RENDER_MESSAGE_MASK_RECTANGLE_BEGIN,
-    RENDER_MESSAGE_MASK_RECTANGLE_END,
-    RENDER_MESSAGE_DRAW_GRADIENT,
+    RENDER_MESSAGE_draw_rectangle,
+    RENDER_MESSAGE_draw_rotated_rectangle,
+    RENDER_MESSAGE_stroke_rectangle,
+    RENDER_MESSAGE_draw_text,
+    RENDER_MESSAGE_blur_screen_region,
+    RENDER_MESSAGE_mask_rectangle_begin,
+    RENDER_MESSAGE_mask_rectangle_end,
+    RENDER_MESSAGE_draw_gradient,
 };
 
 typedef struct RenderMessage RenderMessage;
@@ -51,13 +51,15 @@ struct RenderMessage
     I32 type;
     U32 sort;
     Font *font;
-    Texture texture;
+    Asset *texture;
     SubTexture sub_texture;
     Colour colour;
     Rectangle rectangle;
     F32 angle;
     F32 *projection_matrix;
-    void *data;
+    Gradient gradient;
+    F32 stroke_width;
+    S8 string;
 };
 
 typedef struct
@@ -222,7 +224,7 @@ initialise_renderer(OpenGLFunctions *gl)
     temporary_memory_begin(&global_static_memory);
 
     shader_src = read_entire_file(&global_static_memory,
-                                  SHADER_PATH("default.vert"));
+                                  "../assets/shaders/default.vert");
     assert(shader_src);
 
     vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
@@ -252,7 +254,7 @@ initialise_renderer(OpenGLFunctions *gl)
 
     // NOTE(tbt): compile default fragment shader
     shader_src = read_entire_file(&global_static_memory,
-                                  SHADER_PATH("default.frag"));
+                                  "../assets/shaders/default.frag");
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
     gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
@@ -300,7 +302,7 @@ initialise_renderer(OpenGLFunctions *gl)
 
     // NOTE(tbt): compile blur fragment shader
     shader_src = read_entire_file(&global_static_memory,
-                                  SHADER_PATH("blur.frag"));
+                                  "../assets/shaders/blur.frag");
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
     gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
@@ -348,7 +350,7 @@ initialise_renderer(OpenGLFunctions *gl)
 
     // NOTE(tbt): compile text fragment shader
     shader_src = read_entire_file(&global_static_memory,
-                                  SHADER_PATH("text.frag"));
+                                  "../assets/shaders/text.frag");
     assert(shader_src);
     fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
     gl->ShaderSource(fragment_shader, 1, (const I8 * const *)&shader_src, NULL);
@@ -522,11 +524,10 @@ dequeue_render_message(RenderQueue *queue,
 #define UI_SORT_DEPTH    1080
 #define WORLD_SORT_DEPTH 0
 
-#define ui_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
-#define world_draw_sub_texture(_gl, _rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_gl), (_rectangle), (_colour), (_texture), (_sub_texture), WORLD_SORT_DEPTH, global_projection_matrix)
+#define ui_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
+#define world_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), WORLD_SORT_DEPTH, global_projection_matrix)
 internal void
-draw_sub_texture(OpenGLFunctions *gl,
-                 Rectangle rectangle,
+draw_sub_texture(Rectangle rectangle,
                  Colour colour,
                  Asset *texture,
                  SubTexture sub_texture,
@@ -535,17 +536,11 @@ draw_sub_texture(OpenGLFunctions *gl,
 {
     RenderMessage message = {0};
 
-    if (texture)
-    {
-        load_texture(gl, texture);
-        assert(texture->loaded);
-    }
 
-    message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
+    message.type = RENDER_MESSAGE_draw_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
-    message.texture = texture != NULL ? texture->texture :
-                                        global_flat_colour_texture;
+    message.texture = texture;
     message.sub_texture = sub_texture;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -567,18 +562,11 @@ draw_rotated_sub_texture(OpenGLFunctions *gl,
 {
     RenderMessage message = {0};
 
-    if (texture)
-    {
-        load_texture(gl, texture);
-        assert(texture->loaded);
-    }
-
-    message.type = RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE;
+    message.type = RENDER_MESSAGE_draw_rotated_rectangle;
     message.rectangle = rectangle;
     message.angle = angle;
     message.colour = colour;
-    message.texture = texture != NULL ? texture->texture :
-                                        global_flat_colour_texture;
+    message.texture = texture;
     message.sub_texture = sub_texture;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -596,10 +584,10 @@ fill_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_DRAW_RECTANGLE;
+    message.type = RENDER_MESSAGE_draw_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
-    message.texture = global_flat_colour_texture;
+    message.texture = NULL;
     message.sub_texture = ENTIRE_TEXTURE;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -618,11 +606,11 @@ fill_rotated_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE;
+    message.type = RENDER_MESSAGE_draw_rotated_rectangle;
     message.rectangle = rectangle;
     message.angle = angle;
     message.colour = colour;
-    message.texture = global_flat_colour_texture;
+    message.texture = NULL;
     message.sub_texture = ENTIRE_TEXTURE;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -641,11 +629,10 @@ stroke_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_STROKE_RECTANGLE;
+    message.type = RENDER_MESSAGE_stroke_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
-    message.data = arena_allocate(&global_frame_memory, sizeof(F32));
-    *((F32 *)message.data) = stroke_width;
+    message.stroke_width = stroke_width;
     message.sort = sort;
     message.projection_matrix = projection_matrix;
 
@@ -659,31 +646,24 @@ draw_text(Font *font,
           F32 x, F32 y,
           U32 wrap_width,
           Colour colour,
-          I8 *string,
+          S8 string,
           U32 sort,
           F32 *projection_matrix)
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_DRAW_TEXT;
+    message.type = RENDER_MESSAGE_draw_text;
     message.font = font;
     message.colour = colour;
     message.rectangle.x = x;
     message.rectangle.y = y;
     message.rectangle.w = wrap_width;
-    message.data = arena_allocate(&global_frame_memory, strlen(string) + 1);
-    memcpy(message.data, string, strlen(string));
+    message.string = copy_string(&global_frame_memory, string);
     message.sort = sort;
     message.projection_matrix = projection_matrix;
 
     enqueue_render_message(&global_render_queue, message);
 }
-
-#define GRADIENT(_tl, _tr, _bl, _br) ((Gradient){ (_tl), (_tr), (_bl), (_br) })
-typedef struct
-{
-    Colour tl, tr, bl, br;
-} Gradient;
 
 #define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), UI_SORT_DEPTH, global_ui_projection_matrix)
 #define world_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), WORLD_SORT_DEPTH, global_projection_matrix)
@@ -695,12 +675,11 @@ draw_gradient(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_DRAW_GRADIENT;
+    message.type = RENDER_MESSAGE_draw_gradient;
     message.rectangle = rectangle;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
-    message.data = arena_allocate(&global_frame_memory, sizeof(Gradient));
-    *((Gradient *)message.data) = gradient;
+    message.gradient = gradient;
 
     enqueue_render_message(&global_render_queue, message);
 }
@@ -711,7 +690,7 @@ begin_rectangle_mask(Rectangle region,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_MASK_RECTANGLE_BEGIN;
+    message.type = RENDER_MESSAGE_mask_rectangle_begin;
     message.rectangle = region;
     message.sort = sort;
 
@@ -723,7 +702,7 @@ end_rectangle_mask(U32 sort)
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_MASK_RECTANGLE_END;
+    message.type = RENDER_MESSAGE_mask_rectangle_end;
     message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
@@ -738,7 +717,7 @@ blur_screen_region(Rectangle region,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_BLUR_SCREEN_REGION;
+    message.type = RENDER_MESSAGE_blur_screen_region;
     message.rectangle = region;
     message.sort = sort;
 
@@ -941,7 +920,7 @@ generate_rotated_quad(Rectangle rectangle,
     F32 x = -(rectangle.w * 0.5f), y = -(rectangle.h * 0.5f);
     F32 x_offset = rectangle.x - x, y_offset = rectangle.y - y;
 
-    Rectangle centre_at_origin = RECTANGLE(x, y, rectangle.w, rectangle.h);
+    Rectangle centre_at_origin = rectangle_literal(x, y, rectangle.w, rectangle.h);
 
     result = generate_quad(centre_at_origin, colour, sub_texture);
 
@@ -952,7 +931,7 @@ generate_rotated_quad(Rectangle rectangle,
 
     for (I32 i = 0; i < 4; ++i)
     {
-        // NOTE(tbt): matrix generation are combined into one step
+        // NOTE(tbt): matrix generation and multiplication are combined into one step
         Vertex vertex = vertices[i];
         vertices[i].x = vertex.x * cos(angle) - vertex.y * sin(angle);
         vertices[i].y = vertex.x * sin(angle) + vertex.y * cos(angle);
@@ -1059,9 +1038,23 @@ process_render_queue(OpenGLFunctions *gl)
     {
         switch (message.type)
         {
-            case RENDER_MESSAGE_DRAW_RECTANGLE:
+            case RENDER_MESSAGE_draw_rectangle:
+            case RENDER_MESSAGE_draw_rotated_rectangle:
             {
-                if (batch.texture != message.texture.id                  ||
+                TextureID texture_id = 0;
+
+                texture_id = global_flat_colour_texture.id;
+                if (message.texture)
+                {
+                    load_texture(gl, message.texture);
+
+                    if (message.texture->loaded)
+                    {
+                        texture_id = message.texture->texture.id;
+                    }
+                }
+
+                if (batch.texture != texture_id                          ||
                     batch.shader != global_default_shader                ||
                     batch.quad_count >= BATCH_SIZE                       ||
                     batch.projection_matrix != message.projection_matrix ||
@@ -1070,45 +1063,31 @@ process_render_queue(OpenGLFunctions *gl)
                     flush_batch(gl, &batch);
         
                     batch.shader = global_default_shader;
-                    batch.texture = message.texture.id;
+                    batch.texture = texture_id;
                     batch.projection_matrix = message.projection_matrix;
                 }
 
                 batch.in_use = true;
         
-                batch.buffer[batch.quad_count++] =
-                    generate_quad(message.rectangle,
-                                  message.colour,
-                                  message.sub_texture);
-        
-                break;
-            }
-            case RENDER_MESSAGE_DRAW_ROTATED_RECTANGLE:
-            {
-                if (batch.texture != message.texture.id                  ||
-                    batch.shader != global_default_shader                ||
-                    batch.quad_count >= BATCH_SIZE                       ||
-                    batch.projection_matrix != message.projection_matrix ||
-                    !(batch.in_use))
+                if (message.type == RENDER_MESSAGE_draw_rotated_rectangle)
                 {
-                    flush_batch(gl, &batch);
-        
-                    batch.shader = global_default_shader;
-                    batch.texture = message.texture.id;
-                    batch.projection_matrix = message.projection_matrix;
+                    batch.buffer[batch.quad_count++] =
+                        generate_rotated_quad(message.rectangle,
+                                              message.angle,
+                                              message.colour,
+                                              message.sub_texture);
                 }
-
-                batch.in_use = true;
-        
-                batch.buffer[batch.quad_count++] =
-                    generate_rotated_quad(message.rectangle,
-                                          message.angle,
-                                          message.colour,
-                                          message.sub_texture);
+                else
+                {
+                    batch.buffer[batch.quad_count++] =
+                        generate_quad(message.rectangle,
+                                      message.colour,
+                                      message.sub_texture);
+                }
         
                 break;
             }
-            case RENDER_MESSAGE_STROKE_RECTANGLE:
+            case RENDER_MESSAGE_stroke_rectangle:
             {
                 Rectangle top, bottom, left, right;
                 F32 stroke_width;
@@ -1128,33 +1107,33 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.in_use = true;
 
-                stroke_width = *((F32 *)message.data);
+                stroke_width = message.stroke_width;
 
-                top = RECTANGLE(message.rectangle.x,
-                                message.rectangle.y,
-                                message.rectangle.w,
-                                stroke_width);
+                top = rectangle_literal(message.rectangle.x,
+                                        message.rectangle.y,
+                                        message.rectangle.w,
+                                        stroke_width);
             
-                bottom = RECTANGLE(message.rectangle.x,
-                                   message.rectangle.y +
-                                   message.rectangle.h,
-                                   message.rectangle.w,
-                                   -stroke_width);
+                bottom = rectangle_literal(message.rectangle.x,
+                                           message.rectangle.y +
+                                           message.rectangle.h,
+                                           message.rectangle.w,
+                                           -stroke_width);
 
-                left = RECTANGLE(message.rectangle.x,
-                                 message.rectangle.y +
-                                 stroke_width,
-                                 stroke_width,
-                                 message.rectangle.h -
-                                 stroke_width * 2);
+                left = rectangle_literal(message.rectangle.x,
+                                         message.rectangle.y +
+                                         stroke_width,
+                                         stroke_width,
+                                         message.rectangle.h -
+                                         stroke_width * 2);
             
-                right = RECTANGLE(message.rectangle.x +
-                                  message.rectangle.w,
-                                  message.rectangle.y +
-                                  stroke_width,
-                                  -stroke_width,
-                                  message.rectangle.h -
-                                  stroke_width * 2);
+                right = rectangle_literal(message.rectangle.x +
+                                          message.rectangle.w,
+                                          message.rectangle.y +
+                                          stroke_width,
+                                          -stroke_width,
+                                          message.rectangle.h -
+                                          stroke_width * 2);
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(top,
@@ -1178,10 +1157,9 @@ process_render_queue(OpenGLFunctions *gl)
 
                 break;
             }
-            case RENDER_MESSAGE_DRAW_TEXT:
+            case RENDER_MESSAGE_draw_text:
             {
                 F32 line_start = message.rectangle.x;
-                I8 *string = message.data;
                 F32 x = message.rectangle.x;
                 F32 y = message.rectangle.y;
                 U32 wrap_width = message.rectangle.w;
@@ -1201,10 +1179,12 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.in_use = true;
 
-                while (*string)
+                for (I32 i = 0;
+                     i < message.string.len;
+                     ++i)
                 {
-                    if (*string >=32 &&
-                        *string < 128)
+                    if (message.string.buffer[i] >=32 &&
+                        message.string.buffer[i] < 128)
                     {
                         stbtt_aligned_quad q;
                         Rectangle rectangle;
@@ -1213,27 +1193,26 @@ process_render_queue(OpenGLFunctions *gl)
                         stbtt_GetBakedQuad(message.font->char_data,
                                            message.font->texture.width,
                                            message.font->texture.height,
-                                           *string - 32,
+                                           message.string.buffer[i] - 32,
                                            &x,
                                            &y,
-                                           &q,
-                                           1);
+                                           &q);
         
                         sub_texture.min_x = q.s0;
                         sub_texture.min_y = q.t0;
                         sub_texture.max_x = q.s1;
                         sub_texture.max_y = q.t1;
         
-                        rectangle = RECTANGLE(q.x0, q.y0,
-                                              q.x1 - q.x0,
-                                              q.y1 - q.y0);
+                        rectangle = rectangle_literal(q.x0, q.y0,
+                                                      q.x1 - q.x0,
+                                                      q.y1 - q.y0);
         
                         batch.buffer[batch.quad_count++] =
                             generate_quad(rectangle,
                                           message.colour,
                                           sub_texture);
         
-                        if (wrap_width && isspace(*string))
+                        if (wrap_width && isspace(message.string.buffer[i]))
                         {
                             if (x + rectangle.w * 2 >
                                 line_start + wrap_width)
@@ -1243,17 +1222,16 @@ process_render_queue(OpenGLFunctions *gl)
                             }
                         }
                     }
-                    else if (*string == '\n')
+                    else if (message.string.buffer[i] == '\n')
                     {
                         y += message.font->size;
                         x = line_start;
                     }
-                    ++string;
                 }
         
                 break;
             }
-            case RENDER_MESSAGE_BLUR_SCREEN_REGION:
+            case RENDER_MESSAGE_blur_screen_region:
             {
                 flush_batch(gl, &batch);
 
@@ -1295,11 +1273,11 @@ process_render_queue(OpenGLFunctions *gl)
                 batch.projection_matrix = global_ui_projection_matrix;
                 batch.in_use = true;
                 batch.quad_count = 1;
-                batch.buffer[0] = generate_quad(RECTANGLE(0.0f,
-                                                          0.0f,
-                                                          (F32)global_renderer_window_w,
-                                                          (F32)global_renderer_window_h),
-                                                COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                batch.buffer[0] = generate_quad(rectangle_literal(0.0f,
+                                                                  0.0f,
+                                                                  (F32)global_renderer_window_w,
+                                                                  (F32)global_renderer_window_h),
+                                                colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
                                                 ENTIRE_TEXTURE);
 
                 gl->UseProgram(global_blur_shader);
@@ -1338,13 +1316,13 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.buffer[batch.quad_count++] =
                     generate_quad(message.rectangle,
-                                  COLOUR(1.0f, 1.0f, 1.0f, 1.0f),
+                                  colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
                                   blur_tex_coords);
 
                 batch.in_use = true;
                 break;
             }
-            case RENDER_MESSAGE_MASK_RECTANGLE_BEGIN:
+            case RENDER_MESSAGE_mask_rectangle_begin:
             {
                 flush_batch(gl, &batch);
                 gl->Enable(GL_SCISSOR_TEST);
@@ -1352,51 +1330,49 @@ process_render_queue(OpenGLFunctions *gl)
                             message.rectangle.w, message.rectangle.h);
                 break;
             }
-            case RENDER_MESSAGE_MASK_RECTANGLE_END:
+            case RENDER_MESSAGE_mask_rectangle_end:
             {
                 flush_batch(gl, &batch);
                 gl->Disable(GL_SCISSOR_TEST);
                 break;
             }
-            case RENDER_MESSAGE_DRAW_GRADIENT:
+            case RENDER_MESSAGE_draw_gradient:
             {
                 Quad quad;
 
-                Gradient gradient = *((Gradient *)message.data);
-
                 quad.bl.x = message.rectangle.x;
                 quad.bl.y = message.rectangle.y + message.rectangle.h;
-                quad.bl.r = gradient.bl.r;
-                quad.bl.g = gradient.bl.g;
-                quad.bl.b = gradient.bl.b;
-                quad.bl.a = gradient.bl.a;
+                quad.bl.r = message.gradient.bl.r;
+                quad.bl.g = message.gradient.bl.g;
+                quad.bl.b = message.gradient.bl.b;
+                quad.bl.a = message.gradient.bl.a;
                 quad.bl.u = 0.0f;
                 quad.bl.v = 1.0f;
 
                 quad.br.x = message.rectangle.x + message.rectangle.w;
                 quad.br.y = message.rectangle.y + message.rectangle.h;
-                quad.br.r = gradient.br.r;
-                quad.br.g = gradient.br.g;
-                quad.br.b = gradient.br.b;
-                quad.br.a = gradient.br.a;
+                quad.br.r = message.gradient.br.r;
+                quad.br.g = message.gradient.br.g;
+                quad.br.b = message.gradient.br.b;
+                quad.br.a = message.gradient.br.a;
                 quad.br.u = 1.0f;
                 quad.br.v = 1.0f;
 
                 quad.tr.x = message.rectangle.x + message.rectangle.w;
                 quad.tr.y = message.rectangle.y;
-                quad.tr.r = gradient.tr.r;
-                quad.tr.g = gradient.tr.g;
-                quad.tr.b = gradient.tr.b;
-                quad.tr.a = gradient.tr.a;
+                quad.tr.r = message.gradient.tr.r;
+                quad.tr.g = message.gradient.tr.g;
+                quad.tr.b = message.gradient.tr.b;
+                quad.tr.a = message.gradient.tr.a;
                 quad.tr.u = 1.0f;
                 quad.tr.v = 0.0f;
 
                 quad.tl.x = message.rectangle.x;
                 quad.tl.y = message.rectangle.y;
-                quad.tl.r = gradient.tl.r;
-                quad.tl.g = gradient.tl.g;
-                quad.tl.b = gradient.tl.b;
-                quad.tl.a = gradient.tl.a;
+                quad.tl.r = message.gradient.tl.r;
+                quad.tl.g = message.gradient.tl.g;
+                quad.tl.b = message.gradient.tl.b;
+                quad.tl.a = message.gradient.tl.a;
                 quad.tl.u = 0.0f;
                 quad.tl.v = 0.0f;
 

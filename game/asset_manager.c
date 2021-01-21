@@ -42,22 +42,17 @@ free_for_stb(void *p)
 #define STBTT_free(x, u) ((void)(u),free_for_stb(x))
 #include "stb_truetype.h"
 
-#define SHADER_PATH(_path) ("../assets/shaders/" _path)
-#define AUDIO_PATH(_path) ("../assets/audio/" _path)
-#define TEXTURE_PATH(_path) ("../assets/textures/" _path)
-#define FONT_PATH(_path) ("../assets/fonts/" _path)
-
-typedef struct Asset Asset;
-
 typedef U32 TextureID;
-
-internal TextureID global_currently_bound_texture = 0;
 
 typedef struct
 {
     TextureID id;
     I32 width, height;
 } Texture;
+
+internal TextureID global_currently_bound_texture = 0;
+
+#define AUDIO_BUFFER_SIZE 512
 
 enum
 {
@@ -83,25 +78,24 @@ struct AudioSource
     F32 pan;           // NOTE(tbt): as set by `set_audio source_pan`
 };
 
-#define AUDIO_BUFFER_SIZE 512
-
 enum
 {
-    ASSET_TYPE_NONE,
+    ASSET_KIND_none,
 
-    ASSET_TYPE_TEXTURE,
-    ASSET_TYPE_AUDIO,
+    ASSET_KIND_texture,
+    ASSET_KIND_audio,
 };
 
-#define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
 
+typedef struct Asset Asset;
 struct Asset
 {
+    B32 touched;
     Asset *next_hash;
     Asset *next_loaded;
-    I32 type;
+    I32 kind;
     B32 loaded;
-    I8 *path;
+    S8 path;
 
     union
     {
@@ -111,53 +105,48 @@ struct Asset
 };
 
 #define ASSET_HASH_TABLE_SIZE (512)
-internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {{0}};
+internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {0};
+#define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
 
 Asset *global_loaded_assets = NULL;
 
 internal Asset *
-asset_from_path(I8 *path)
+asset_from_path(S8 path)
 {
     U64 index = asset_hash(path);
-    Asset *result = global_assets_dict + index;
+    Asset *result = &global_assets_dict[index];
 
-    while (result)
+    if (result->touched)
     {
-        if (!result->path) { goto new_asset; }
-
-        if (strcmp(result->path, path))
+        Asset *prev = NULL;
+        for (; result; result = result->next_hash)
         {
-            result = result->next_hash;
+            if (string_match(path, result->path))
+            {
+                return result;
+            }
+            
+            prev = result;
         }
-        else
+
+        if (prev)
         {
+            prev->next_hash = arena_allocate(&global_static_memory,
+                                             sizeof(*prev->next_hash));
+            result = prev->next_hash;
+            result->touched = true;
+            result->path = copy_string(&global_static_memory, path);
             return result;
         }
     }
-
-    return NULL;
-
-new_asset:
-    if (global_assets_dict[index].path &&
-        strcmp(global_assets_dict[index].path, path))
-    {
-        // NOTE(tbt): hash collision
-        Asset *tail;
-
-        result = arena_allocate(&global_static_memory, sizeof(*result));
-
-        while (tail->next_hash) { tail = tail->next_hash; }
-        tail->next_hash = result;
-    }
     else
     {
-        result = global_assets_dict + index;
+        result->touched = true;
+        result->path = copy_string(&global_static_memory, path);
+        return result;
     }
 
-    result->path = arena_allocate(&global_static_memory, strlen(path) + 1);
-    strcpy(result->path, path);
-
-    return result;
+    return NULL;
 }
 
 #define ENTIRE_TEXTURE ((SubTexture){ 0.0f, 0.0f, 1.0f, 1.0f })
@@ -207,13 +196,13 @@ load_texture(OpenGLFunctions *gl,
     U8 *pixels;
 
     if (!asset) { return; }
-    if (!asset->path || asset->loaded) { return; }
-
-    assert(asset->path);
+    if (!asset->touched || asset->loaded) { return; }
 
     temporary_memory_begin(&global_static_memory);
 
-    pixels = stbi_load(asset->path,
+    I8 path_cstr[512] = {0};
+    snprintf(path_cstr, 512, "%.*s", (I32)asset->path.len, asset->path.buffer);
+    pixels = stbi_load(path_cstr,
                        &(asset->texture.width),
                        &(asset->texture.height),
                        NULL, 4);
@@ -244,7 +233,7 @@ load_texture(OpenGLFunctions *gl,
 
     temporary_memory_end(&global_static_memory);
 
-    asset->type = ASSET_TYPE_TEXTURE;
+    asset->kind = ASSET_KIND_texture;
     asset->loaded = true;
     asset->next_loaded = global_loaded_assets;
     global_loaded_assets = asset;
@@ -254,7 +243,7 @@ internal void
 unload_texture(OpenGLFunctions *gl,
                Asset *asset)
 {
-    assert(asset->type == ASSET_TYPE_TEXTURE && asset->loaded);
+    assert(asset->kind == ASSET_KIND_texture && asset->loaded);
     gl->DeleteTextures(1, &asset->texture.id);
     global_currently_bound_texture = 0;
     asset->texture.id = 0;
@@ -283,20 +272,16 @@ create_sub_texture(Texture texture,
     return result;
 }
 
-internal SubTexture *
-slice_animation(Texture texture,
-                F32 x, F32 y,
-                F32 w, F32 h,
-                U32 horizontal_count,
-                U32 vertical_count)
+internal void
+slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horizontal_count * vertical_count` elements
+                Texture texture,      // NOTE(tbt): the texture to slice from
+                F32 x, F32 y,         // NOTE(tbt): the coordinate in pixels of the top left corner of the top left frame
+                F32 w, F32 h,         // NOTE(tbt): the size in pixels of each frame
+                U32 horizontal_count, // NOTE(tbt): the number of frames horizontally
+                U32 vertical_count)   // NOTE(tbt): the number of frames vertically
 {
     I32 x_index, y_index;
     I32 index = 0;
-
-    SubTexture *result = arena_allocate(&global_static_memory,
-                                        horizontal_count *
-                                        vertical_count *
-                                        sizeof(*result));
 
     for (y_index = 0;
          y_index < vertical_count;
@@ -312,8 +297,6 @@ slice_animation(Texture texture,
                                                  w, h);
         }
     }
-
-    return result;
 }
 
 internal Font *
@@ -369,9 +352,12 @@ load_audio(Asset *asset)
     I32 data_rate, bits_per_sample, channels, data_size;
 
     if (!asset) { return; }
-    if (asset->loaded || !asset->path) { return; }
+    if (asset->loaded || !asset->touched) { return; }
 
-    wav_read(asset->path,
+    I8 path_cstr[512] = {0};
+    snprintf(path_cstr, 512, "%.*s", (I32)asset->path.len, asset->path.buffer);
+    
+    wav_read(path_cstr,
              &data_rate,
              &bits_per_sample,
              &channels,
@@ -383,7 +369,7 @@ load_audio(Asset *asset)
     assert(channels == 2);
 
     asset->audio.buffer = arena_allocate(&global_level_memory, data_size);
-    wav_read(asset->path, NULL, NULL, NULL, NULL, asset->audio.buffer);
+    wav_read(path_cstr, NULL, NULL, NULL, NULL, asset->audio.buffer);
 
     asset->audio.buffer_size = data_size;
     asset->audio.l_gain = 0.5f;
@@ -391,7 +377,7 @@ load_audio(Asset *asset)
     asset->audio.level = 1.0f;
     asset->audio.pan = 0.5f;
 
-    asset->type = ASSET_TYPE_AUDIO;
+    asset->kind = ASSET_KIND_audio;
     asset->loaded = true;
     asset->next_loaded = global_loaded_assets;
     global_loaded_assets = asset;
@@ -427,14 +413,14 @@ unload_all_assets(OpenGLFunctions *gl)
     Asset *loaded_asset = global_loaded_assets;
     while (loaded_asset)
     {
-        switch (loaded_asset->type)
+        switch (loaded_asset->kind)
         {
-            case ASSET_TYPE_TEXTURE:
+            case ASSET_KIND_texture:
             {
                 unload_texture(gl, loaded_asset);
                 break;
             }
-            case ASSET_TYPE_AUDIO:
+            case ASSET_KIND_audio:
             {
                 unload_audio(loaded_asset);
                 break;

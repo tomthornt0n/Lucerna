@@ -44,7 +44,16 @@ if [ "$FULL" == "true" ]; then
     pushd platform > /dev/null
     ./linux_build.sh $MODE
     popd > /dev/null
+
+    pushd lcddl > /dev/null
+    ./linux_build.sh
+    popd > /dev/null
 fi
+
+echo -e "\033[35mrunning lcddl.\033[0m"
+pushd bin > /dev/null
+./lcddl ./lcddl_user_layer.so ../assets/entities/*
+popd > /dev/null
 
 echo -e "\033[35mbuilding game in $MODE mode.\033[0m"
 time gcc -Iinclude -fPIC -shared $FLAGS game/main.c -lGL -lm -o bin/liblucerna.so
