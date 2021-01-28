@@ -45,7 +45,7 @@ if [ "$FULL" == "true" ]; then
     ./linux_build.sh $MODE
     popd > /dev/null
 
-    pushd lcddl > /dev/null
+    pushd meta > /dev/null
     ./linux_build.sh
     popd > /dev/null
 fi
