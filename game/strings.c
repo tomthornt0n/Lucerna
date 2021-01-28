@@ -1,6 +1,6 @@
 typedef struct
 {
-    I8 *buffer;
+    U8 *buffer;
     U64 len;
 } S8;
 
@@ -20,17 +20,10 @@ s8_from_cstring(MemoryArena *memory,
 }
 
 internal I8 *
-temp_cstring_from_s8(S8 string)
+cstring_from_s8(MemoryArena *memory,
+                S8 string)
 {
-    I8 *result = arena_allocate(&global_frame_memory, string.len + 1);
-    strncpy(result, string.buffer, string.len);
-    return result;
-}
-
-internal I8 *
-cstring_from_s8(S8 string)
-{
-    I8 *result = arena_allocate(&global_static_memory, string.len + 1);
+    I8 *result = arena_allocate(memory, string.len + 1);
     strncpy(result, string.buffer, string.len);
     return result;
 }

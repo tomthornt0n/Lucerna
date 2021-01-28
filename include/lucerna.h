@@ -27,21 +27,21 @@ typedef uint32_t B32;
 
 #include "errno.h"
 
-internal F64
+internal inline F64
 min_f(F64 a,
       F64 b)
 {
     return a < b ? a : b;
 }
 
-internal F64
+internal inline F64
 max_f(F64 a,
       F64 b)
 {
     return a > b ? a : b;
 }
 
-internal F64
+internal inline F64
 clamp_f(F64 n,
         F64 min, F64 max)
 {
@@ -60,42 +60,42 @@ reciprocal_sqrt_f(F32 n)
     return i.f;
 }
 
-internal I64
+internal inline I64
 min_i(I64 a,
       I64 b)
 {
     return a < b ? a : b;
 }
 
-internal I64
+internal inline I64
 max_i(I64 a,
       I64 b)
 {
     return a > b ? a : b;
 }
 
-internal I64
+internal inline I64
 clamp_i(I64 n,
         I64 min, I64 max)
 {
     return max_f(min, min_f(n, max));
 }
 
-internal U64
+internal inline U64
 min_u(U64 a,
       U64 b)
 {
     return a < b ? a : b;
 }
 
-internal U64
+internal inline U64
 max_u(U64 a,
       U64 b)
 {
     return a > b ? a : b;
 }
 
-internal U64
+internal inline U64
 clamp_u(U64 n,
         U64 min, U64 max)
 {
@@ -281,7 +281,7 @@ point_is_in_region(F32 x, F32 y,
 #define MOUSE_BUTTON_7          6
 #define MOUSE_BUTTON_8          7
 
-#define control_and(_char) ((_char) - 96)
+#define ctrl(_char) ((_char) - 96)
 
 // NOTE(tbt): the platform layer constructs a linked list of the ASCII values relating
 //            to all of the key presses for a given frame
@@ -302,6 +302,22 @@ typedef struct
     I32 mouse_scroll;
     U32 window_width, window_height;
 } PlatformState;
+
+internal B32
+is_key_typed(PlatformState *input,
+             U8 key)
+{
+    for (KeyTyped *key_typed = input->keys_typed;
+         NULL != key_typed;
+         key_typed = key_typed->next)
+    {
+        if (key_typed->key == key)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 // NOTE(tbt): functions loaded by the platform layer before the game begins
 typedef struct
@@ -352,8 +368,8 @@ typedef struct
     PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
 
-// NOTE(tbt): memory arenas are used by both the platform layer and the game
-typedef struct MemoryArena MemoryArena;
+#include "../game/arena.c"
+#include "../game/strings.c"
 
 // NOTE(tbt): the functions called by the platform layer
 typedef void ( *GameInit) (OpenGLFunctions *gl);                                                       // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
@@ -366,6 +382,10 @@ void platform_get_audio_lock(void);
 void platform_release_audio_lock(void);
 
 void platform_set_vsync(B32 enabled);
+void platform_toggle_fullscreen(void);
+
+B32 platform_write_entire_file(S8 path, U8 *buffer, U64 size);
+S8 platform_read_entire_file(MemoryArena *memory, S8 path);
 
 #endif
 

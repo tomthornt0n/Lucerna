@@ -48,18 +48,34 @@ typedef struct RenderMessage RenderMessage;
 struct RenderMessage
 {
     RenderMessage *next;
-    I32 type;
+    I32 kind;
     U32 sort;
-    Font *font;
-    Asset *texture;
-    SubTexture sub_texture;
-    Colour colour;
     Rectangle rectangle;
-    F32 angle;
     F32 *projection_matrix;
-    Gradient gradient;
-    F32 stroke_width;
-    S8 string;
+
+    union
+    {
+        struct
+        {
+            Font *font;
+            S8 string;
+        };
+
+        struct
+        {
+            Asset *texture;
+            SubTexture sub_texture;
+            F32 angle;
+            F32 stroke_width;
+        };
+
+    };
+
+    union
+    {
+        Colour colour;
+        Gradient gradient;
+    };
 };
 
 typedef struct
@@ -537,7 +553,7 @@ draw_sub_texture(Rectangle rectangle,
     RenderMessage message = {0};
 
 
-    message.type = RENDER_MESSAGE_draw_rectangle;
+    message.kind = RENDER_MESSAGE_draw_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
     message.texture = texture;
@@ -562,7 +578,7 @@ draw_rotated_sub_texture(OpenGLFunctions *gl,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_draw_rotated_rectangle;
+    message.kind = RENDER_MESSAGE_draw_rotated_rectangle;
     message.rectangle = rectangle;
     message.angle = angle;
     message.colour = colour;
@@ -584,7 +600,7 @@ fill_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_draw_rectangle;
+    message.kind = RENDER_MESSAGE_draw_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
     message.texture = NULL;
@@ -606,7 +622,7 @@ fill_rotated_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_draw_rotated_rectangle;
+    message.kind = RENDER_MESSAGE_draw_rotated_rectangle;
     message.rectangle = rectangle;
     message.angle = angle;
     message.colour = colour;
@@ -629,7 +645,7 @@ stroke_rectangle(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_stroke_rectangle;
+    message.kind = RENDER_MESSAGE_stroke_rectangle;
     message.rectangle = rectangle;
     message.colour = colour;
     message.stroke_width = stroke_width;
@@ -652,7 +668,7 @@ draw_text(Font *font,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_draw_text;
+    message.kind = RENDER_MESSAGE_draw_text;
     message.font = font;
     message.colour = colour;
     message.rectangle.x = x;
@@ -675,7 +691,7 @@ draw_gradient(Rectangle rectangle,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_draw_gradient;
+    message.kind = RENDER_MESSAGE_draw_gradient;
     message.rectangle = rectangle;
     message.projection_matrix = projection_matrix;
     message.sort = sort;
@@ -690,7 +706,7 @@ begin_rectangle_mask(Rectangle region,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_mask_rectangle_begin;
+    message.kind = RENDER_MESSAGE_mask_rectangle_begin;
     message.rectangle = region;
     message.sort = sort;
 
@@ -702,7 +718,7 @@ end_rectangle_mask(U32 sort)
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_mask_rectangle_end;
+    message.kind = RENDER_MESSAGE_mask_rectangle_end;
     message.sort = sort;
 
     enqueue_render_message(&global_render_queue, message);
@@ -717,7 +733,7 @@ blur_screen_region(Rectangle region,
 {
     RenderMessage message = {0};
 
-    message.type = RENDER_MESSAGE_blur_screen_region;
+    message.kind = RENDER_MESSAGE_blur_screen_region;
     message.rectangle = region;
     message.sort = sort;
 
@@ -1036,7 +1052,7 @@ process_render_queue(OpenGLFunctions *gl)
 
     while (dequeue_render_message(&global_render_queue, &message))
     {
-        switch (message.type)
+        switch (message.kind)
         {
             case RENDER_MESSAGE_draw_rectangle:
             case RENDER_MESSAGE_draw_rotated_rectangle:
@@ -1069,7 +1085,7 @@ process_render_queue(OpenGLFunctions *gl)
 
                 batch.in_use = true;
         
-                if (message.type == RENDER_MESSAGE_draw_rotated_rectangle)
+                if (message.kind == RENDER_MESSAGE_draw_rotated_rectangle)
                 {
                     batch.buffer[batch.quad_count++] =
                         generate_rotated_quad(message.rectangle,

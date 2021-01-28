@@ -16,13 +16,10 @@
 
 #include "lucerna.h"
 
-#include "arena.c"
-
 internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
-#include "strings.c"
 #include "asset_manager.c"
 #include "audio.c"
 
@@ -31,12 +28,10 @@ internal Font *global_ui_font;
 #include "renderer.c"
 #include "dev_ui.c"
 #include "tiles.c"
+#include "tile_map_editor.c"
 #include "entities.c"
 #include "serialisation.c"
 #include "maps.c"
-#include "save_game.c"
-
-#include "editor.c"
 
 internal TileMap global_tile_map;
 
@@ -50,80 +45,66 @@ game_init(OpenGLFunctions *gl)
     global_ui_font = load_font(gl, "../assets/fonts/mononoki.ttf", 19);
 
     initialise_auto_tiler(gl);
-    initialise_tile_map(&global_static_memory, &global_tile_map, 12, 12);
+    if (!deserialise_tile_map(&global_static_memory, &global_tile_map, s8_literal("test.tile_map")))
+    {
+        initialise_tile_map(&global_static_memory, &global_tile_map, 100, 100);
+    }
 
     initialise_renderer(gl);
 }
+
 
 void
 game_update_and_render(OpenGLFunctions *gl,
                        PlatformState *input,
                        F64 frametime_in_s)
 {
-    //
-    // NOTE(tbt): recalculate projection matrix, set viewport, etc. when window
-    //            size changes
-    //
+    set_renderer_window_size(gl, input->window_width,
+                                 input->window_height);
 
-    static U32 previous_width = 0, previous_height = 0;
-    if (input->window_width != previous_width ||
-        input->window_height != previous_height)
+    prepare_ui();
+    
+    static B32 editor_mode = false;
+
+    if (is_key_typed(input, ctrl('e')))
     {
-        set_renderer_window_size(gl, input->window_width,
-                                     input->window_height);
+        editor_mode = !editor_mode;
     }
 
-    //
-    // NOTE(tbt): debug stuff - fps display and keybindings for enabling and
-    //            disbling v-sync
-    //
-
-    if (input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+    if (editor_mode)
     {
-        place_tile(&global_tile_map, TILE_KIND_grass, (input->mouse_x + global_camera_x) / 64, (input->mouse_y + global_camera_y) / 64);
+        edit_tile_map(input, frametime_in_s, &global_tile_map);
     }
-    else if (input->is_mouse_button_pressed[MOUSE_BUTTON_right])
+    else
     {
-        place_tile(&global_tile_map, TILE_KIND_dirt, (input->mouse_x + global_camera_x) / 64, (input->mouse_y + global_camera_y) / 64);
-    }
-    else if (input->is_mouse_button_pressed[MOUSE_BUTTON_middle])
-    {
-        place_tile(&global_tile_map, TILE_KIND_trees, (input->mouse_x + global_camera_x) / 64, (input->mouse_y + global_camera_y) / 64);
+        render_tile_map(&global_tile_map);
     }
 
-    I8 fps_str[16];
-    gcvt(1.0 / frametime_in_s, 14, fps_str);
-    ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, colour_literal(0.0f, 0.0f, 0.0f, 1.0f), s8_from_cstring(&global_static_memory, fps_str));
+    I8 fps_str[128];
+    snprintf(fps_str, 128, "%f ms (%f fps)", frametime_in_s * 1000.0, 1.0 / frametime_in_s);
+    ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, colour_literal(0.0f, 0.0f, 0.0f, 1.0f), s8_from_cstring(&global_frame_memory, fps_str));
 
-    for (KeyTyped *key = input->keys_typed;
-         NULL != key;
-         key = key->next)
-    {
-        if (key->key == control_and('e'))
+    if (is_key_typed(input, ctrl('v')))
         {
             platform_set_vsync(true);
-        }
-        else if (key->key == control_and('d'))
+    }
+    else if (is_key_typed(input, ctrl('d')))
         {
             platform_set_vsync(false);
-        }
+    }
+    else if (is_key_typed(input, ctrl('f')))
+    {
+        platform_toggle_fullscreen();
     }
 
-    //
-    // NOTE(tbt): actually draw everything
-    //
-
-    render_tile_map(&global_tile_map);
+    finish_ui(input);
 
     process_render_queue(gl);
-
-    previous_width = input->window_width;
-    previous_height = input->window_height;
 }
 
 void
 game_cleanup(OpenGLFunctions *gl)
 {
-    return;
+    serialise_tile_map(&global_tile_map, s8_literal("test.tile_map"));
 }
 

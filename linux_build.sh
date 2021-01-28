@@ -52,7 +52,7 @@ fi
 
 echo -e "\033[35mrunning lcddl.\033[0m"
 pushd bin > /dev/null
-./lcddl ./lcddl_user_layer.so ../assets/entities/*
+time ./lcddl ./lcddl_user_layer.so ../assets/entities/*
 popd > /dev/null
 
 echo -e "\033[35mbuilding game in $MODE mode.\033[0m"

@@ -57,7 +57,7 @@ internal TextureID global_currently_bound_texture = 0;
 enum
 {
     SOURCE_FLAG_NO_FLAGS = 0,
-
+    
     SOURCE_FLAG_ACTIVE  = 1 << 0,
     SOURCE_FLAG_REWIND  = 1 << 1,
     SOURCE_FLAG_LOOPING = 1 << 2
@@ -73,7 +73,7 @@ struct AudioSource
     U8  flags;         // NOTE(tbt): bit field of source properties - see the enum above
     F32 l_gain;        // NOTE(tbt): left channel is multiplied by this before mixing
     F32 r_gain;        // NOTE(tbt): right channel is multiplied by this before mixing
-
+    
     F32 level;         // NOTE(tbt): as set by `set_audio_source_level()`
     F32 pan;           // NOTE(tbt): as set by `set_audio source_pan`
 };
@@ -81,7 +81,7 @@ struct AudioSource
 enum
 {
     ASSET_KIND_none,
-
+    
     ASSET_KIND_texture,
     ASSET_KIND_audio,
 };
@@ -96,7 +96,7 @@ struct Asset
     I32 kind;
     B32 loaded;
     S8 path;
-
+    
     union
     {
         Texture texture;
@@ -115,7 +115,7 @@ asset_from_path(S8 path)
 {
     U64 index = asset_hash(path);
     Asset *result = &global_assets_dict[index];
-
+    
     if (result->touched)
     {
         Asset *prev = NULL;
@@ -128,7 +128,7 @@ asset_from_path(S8 path)
             
             prev = result;
         }
-
+        
         if (prev)
         {
             prev->next_hash = arena_allocate(&global_static_memory,
@@ -145,7 +145,7 @@ asset_from_path(S8 path)
         result->path = copy_string(&global_static_memory, path);
         return result;
     }
-
+    
     return NULL;
 }
 
@@ -170,11 +170,11 @@ read_entire_file(MemoryArena *arena,
     FILE *file;
     U64 file_size, bytes_read;
     I8 *result;
-
+    
     file = fopen(path, "rb");
-
+    
     assert(file);
-
+    
     fseek(file, 0, SEEK_END);
     file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -185,7 +185,7 @@ read_entire_file(MemoryArena *arena,
     fclose(file);
     
     result[file_size] = 0;
-
+    
     return result;
 }
 
@@ -194,33 +194,33 @@ load_texture(OpenGLFunctions *gl,
              Asset *asset)
 {
     U8 *pixels;
-
+    
     if (!asset) { return; }
     if (!asset->touched || asset->loaded) { return; }
-
+    
     temporary_memory_begin(&global_static_memory);
-
+    
     I8 path_cstr[512] = {0};
     snprintf(path_cstr, 512, "%.*s", (I32)asset->path.len, asset->path.buffer);
     pixels = stbi_load(path_cstr,
                        &(asset->texture.width),
                        &(asset->texture.height),
                        NULL, 4);
-
+    
     if (!pixels)
     {
         temporary_memory_end(&global_static_memory);
         return;
     }
-
+    
     gl->GenTextures(1, &(asset->texture.id));
     gl->BindTexture(GL_TEXTURE_2D, asset->texture.id);
-
+    
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
+    
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_RGBA8,
@@ -230,9 +230,9 @@ load_texture(OpenGLFunctions *gl,
                    GL_RGBA,
                    GL_UNSIGNED_BYTE,
                    pixels);
-
+    
     temporary_memory_end(&global_static_memory);
-
+    
     asset->kind = ASSET_KIND_texture;
     asset->loaded = true;
     asset->next_loaded = global_loaded_assets;
@@ -250,25 +250,25 @@ unload_texture(OpenGLFunctions *gl,
     asset->texture.width = 0;
     asset->texture.height = 0;
     asset->loaded = false;
-
+    
     Asset **indirect = &global_loaded_assets;
     while (*indirect != asset) { indirect = &(*indirect)->next_loaded; }
     *indirect = (*indirect)->next_loaded;
 }
 
 internal SubTexture
-create_sub_texture(Texture texture,
-                   F32 x, F32 y,
-                   F32 w, F32 h)
+sub_texture_from_texture(Texture texture,
+                         F32 x, F32 y,
+                         F32 w, F32 h)
 {
     SubTexture result;
-
+    
     result.min_x = x / texture.width;
     result.min_y = y / texture.height;
-
+    
     result.max_x = (x + w) / texture.width;
     result.max_y = (y + h) / texture.height;
-
+    
     return result;
 }
 
@@ -282,7 +282,7 @@ slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horiz
 {
     I32 x_index, y_index;
     I32 index = 0;
-
+    
     for (y_index = 0;
          y_index < vertical_count;
          ++y_index)
@@ -291,7 +291,7 @@ slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horiz
              x_index < horizontal_count;
              ++x_index)
         {
-            result[index++] = create_sub_texture(texture,
+            result[index++] = sub_texture_from_texture(texture,
                                                  x + x_index * w,
                                                  y + y_index * h,
                                                  w, h);
@@ -305,29 +305,29 @@ load_font(OpenGLFunctions *gl,
           U32 size)
 {
     Font *result = arena_allocate(&global_static_memory, sizeof(*result));
-
+    
     U8 *file_buffer;
     U8 pixels[1024 * 1024];
-
+    
     temporary_memory_begin(&global_static_memory);
-
+    
     file_buffer = read_entire_file(&global_static_memory, path);
     assert(file_buffer);
-
+    
     stbtt_BakeFontBitmap(file_buffer, 0, size, pixels, 1024, 1024, 32, 96, result->char_data);
-
+    
     result->texture.width = 1024;
     result->texture.height = 1024;
     result->size = size;
-
+    
     gl->GenTextures(1, &result->texture.id);
     gl->BindTexture(GL_TEXTURE_2D, result->texture.id);
-
+    
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
+    
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_ALPHA,
@@ -337,9 +337,9 @@ load_font(OpenGLFunctions *gl,
                    GL_ALPHA,
                    GL_UNSIGNED_BYTE,
                    pixels);
-
+    
     temporary_memory_end(&global_static_memory);
-
+    
     return result;
 }
 
@@ -350,10 +350,10 @@ internal void
 load_audio(Asset *asset)
 {
     I32 data_rate, bits_per_sample, channels, data_size;
-
+    
     if (!asset) { return; }
     if (asset->loaded || !asset->touched) { return; }
-
+    
     I8 path_cstr[512] = {0};
     snprintf(path_cstr, 512, "%.*s", (I32)asset->path.len, asset->path.buffer);
     
@@ -363,20 +363,20 @@ load_audio(Asset *asset)
              &channels,
              &data_size,
              NULL);
-
+    
     assert(data_rate == 44100);
     assert(bits_per_sample == 16);
     assert(channels == 2);
-
+    
     asset->audio.buffer = arena_allocate(&global_level_memory, data_size);
     wav_read(path_cstr, NULL, NULL, NULL, NULL, asset->audio.buffer);
-
+    
     asset->audio.buffer_size = data_size;
     asset->audio.l_gain = 0.5f;
     asset->audio.r_gain = 0.5f;
     asset->audio.level = 1.0f;
     asset->audio.pan = 0.5f;
-
+    
     asset->kind = ASSET_KIND_audio;
     asset->loaded = true;
     asset->next_loaded = global_loaded_assets;
@@ -392,16 +392,16 @@ unload_audio(Asset *asset)
         AudioSource **indirect_source = &global_playing_sources;
         while (*indirect_source != &asset->audio) { indirect_source = &(*indirect_source)->next; }
         *indirect_source = (*indirect_source)->next;
-
+        
         asset->audio.flags &= ~SOURCE_FLAG_ACTIVE;
         asset->audio.flags |= SOURCE_FLAG_REWIND;
     }
-
+    
     asset->loaded = false;
     // NOTE(tbt): audio data is in memory with level duration so will be freed when the
     //            map is unloaded
     asset->audio.buffer = NULL;
-
+    
     Asset **indirect_asset = &global_loaded_assets;
     while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
     *indirect_asset = (*indirect_asset)->next_loaded;

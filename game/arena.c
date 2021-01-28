@@ -29,7 +29,7 @@
 
 #endif
 
-struct MemoryArena
+typedef struct
 {
     U8 *buffer;         // NOTE(tbt): backing memory
     U64 buffer_size;    // NOTE(tbt): size of the backing memory in bytes
@@ -39,7 +39,7 @@ struct MemoryArena
 #ifdef LUCERNA_DEBUG
     I8 name[ARENA_NAME_MAX];
 #endif
-};
+} MemoryArena;
 
 internal void
 initialise_memory_arena(MemoryArena *arena,
@@ -55,7 +55,6 @@ initialise_memory_arena(MemoryArena *arena,
 #ifdef LUCERNA_DEBUG
     U32 len = strlen(name) + 1;
     memcpy(arena->name, name, len < ARENA_NAME_MAX ? len : ARENA_NAME_MAX);
-    fprintf(stderr, "initialised arena '%s'\n", arena->name);
 #endif
 }
 

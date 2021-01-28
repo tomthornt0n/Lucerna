@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <math.h>
 #include <assert.h>
 #include <dlfcn.h>
@@ -22,6 +25,7 @@
 
 #include <X11/Xlib.h>
 #include <xcb/xcb.h>
+#include <xcb/xcb_ewmh.h>
 #include <X11/Xlib-xcb.h>
 #include <GL/glx.h>
 #include "glxext.h"
@@ -30,8 +34,6 @@
 #include <alsa/asoundlib.h>
 
 #define GAME_LIBRARY_PATH "./liblucerna.so"
-
-#include "../game/arena.c"
 
 typedef void ( *PFNGLXDESTROYCONTEXTPROC) (Display *dpy, GLXContext ctx);
 typedef const char *( *PFNGLXQUERYEXTENSIONSSTRINGPROC) (Display *dpy, int screen);
@@ -334,7 +336,175 @@ platform_set_vsync(B32 enabled)
                     enabled);
 }
 
+internal xcb_intern_atom_reply_t *
+linux_get_atom_reply(I8 *atom_id)
+{
+    xcb_intern_atom_cookie_t cookie = xcb_intern_atom(global_connection,
+                                                          0,
+                                                          strlen(atom_id),
+                                                          atom_id);
+    xcb_flush(global_connection);
+    
+      return xcb_intern_atom_reply(global_connection, cookie, 0);
+}
+
+void
+platform_set_fullscreen(B32 fullscreen)
+{
+    xcb_intern_atom_reply_t *wm_state_reply = linux_get_atom_reply("_NET_WM_STATE");
+        xcb_intern_atom_reply_t *fullscreen_reply = linux_get_atom_reply("_NET_WM_STATE_FULLSCREEN");
+        
+        if (fullscreen)
+        {
+        xcb_change_property(global_connection,
+                            XCB_PROP_MODE_REPLACE,
+                            global_window,
+                            wm_state_reply->atom,
+                            XCB_ATOM_ATOM,
+                            32,
+                            1,
+                            &(fullscreen_reply->atom));
+        }
+    else
+        {
+        xcb_delete_property(global_connection, global_window, wm_state_reply->atom);
+    }
+        
+    free(fullscreen_reply);
+    free(wm_state_reply);
+    
+    xcb_unmap_window(global_connection, global_window);
+        xcb_map_window(global_connection, global_window);
+}
+
+void
+platform_toggle_fullscreen(void)
+{
+    xcb_intern_atom_reply_t *wm_state_reply = linux_get_atom_reply("_NET_WM_STATE");
+    xcb_intern_atom_reply_t *fullscreen_reply = linux_get_atom_reply("_NET_WM_STATE_FULLSCREEN");
+    
+xcb_get_property_cookie_t current_fullscreen_cookie = xcb_get_property(global_connection,
+                                                                       0,
+                                                                       global_window,
+                                                                       wm_state_reply->atom,
+                                                                       XCB_ATOM_ATOM,
+                                                                       0,
+                                                                       sizeof(xcb_atom_t));
+
+xcb_get_property_reply_t *current_fullscreen_property = xcb_get_property_reply(global_connection, current_fullscreen_cookie, NULL);
+xcb_atom_t *current_atom_fullscreen = (xcb_atom_t *)xcb_get_property_value(current_fullscreen_property);
+
+    B32 fullscreen = (*current_atom_fullscreen != fullscreen_reply->atom);
+    
+    if (fullscreen)
+    {
+        xcb_change_property(global_connection,
+                            XCB_PROP_MODE_REPLACE,
+                            global_window,
+                            wm_state_reply->atom,
+                            XCB_ATOM_ATOM,
+                            32,
+                            1,
+                            &(fullscreen_reply->atom));
+    }
+    else
+    {
+        xcb_delete_property(global_connection, global_window, wm_state_reply->atom);
+    }
+    
+    free(current_fullscreen_property);
+    free(wm_state_reply);
+    free(fullscreen_reply);
+    
+    xcb_unmap_window(global_connection, global_window);
+    xcb_map_window(global_connection, global_window);
+}
+
 MemoryArena global_platform_static_memory;
+
+B32
+platform_write_entire_file(S8 path,
+                           U8 *buffer,
+                           U64 buffer_size)
+{
+    B32 success = false;
+
+    temporary_memory_begin(&global_platform_static_memory);
+
+    I8 *temp_path = arena_allocate(&global_platform_static_memory, path.len + 2);
+    memcpy(temp_path, path.buffer, path.len);
+    strcat(temp_path, "~");
+
+    I32 fd = open(temp_path,
+                  O_CREAT | O_WRONLY,
+                  S_IRUSR | S_IWUSR);
+    
+    if (-1 != fd)
+    {
+        U64 bytes_written = write(fd, buffer, buffer_size);
+
+        if (bytes_written == buffer_size)
+        {
+            // TODO(tbt): get rid of stdio.h
+            rename(temp_path, cstring_from_s8(&global_platform_static_memory, path));
+            success = true;
+        }
+
+        B32 file_closed_successfully = -1 != close(fd);
+        success = success & file_closed_successfully;
+    }
+
+    temporary_memory_end(&global_platform_static_memory);
+
+    return success;
+}
+
+S8
+platform_read_entire_file(MemoryArena *memory,
+                          S8 path)
+{
+    S8 result;
+    result.buffer = NULL;
+    result.len = 0;
+
+    temporary_memory_begin(&global_platform_static_memory);
+
+    I32 fd = open(cstring_from_s8(&global_platform_static_memory, path), O_RDONLY);
+
+    temporary_memory_end(&global_platform_static_memory);
+
+    if (-1 != fd)
+    {
+        U64 file_size = lseek(fd, 0, SEEK_END);
+
+        if (-1 != file_size)
+        {
+            if (-1 != lseek(fd, 0, SEEK_SET))
+            {
+                U8 *buffer = arena_allocate(memory, file_size);
+
+                ssize_t bytes_read = read(fd, buffer, file_size);
+                if (bytes_read == file_size)
+                {
+                    result.buffer = buffer;
+                    result.len = file_size;
+                }
+                else
+                {
+                    fprintf(stderr, "read %ld bytes: %s\n", bytes_read, strerror(errno));
+                }
+            }
+        }
+
+        if (-1 == close(fd))
+        {
+            result.buffer = NULL;
+            result.len = 0;
+        }
+    }
+
+    return result;
+}
 
 I32
 main(int argc,
@@ -480,23 +650,9 @@ main(int argc,
                       value_mask,
                       value_list);
 
-    wm_protocol_cookie = xcb_intern_atom(global_connection,
-                                         1,
-                                         12,
-                                         "WM_PROTOCOLS");
+    wm_protocol_reply = linux_get_atom_reply("WM_PROTOCOLS");
 
-    wm_protocol_reply = xcb_intern_atom_reply(global_connection,
-                                              wm_protocol_cookie,
-                                              0);
-
-    window_close_cookie = xcb_intern_atom(global_connection,
-                                          0,
-                                          16,
-                                          "WM_DELETE_WINDOW");
-
-    window_close_reply = xcb_intern_atom_reply(global_connection,
-                                               window_close_cookie,
-                                               0);
+    window_close_reply = linux_get_atom_reply("WM_DELETE_WINDOW");
 
     window_close_atom = window_close_reply->atom;
 
@@ -504,8 +660,8 @@ main(int argc,
                         XCB_PROP_MODE_REPLACE,
                         global_window,
                         wm_protocol_reply->atom,
-                        4,
-                        32,
+                        XCB_ATOM_ATOM,
+                            32,
                         1,
                         &window_close_atom);
 

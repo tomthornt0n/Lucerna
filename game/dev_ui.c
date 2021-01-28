@@ -100,95 +100,30 @@ get_text_bounds(Font *font,
         }
     }
 
-    result = rectangle_literal(min_x, min_y, max_x - min_x, max_y - min_y);
+    result = rectangle_literal(min_x - PADDING, min_y - PADDING, max_x - min_x + PADDING * 2, max_y - min_y + PADDING * 2);
     return result;
 }
 
-internal Rectangle
-n_get_text_bounds(Font *font,
-                  F32 x, F32 y,
-                  U32 wrap_width,
-                  S8 string,
-                  I32 n)
+typedef enum
 {
-    Rectangle result;
-    stbtt_aligned_quad q;
-    F32 line_start = x;
+    UI_NODE_KIND_none,
 
-    F32 min_x = x, min_y = y, max_x = 0.0f, max_y = 0.0f;
+    UI_NODE_KIND_window,
+    UI_NODE_KIND_button,
+    UI_NODE_KIND_dropdown,
+    UI_NODE_KIND_slider_f,
+    UI_NODE_KIND_slider_i,
+    UI_NODE_KIND_label,
+    UI_NODE_KIND_line_break,
+    UI_NODE_KIND_sprite_picker,
+} UINodeKind;
 
-    for (I32 i = 0;
-         i < string.len;
-         ++i)
-    {
-        if (string.buffer[i] >=32 &&
-            string.buffer[i] < 128)
-        {
-            F32 char_width, char_height;
-    
-            stbtt_GetBakedQuad(font->char_data,
-                               font->texture.width,
-                               font->texture.height,
-                               string.buffer[i] - 32,
-                               &x,
-                               &y,
-                               &q);
-
-            if (q.x0 < min_x)
-            {
-                min_x = q.x0;
-            }
-            if (q.y0 < min_y)
-            {
-                min_y = q.y0;
-            }
-            if (q.x1 > max_x)
-            {
-                max_x = q.x1;
-            }
-            if (q.y1 > max_y)
-            {
-                max_y = q.y1;
-            }
-
-            // NOTE(tbt): need to check against the current position as well as
-            //            some characters don't have any width, just advance the
-            //            current position
-            if (x > max_x)
-            {
-                max_x = x;
-            }
-            if (y > max_y)
-            {
-                max_y = y;
-            }
-
-            if (wrap_width && isspace(string.buffer[i]))
-            {
-                if (x + (q.x1 - q.x0) * 2 >
-                    line_start + wrap_width)
-                {
-                    y += font->size;
-                    x = line_start;
-                }
-            }
-        }
-        else if (string.buffer[i] == '\n')
-        {
-            y += font->size;
-            x = line_start;
-        }
-    }
-
-    result = rectangle_literal(min_x, min_y, max_x - min_x, max_y - min_y);
-    return result;
-}
 
 typedef struct UINode UINode;
 struct UINode
 {
     B32 exists;
-    U32 type;
+    UINodeKind kind;
     UINode *first_child, *last_child, *next_sibling;
     UINode *next_insertion_point; // NOTE(tbt): form a stack of where to insert new nodes
     S8 key;
@@ -277,22 +212,6 @@ ui_node_from_string(S8 string)
     return result;
 }
 
-enum
-{
-    UI_NODE_TYPE_NONE,
-
-    UI_NODE_TYPE_WINDOW,
-    UI_NODE_TYPE_BUTTON,
-    UI_NODE_TYPE_DROPDOWN,
-    UI_NODE_TYPE_SLIDER_F,
-    UI_NODE_TYPE_SLIDER_I,
-    UI_NODE_TYPE_LABEL,
-    UI_NODE_TYPE_LINE_BREAK,
-    UI_NODE_TYPE_SCROLL_PANEL,
-    UI_NODE_TYPE_COLOUR_PICKER,
-    UI_NODE_TYPE_SPRITE_PICKER,
-};
-
 internal UINode *global_hot_widget, *global_active_widget;
 internal UINode *global_widgets_under_mouse;
 internal B32 global_is_mouse_over_ui;
@@ -336,6 +255,8 @@ _ui_insert_node(UINode *node)
     node->next_under_mouse = NULL;
 }
 
+#define do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
+
 internal void
 begin_window(PlatformState *input,
              S8 name,
@@ -371,7 +292,7 @@ begin_window(PlatformState *input,
         node->sort = UI_SORT_DEPTH + 10;
     }
 
-    node->type = UI_NODE_TYPE_WINDOW;
+    node->kind = UI_NODE_KIND_window;
 
     if (point_is_in_region(input->mouse_x,
                            input->mouse_y,
@@ -401,6 +322,8 @@ begin_window(PlatformState *input,
 
     if (node->dragging)
     {
+        global_is_mouse_over_ui = true;
+
         node->drag_x = clamp_f(floor(input->mouse_x - node->interactable.w * 0.5f), 0.0f, global_renderer_window_w - PADDING);
         node->drag_y = clamp_f(floor(input->mouse_y - node->interactable.h * 0.5f), 0.0f, global_renderer_window_h - PADDING);
 
@@ -415,8 +338,6 @@ begin_window(PlatformState *input,
         }
     }
 }
-
-#define do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
 
 internal B32
 do_bit_toggle_button(PlatformState *input,
@@ -436,7 +357,7 @@ do_bit_toggle_button(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_BUTTON;
+    node->kind = UI_NODE_KIND_button;
     node->wrap_width = width;
 
     if (mask != NULL) { node->toggled = *mask & (1 << bit); };
@@ -503,7 +424,7 @@ do_button(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_BUTTON;
+    node->kind = UI_NODE_KIND_button;
     node->wrap_width = width;
 
     if (!node->hidden)
@@ -536,9 +457,12 @@ do_button(PlatformState *input,
     return node->toggled;
 }
 
+#define do_dropdown(_input, _name, _label, _width) for (I32 i = (begin_dropdown((_input), (_name), (_label), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
+
 internal void
 begin_dropdown(PlatformState *input,
                S8 name,
+               S8 label,
                F32 width)
 {  
     UINode *node;
@@ -551,8 +475,9 @@ begin_dropdown(PlatformState *input,
     _ui_insert_node(node);
     _ui_push_insertion_point(node);
 
-    node->type = UI_NODE_TYPE_DROPDOWN;
+    node->kind = UI_NODE_KIND_dropdown;
     node->wrap_width = width;
+    node->label = copy_string(&global_frame_memory, label);
 
     if (!node->hidden)
     {
@@ -585,10 +510,8 @@ begin_dropdown(PlatformState *input,
     }
 }
 
-#define do_dropdown(_input, _name, _width) for (I32 i = (begin_dropdown((_input), (_name), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
-
 internal void
-do_slider_i(PlatformState *input,
+do_slider_l(PlatformState *input,
             S8 name,
             F32 min, F32 max,
             F32 snap,
@@ -606,7 +529,76 @@ do_slider_i(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_SLIDER_I;
+    node->kind = UI_NODE_KIND_slider_i;
+    node->min = min;
+    node->max = max;
+    node->wrap_width = width;
+
+    if (!node->hidden)
+    {
+        if (point_is_in_region(input->mouse_x,
+                               input->mouse_y,
+                               node->interactable) &&
+            !global_active_widget)
+        {
+            node->next_under_mouse = global_widgets_under_mouse;
+            global_widgets_under_mouse = node;
+        }
+        if (global_hot_widget == node &&
+            input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+        {
+            global_active_widget = node;
+            node->dragging = true;
+        }
+
+        if (node->dragging)
+        {
+            F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
+                                  0.0f, width - SLIDER_THUMB_SIZE);
+
+            *value = thumb_x / (width - SLIDER_THUMB_SIZE) *
+                               (node->max - node->min) + node->min;
+
+            if (snap > 0.0f)
+            {
+                *value = floor(*value / snap) * snap;
+            }
+
+            if (!global_hot_widget)
+            {
+                global_active_widget = node;
+            }
+
+            if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+            {
+                node->dragging = false;
+            }
+        }
+
+        node->value_i = *value;
+    }
+}
+
+internal void
+do_slider_i(PlatformState *input,
+            S8 name,
+            F32 min, F32 max,
+            F32 snap,
+            F32 width,
+            I32 *value)
+{
+    UINode *node;
+    
+    *value = clamp_i(*value, min, max);
+
+    if (!(node = ui_node_from_string(name)))
+    {
+        node = new_ui_node_from_string(&global_static_memory, name);
+    }
+
+    _ui_insert_node(node);
+
+    node->kind = UI_NODE_KIND_slider_i;
     node->min = min;
     node->max = max;
     node->wrap_width = width;
@@ -675,7 +667,7 @@ do_slider_lf(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_SLIDER_F;
+    node->kind = UI_NODE_KIND_slider_f;
     node->min = min;
     node->max = max;
     node->wrap_width = width;
@@ -744,7 +736,7 @@ do_slider_f(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_SLIDER_F;
+    node->kind = UI_NODE_KIND_slider_f;
     node->min = min;
     node->max = max;
     node->wrap_width = width;
@@ -810,7 +802,7 @@ do_label(S8 name,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_LABEL;
+    node->kind = UI_NODE_KIND_label;
     node->wrap_width = width;
 }
 
@@ -824,7 +816,7 @@ do_line_break(void)
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_LINE_BREAK;
+    node->kind = UI_NODE_KIND_line_break;
 }
 
 internal void
@@ -844,7 +836,7 @@ do_sprite_picker(PlatformState *input,
 
     _ui_insert_node(node);
 
-    node->type = UI_NODE_TYPE_SPRITE_PICKER;
+    node->kind = UI_NODE_KIND_sprite_picker;
     node->texture = texture;
     node->texture_width = width;
     node->texture_height = width;
@@ -927,30 +919,27 @@ layout_and_render_ui_node(PlatformState *input,
                           UINode *node,
                           F32 x, F32 y)
 {
-    switch (node->type)
+    switch (node->kind)
     {
-        case UI_NODE_TYPE_WINDOW:
+        case UI_NODE_KIND_window:
         {
             Rectangle title_bounds = get_text_bounds(global_ui_font,
-                                                     node->drag_x + PADDING,
+                                                     node->drag_x,
                                                      node->drag_y,
                                                      node->wrap_width,
                                                      node->label);
 
-            node->bounds = rectangle_literal(node->drag_x,
-                                     node->drag_y,
-                                     title_bounds.w + PADDING * 2,
-                                     0.0f);
+            node->bounds = rectangle_literal(title_bounds.x,
+                                             title_bounds.y,
+                                             title_bounds.w,
+                                             0.0f);
 
-            node->bg = rectangle_literal(node->drag_x,
-                                 node->drag_y + title_bounds.h + PADDING * 2,
-                                 title_bounds.w + PADDING * 2,
-                                 0.0f);
+            node->bg = rectangle_literal(title_bounds.x,
+                                         title_bounds.y + title_bounds.h,
+                                         title_bounds.w,
+                                         0.0f);
 
-            node->interactable = rectangle_literal(node->drag_x,
-                                           node->drag_y,
-                                           title_bounds.w + PADDING * 2,
-                                           title_bounds.h + PADDING * 2);
+            node->interactable = title_bounds;
 
             UINode *child = node->first_child;
             // NOTE(tbt): keep track of where to place the next child
@@ -960,7 +949,7 @@ layout_and_render_ui_node(PlatformState *input,
 
             while (child)
             {
-                if (child->type == UI_NODE_TYPE_LINE_BREAK ||
+                if (child->kind == UI_NODE_KIND_line_break ||
                     current_x + child->bounds.w + PADDING >
                     node->drag_x + node->wrap_width)
                 {
@@ -974,7 +963,7 @@ layout_and_render_ui_node(PlatformState *input,
                                           current_x,
                                           current_y);
 
-                if (child->type != UI_NODE_TYPE_WINDOW)
+                if (child->kind != UI_NODE_KIND_window)
                 {
                     child->sort = node->sort + 1;
 
@@ -1025,8 +1014,8 @@ layout_and_render_ui_node(PlatformState *input,
                            global_ui_projection_matrix);
 
             draw_text(global_ui_font,
-                      title_bounds.x,
-                      title_bounds.y + global_ui_font->size + PADDING * 2,
+                      node->drag_x,
+                      node->drag_y,
                       node->wrap_width,
                       FG_COL_1,
                       node->label,
@@ -1035,20 +1024,12 @@ layout_and_render_ui_node(PlatformState *input,
 
             break;
         }
-        case UI_NODE_TYPE_BUTTON:
+        case UI_NODE_KIND_button:
         {
-            Rectangle label_bounds = get_text_bounds(global_ui_font,
-                                                     x, y + global_ui_font->size,
-                                                     node->wrap_width,
-                                                     node->label);
-
-
-            node->bounds = rectangle_literal(label_bounds.x,
-                                     label_bounds.y,
-                                     label_bounds.w + 2 * PADDING,
-                                     label_bounds.h + 2 * PADDING);
-            node->bg = node->bounds;
-            node->interactable = node->bounds;
+            node->bounds = node->bg = node->interactable = get_text_bounds(global_ui_font,
+                                                                           x + PADDING, y + global_ui_font->size,
+                                                                           node->wrap_width,
+                                                                           node->label);
 
             if (global_hot_widget == node)
             {
@@ -1064,7 +1045,7 @@ layout_and_render_ui_node(PlatformState *input,
                                  global_ui_projection_matrix);
 
                 draw_text(global_ui_font,
-                          x + PADDING, y + global_ui_font->size + PADDING,
+                          x + PADDING, y + global_ui_font->size,
                           node->wrap_width,
                           FG_COL_1,
                           node->label,
@@ -1085,7 +1066,7 @@ layout_and_render_ui_node(PlatformState *input,
                                  global_ui_projection_matrix);
 
                 draw_text(global_ui_font,
-                          x + PADDING, y + global_ui_font->size + PADDING,
+                          x + PADDING, y + global_ui_font->size,
                           node->wrap_width,
                           FG_COL_1,
                           node->label,
@@ -1102,7 +1083,7 @@ layout_and_render_ui_node(PlatformState *input,
                                    global_ui_projection_matrix);
 
                     draw_text(global_ui_font,
-                              x + PADDING, y + global_ui_font->size + PADDING,
+                              x + PADDING, y + global_ui_font->size,
                               node->wrap_width,
                               BG_COL_1,
                               node->label,
@@ -1118,7 +1099,7 @@ layout_and_render_ui_node(PlatformState *input,
                                      global_ui_projection_matrix);
 
                     draw_text(global_ui_font,
-                              x + PADDING, y + global_ui_font->size + PADDING,
+                              x + PADDING, y + global_ui_font->size,
                               node->wrap_width,
                               FG_COL_1,
                               node->label,
@@ -1129,30 +1110,23 @@ layout_and_render_ui_node(PlatformState *input,
 
             break;
         }
-        case UI_NODE_TYPE_DROPDOWN:
+        case UI_NODE_KIND_dropdown:
         {
-            Rectangle label_bounds = get_text_bounds(global_ui_font,
-                                                     x, y + global_ui_font->size,
-                                                     node->wrap_width,
-                                                     node->label);
-
-
-            node->bounds = rectangle_literal(label_bounds.x,
-                                     label_bounds.y,
-                                     label_bounds.w + 2 * PADDING,
-                                     label_bounds.h + 2 * PADDING);
-            node->interactable = node->bounds;
+            node->bounds = node->interactable = get_text_bounds(global_ui_font,
+                                                                x + PADDING, y + global_ui_font->size,
+                                                                node->wrap_width,
+                                                                node->label);
             node->bg = rectangle_literal(node->bounds.x,
-                                 node->bounds.y + node->bounds.h,
-                                 node->bounds.w,
-                                 0.0f);
+                                         node->bounds.y + node->bounds.h,
+                                         node->bounds.w,
+                                         0.0f);
 
             UINode *child = node->first_child;
             F32 current_y = node->bg.y + PADDING;
 
             while (child)
             {
-                if (child->type == UI_NODE_TYPE_WINDOW) { continue; }
+                if (child->kind == UI_NODE_KIND_window) { continue; }
 
                 if (node->toggled)
                 {
@@ -1168,7 +1142,7 @@ layout_and_render_ui_node(PlatformState *input,
                 child->sort = node->sort + 2;
 
                 child->wrap_width = min_f(child->wrap_width,
-                                                node->bounds.w);
+                                          node->bounds.w);
 
                 layout_and_render_ui_node(input,
                                           child,
@@ -1232,7 +1206,7 @@ layout_and_render_ui_node(PlatformState *input,
                              global_ui_projection_matrix);
 
             draw_text(global_ui_font,
-                      x + PADDING, y + global_ui_font->size + PADDING,
+                      x + PADDING, y + global_ui_font->size,
                       node->wrap_width,
                       FG_COL_1,
                       node->label,
@@ -1241,7 +1215,7 @@ layout_and_render_ui_node(PlatformState *input,
 
             break;
         }
-        case UI_NODE_TYPE_SLIDER_I:
+        case UI_NODE_KIND_slider_i:
         {
             F32 thumb_x = ((node->value_i - node->min) /
                            (node->max - node->min)) *
@@ -1284,7 +1258,7 @@ layout_and_render_ui_node(PlatformState *input,
 
             break;
         }
-        case UI_NODE_TYPE_SLIDER_F:
+        case UI_NODE_KIND_slider_f:
         {
             F32 thumb_x;
 
@@ -1329,7 +1303,7 @@ layout_and_render_ui_node(PlatformState *input,
 
             break;
         }
-        case UI_NODE_TYPE_LABEL:
+        case UI_NODE_KIND_label:
         {
             Rectangle label_bounds = get_text_bounds(global_ui_font,
                                                      x, y,
@@ -1354,7 +1328,7 @@ layout_and_render_ui_node(PlatformState *input,
                       global_ui_projection_matrix);
             break;
         }
-        case UI_NODE_TYPE_SPRITE_PICKER:
+        case UI_NODE_KIND_sprite_picker:
         {
             node->bounds = rectangle_literal(x, y, node->texture_width, node->texture_height);
             node->interactable = node->bounds;
@@ -1398,7 +1372,7 @@ layout_and_render_ui_node(PlatformState *input,
     }
 }
 
-#define do_ui(_gl, _input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_gl), (_input))))
+#define do_ui(_input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_input))))
 
 internal void
 prepare_ui(void)
