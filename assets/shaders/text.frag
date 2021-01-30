@@ -9,7 +9,7 @@ uniform sampler2D u_texture;
 
 void main()
 {
-    float alpha = texture2D(u_texture, v_texture_coordinates).a * v_colour.a;
+    float alpha = texture2D(u_texture, v_texture_coordinates).r * v_colour.a;
     o_colour = vec4(v_colour.rgb, alpha * v_colour.a);
 }
 

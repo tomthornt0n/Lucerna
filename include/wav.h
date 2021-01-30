@@ -26,14 +26,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-void wav_read(char *path,
-              int *data_rate,
-              int *bits_per_sample,
-              int *channels, 
-              int *data_size,
-              void *data);
-
+    
+    void wav_read(char *path,
+                  int *data_rate,
+                  int *bits_per_sample,
+                  int *channels, 
+                  int *data_size,
+                  void *data);
+    
 #ifdef __cplusplus
 }
 #endif
@@ -50,11 +50,11 @@ typedef unsigned char  wav_b8;
 #define WAV_FALSE 0
 
 #define WAV_RIFF_CODE(a, b, c, d) (((wav_u32)(a) << 0)  |                      \
-                                   ((wav_u32)(b) << 8)  |                      \
-                                   ((wav_u32)(c) << 16) |                      \
-                                   ((wav_u32)(d) << 24))
+((wav_u32)(b) << 8)  |                      \
+((wav_u32)(c) << 16) |                      \
+((wav_u32)(d) << 24))
 
-#pragma pack(push, 0)
+#pragma pack(push, 1)
 struct wav_riff_header
 {
     wav_u32 id;
@@ -82,87 +82,87 @@ wav_read(char *filename,
 {
     FILE *file;
     int bytes_read;
-
+    
     struct wav_riff_header header;
     wav_u32 wave;
-
+    
     wav_b8 fmt_read = WAV_FALSE, data_read = WAV_FALSE;
-
+    
     WAV_ASSERT(sizeof(wav_u16) == 2);
     WAV_ASSERT(sizeof(wav_u32) == 4);
-
+    
     WAV_ASSERT(filename);
-
+    
     file = fopen(filename, "rb");
     WAV_ASSERT(file);
     
     bytes_read = fread(&header, 1, sizeof(header), file);
     WAV_ASSERT(bytes_read == sizeof(header));
     WAV_ASSERT(header.id == WAV_RIFF_CODE('R', 'I', 'F', 'F'));
-
+    
     bytes_read = fread(&wave, 1, sizeof(wave), file);
     WAV_ASSERT(bytes_read == sizeof(wave));
     WAV_ASSERT(wave == WAV_RIFF_CODE('W', 'A', 'V', 'E'));
-
+    
     while (!feof(file))
     {
         struct wav_fmt_chunk fmt;
-
+        
         bytes_read = fread(&header, 1, sizeof(header), file);
         if (bytes_read != sizeof(header)) break;
-
+        
         switch (header.id)
         {
             case WAV_RIFF_CODE('f', 'm', 't', ' '):
             {
                 fmt_read = WAV_TRUE;
-
+                
                 WAV_ASSERT(header.size == sizeof(fmt));
-
+                
                 bytes_read = fread(&fmt, 1, header.size, file);
                 WAV_ASSERT(bytes_read == sizeof(fmt));
-
+                
                 WAV_ASSERT(fmt.w_format_tag == 1); /* only uncompressed pcm data is supported */
                 WAV_ASSERT(fmt.n_block_align == (fmt.w_bits_per_sample / 8) * fmt.n_channels);
                 WAV_ASSERT(fmt.n_avg_bytes_per_sec == fmt.n_samples_per_sec * fmt.n_block_align);
-
+                
                 if (data_rate) { *data_rate = fmt.n_samples_per_sec; }
                 if (channels) { *channels = fmt.n_channels; }
                 if (bits_per_sample) { *bits_per_sample = fmt.w_bits_per_sample; }
-
+                
                 break;
             }
             case WAV_RIFF_CODE('d', 'a', 't', 'a'):
             {
                 data_read = WAV_TRUE;
-
+                
                 if (data_size) { *data_size = header.size; }
-
+                
                 if (data)
                 {
                     bytes_read = fread(data, 1, header.size, file);
                     WAV_ASSERT(bytes_read == header.size);
                 }
-
+                
                 break;
             }
             default:
             {
                 fseek(file, header.size, SEEK_CUR);
-
+                
                 break;
             }
         }
-
+        
         if (fmt_read &&
             data_read)
         {
             break;
         }
     }
-
+    
     WAV_ASSERT(fmt_read && data_read);
-
+    
     fclose(file);
 }
 #endif

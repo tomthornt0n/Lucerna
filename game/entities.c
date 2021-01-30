@@ -22,7 +22,7 @@ struct Entity
     F32 y;
     
     
-    Rectangle render_sub_texture__rectangle; // NOTE(tbt): position is relative to `x` and `y`
+    Rect render_sub_texture__rectangle; // NOTE(tbt): position is relative to `x` and `y`
     SubTexture render_sub_texture__sub_texture;
     Asset *render_sub_texture__texture;
 };
@@ -39,7 +39,7 @@ push_player(MemoryArena *memory,
     
     result->flags =
         (1 << ENTITY_FLAG_is_player) |
-                    (1 << ENTITY_FLAG_can_move)  |
+        (1 << ENTITY_FLAG_can_move)  |
         (1 << ENTITY_FLAG_render_sub_texture);
     
     result->render_sub_texture__rectangle = rectangle_literal(x, y, 64.0f, 64.0f);
@@ -61,6 +61,6 @@ process_entities(OpenGLFunctions *gl,
         if (e->flags & (1 << ENTITY_FLAG_render_sub_texture))
         {
             // TODO(tbt): render sub texture
+        }
     }
-}
 }

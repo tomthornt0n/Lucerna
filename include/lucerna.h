@@ -52,11 +52,11 @@ internal F32
 reciprocal_sqrt_f(F32 n)
 {
     union FloatAsInt { F32 f; I32 i; } i;
-
+    
     i.f = n;
     i.i = 0x5f375a86 - (i.i >> 1);
     i.f *= 1.5f - (i.f * 0.5f * i.f * i.f);
-
+    
     return i.f;
 }
 
@@ -104,12 +104,12 @@ clamp_u(U64 n,
 
 #define bit(_n) (1 << (_n))
 
-#define rectangle_literal(_x, _y, _w, _h) ((Rectangle){ (_x), (_y), (_w), (_h) })
+#define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
     F32 x, y;
     F32 w, h;
-} Rectangle;
+} Rect;
 
 #define colour_literal(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
 typedef struct
@@ -125,8 +125,8 @@ typedef struct
 
 
 internal B32
-rectangles_are_intersecting(Rectangle a,
-                            Rectangle b)
+rectangles_are_intersecting(Rect a,
+                            Rect b)
 {
     if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
     if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
@@ -135,7 +135,7 @@ rectangles_are_intersecting(Rectangle a,
 
 internal B32
 point_is_in_region(F32 x, F32 y,
-                   Rectangle region)
+                   Rect region)
 {
     if (x < region.x              ||
         y < region.y              ||
@@ -371,21 +371,40 @@ typedef struct
 #include "../game/arena.c"
 #include "../game/strings.c"
 
+//
 // NOTE(tbt): the functions called by the platform layer
+//
+
 typedef void ( *GameInit) (OpenGLFunctions *gl);                                                       // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
 typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, F64 frametime_in_s);  // NOTE(tbt): called every frame
 typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);                                    // NOTE(tbt): called from the audio thread when the buffer needs refilling
 typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);                                      // NOTE(tbt): called when the window is closed and the main loop exits
 
+//
+// NOTE(tbt): functions in the platform layer called by the game
+//
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#ifdef LC_GAME
+#define LC_API __declspec(dllimport)
+#else
+#define LC_API __declspec(dllexport)
+#endif
+#else
+#define LC_API 
+#endif
+
 // NOTE(tbt): control for a lock to be used with the audio thread
-void platform_get_audio_lock(void);
-void platform_release_audio_lock(void);
+LC_API void platform_get_audio_lock(void);
+LC_API void platform_release_audio_lock(void);
 
-void platform_set_vsync(B32 enabled);
-void platform_toggle_fullscreen(void);
+// NOTE(tbt): control visual settings
+LC_API void platform_set_vsync(B32 enabled);
+LC_API void platform_toggle_fullscreen(void);
 
-B32 platform_write_entire_file(S8 path, U8 *buffer, U64 size);
-S8 platform_read_entire_file(MemoryArena *memory, S8 path);
+// NOTE(tbt): basic file IO
+LC_API B32 platform_write_entire_file(S8 path, U8 *buffer, U64 size);
+LC_API S8 platform_read_entire_file(MemoryArena *memory, S8 path);
 
 #endif
 

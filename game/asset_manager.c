@@ -163,32 +163,6 @@ typedef struct
     U32 size;
 } Font;
 
-internal void *
-read_entire_file(MemoryArena *arena,
-                 I8 *path)
-{
-    FILE *file;
-    U64 file_size, bytes_read;
-    I8 *result;
-    
-    file = fopen(path, "rb");
-    
-    assert(file);
-    
-    fseek(file, 0, SEEK_END);
-    file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    
-    result = arena_allocate_aligned(arena, file_size + 1, 1);
-    bytes_read = fread(result, 1, file_size, file);
-    assert(bytes_read == file_size);
-    fclose(file);
-    
-    result[file_size] = 0;
-    
-    return result;
-}
-
 internal void
 load_texture(OpenGLFunctions *gl,
              Asset *asset)
@@ -292,29 +266,29 @@ slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horiz
              ++x_index)
         {
             result[index++] = sub_texture_from_texture(texture,
-                                                 x + x_index * w,
-                                                 y + y_index * h,
-                                                 w, h);
+                                                       x + x_index * w,
+                                                       y + y_index * h,
+                                                       w, h);
         }
     }
 }
 
 internal Font *
 load_font(OpenGLFunctions *gl,
-          I8 *path,
+          S8 path,
           U32 size)
 {
     Font *result = arena_allocate(&global_static_memory, sizeof(*result));
     
-    U8 *file_buffer;
     U8 pixels[1024 * 1024];
     
     temporary_memory_begin(&global_static_memory);
     
-    file_buffer = read_entire_file(&global_static_memory, path);
-    assert(file_buffer);
+    S8 file = platform_read_entire_file(&global_static_memory, path);
     
-    stbtt_BakeFontBitmap(file_buffer, 0, size, pixels, 1024, 1024, 32, 96, result->char_data);
+    assert(file.buffer);
+    
+    stbtt_BakeFontBitmap(file.buffer, 0, size, pixels, 1024, 1024, 32, 96, result->char_data);
     
     result->texture.width = 1024;
     result->texture.height = 1024;
@@ -330,11 +304,11 @@ load_font(OpenGLFunctions *gl,
     
     gl->TexImage2D(GL_TEXTURE_2D,
                    0,
-                   GL_ALPHA,
+                   GL_RED,
                    result->texture.width,
                    result->texture.height,
                    0,
-                   GL_ALPHA,
+                   GL_RED,
                    GL_UNSIGNED_BYTE,
                    pixels);
     
@@ -428,8 +402,9 @@ unload_all_assets(OpenGLFunctions *gl)
             default:
             {
                 fprintf(stderr,
-                        "skipping unloading asset '%s'...\n",
-                        loaded_asset->path);
+                        "skipping unloading asset '%.*s'...\n",
+                        (I32)loaded_asset->path.len,
+                        loaded_asset->path.buffer);
                 break;
             }
         }
