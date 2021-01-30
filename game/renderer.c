@@ -49,7 +49,7 @@ struct RenderMessage
 {
     RenderMessage *next;
     I32 kind;
-    U32 sort;
+    U8 sort;
     Rect rectangle;
     F32 *projection_matrix;
     
@@ -537,7 +537,7 @@ dequeue_render_message(RenderQueue *queue,
     return true;
 }
 
-#define UI_SORT_DEPTH    1080
+#define UI_SORT_DEPTH    128
 #define WORLD_SORT_DEPTH 0
 
 #define ui_draw_sub_texture(_rectangle, _colour, _texture, _sub_texture) draw_sub_texture((_rectangle), (_colour), (_texture), (_sub_texture), UI_SORT_DEPTH, global_ui_projection_matrix)
@@ -942,61 +942,50 @@ generate_rotated_quad(Rect rectangle,
     return result;
 }
 
-internal RenderMessage *
-_sort_render_queue(RenderMessage *head,
-                   RenderMessage *lists,
-                   RenderMessage **tails,
-                   U32 shift)
-{
-    while (head)
-    {
-        U32 bucket = (head->sort >> shift) & 0xff;
-        
-        tails[bucket]->next = head;
-        tails[bucket] = head;
-        head = head->next
-    }
-    
-    RenderMessage list;
-    RenderMessage *prev = &list;
-    for (U32 n = 0;
-         n < 256;
-         ++n)
-    {
-        if (lists[n].next)
-        {
-            prev->next = NULL;
-            prev = tails[n];
-            lists[n].next = NULL;
-            tails[n] = &lists[n];
-        }
-    }
-    prev->next = NULL;
-    return list.next;
-}
-
 internal void
 sort_render_queue(RenderQueue *queue)
 {
-    RenderMessage lists[256];
-    RenderMessage *tails[256];
+    RenderMessage *heads[256] = {0};
+    RenderMessage *tails[256] = {0};
     
-    for (U32 n = 0;
-         n < 256;
-         ++n)
+    RenderMessage *next = NULL;
+    
+    for (RenderMessage *node = queue->start;
+         node;
+         node = next)
     {
-        lists[n].next = NULL;
-        tails[n] = &lists[n];
+        if (tails[node->sort])
+        {
+            tails[node->sort]->next = node;
+        }
+        else
+        {
+            heads[node->sort] = node;
+        }
+        tails[node->sort] = node;
+        next = node->next;
+        node->next = NULL;
     }
     
-    queue->head = _sort_render_queue(queue->head, lists, tails, 0);
-    queue->head = _sort_render_queue(queue->head, lists, tails, 8);
-    queue->head = _sort_render_queue(queue->head, lists, tails, 16);
-    queue->head = _sort_render_queue(queue->head, lists, tails, 24);
-    
-    // NOTE(tbt): does not update the end pointer of the queue
-    // NOTE(tbt): fine for now because only sorted at the end of every frame
+    queue->start = NULL;
     queue->end = NULL;
+    
+    for (I32 i = 0;
+         i < 256;
+         ++i)
+    {
+        if (!heads[i]) { continue; }
+        
+        if (queue->end)
+        {
+            queue->end->next = heads[i];
+        }
+        else
+        {
+            queue->start = heads[i];
+        }
+        queue->end = tails[i];
+    }
 }
 
 internal void

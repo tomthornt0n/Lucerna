@@ -368,6 +368,7 @@ do_bit_toggle_button(PlatformState *input,
             global_active_widget == node)
         {
             node->toggled = !node->toggled;
+            play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
             if (mask != NULL)
             {
                 if (node->toggled)
@@ -433,6 +434,7 @@ do_button(PlatformState *input,
             global_active_widget == node)
         {
             node->toggled = true;
+            play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
         }
         else
         {
@@ -485,6 +487,7 @@ begin_dropdown(PlatformState *input,
             global_active_widget == node)
         {
             node->toggled = !node->toggled;
+            play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
         }
         
         if (point_is_in_region(input->mouse_x,
@@ -548,7 +551,11 @@ do_slider_l(PlatformState *input,
             input->is_mouse_button_pressed[MOUSE_BUTTON_left])
         {
             global_active_widget = node;
-            node->dragging = true;
+            if (!node->dragging)
+            {
+                node->dragging = true;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+            }
         }
         
         if (node->dragging)
@@ -572,6 +579,7 @@ do_slider_l(PlatformState *input,
             if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
             {
                 node->dragging = false;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
             }
         }
         
@@ -616,8 +624,13 @@ do_slider_i(PlatformState *input,
         if (global_hot_widget == node &&
             input->is_mouse_button_pressed[MOUSE_BUTTON_left])
         {
+            
             global_active_widget = node;
-            node->dragging = true;
+            if (!node->dragging)
+            {
+                node->dragging = true;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+            }
         }
         
         if (node->dragging)
@@ -641,6 +654,7 @@ do_slider_i(PlatformState *input,
             if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
             {
                 node->dragging = false;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
             }
         }
         
@@ -686,7 +700,11 @@ do_slider_lf(PlatformState *input,
             input->is_mouse_button_pressed[MOUSE_BUTTON_left])
         {
             global_active_widget = node;
-            node->dragging = true;
+            if (!node->dragging)
+            {
+                node->dragging = true;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+            }
         }
         
         if (node->dragging)
@@ -710,6 +728,7 @@ do_slider_lf(PlatformState *input,
             if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
             {
                 node->dragging = false;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
             }
         }
         
@@ -755,7 +774,11 @@ do_slider_f(PlatformState *input,
             input->is_mouse_button_pressed[MOUSE_BUTTON_left])
         {
             global_active_widget = node;
-            node->dragging = true;
+            if (!node->dragging)
+            {
+                node->dragging = true;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+            }
         }
         
         if (node->dragging)
@@ -779,6 +802,7 @@ do_slider_f(PlatformState *input,
             if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
             {
                 node->dragging = false;
+                play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
             }
         }
         

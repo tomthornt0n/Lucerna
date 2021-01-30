@@ -531,7 +531,7 @@ windows_audio_thread_main(LPVOID arg)
     
     U32 output_byte_index = 0;
     
-    U32 latencey_bytes = 22050 << 2;
+    U32 latency_bytes = 22050;
     
     platform_release_audio_lock();
     
@@ -551,7 +551,7 @@ windows_audio_thread_main(LPVOID arg)
             
             byte_to_lock = output_byte_index % secondary_buffer_size;
             
-            target_cursor = (play_cursor + latencey_bytes) % secondary_buffer_size;
+            target_cursor = (play_cursor + latency_bytes) % secondary_buffer_size;
             
             if (byte_to_lock > target_cursor)
             {

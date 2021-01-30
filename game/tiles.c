@@ -130,8 +130,6 @@ _auto_tile_grass(TileMap *tile_map,
 {
     if (index > tile_map->width * tile_map->height) { return; }
     
-    srand(index);
-    
     Tile *tile = &global_autotiler.grass_tiles[max_i(0, rand() % 6 - 3)];
     U32 tile_index = tile - global_autotiler.tiles;
     tile_map->tiles[index] = tile_index;
@@ -225,6 +223,8 @@ _auto_tile_trees(TileMap *tile_map,
 internal void
 _refresh_auto_tiling(TileMap *tile_map)
 {
+    srand(0);
+    
     for (I64 i = 0;
          i < tile_map->width * tile_map->height;
          ++i)

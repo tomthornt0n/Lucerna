@@ -16,3 +16,6 @@ REM todo: entire folder
 CD ..
 
 cl /nologo /Iinclude /DLUCERNA_DEBUG /Zi game\main.c /link /nologo bin\platform_windows.lib /dll /EXPORT:game_init /EXPORT:game_update_and_render /EXPORT:game_audio_callback /EXPORT:game_cleanup /out:bin\lucerna.dll
+
+del *.obj
+del *.pdb
