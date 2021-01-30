@@ -943,72 +943,57 @@ generate_rotated_quad(Rect rectangle,
 }
 
 internal RenderMessage *
-render_queue_sorted_merge(RenderMessage *a, RenderMessage *b)
+_sort_render_queue(RenderMessage *head,
+                   RenderMessage *lists,
+                   RenderMessage **tails,
+                   U32 shift)
 {
-    RenderMessage *result;
-    
-    if (!a) { return b; }
-    if (!b) { return a; }
-    
-    if (a->sort <= b->sort)
+    while (head)
     {
-        result = a;
-        result->next = render_queue_sorted_merge(a->next, b);
-    }
-    else
-    {
-        result = b;
-        result->next = render_queue_sorted_merge(a, b->next);
+        U32 bucket = (head->sort >> shift) & 0xff;
+        
+        tails[bucket]->next = head;
+        tails[bucket] = head;
+        head = head->next
     }
     
-    return result;
-}
-
-internal void
-render_queue_split(RenderMessage *source,
-                   RenderMessage **a,
-                   RenderMessage **b)
-{
-    RenderMessage *fast, *slow;
-    
-    slow = source;
-    fast = source->next;
-    
-    while (fast)
+    RenderMessage list;
+    RenderMessage *prev = &list;
+    for (U32 n = 0;
+         n < 256;
+         ++n)
     {
-        fast = fast->next;
-        if (fast)
+        if (lists[n].next)
         {
-            slow = slow->next;
-            fast = fast->next;
+            prev->next = NULL;
+            prev = tails[n];
+            lists[n].next = NULL;
+            tails[n] = &lists[n];
         }
     }
-    
-    *a = source;
-    *b = slow->next;
-    slow->next = NULL;
-}
-
-internal void
-render_queue_merge_sort(RenderMessage **head_reference)
-{
-    RenderMessage *head = *head_reference;
-    RenderMessage *a, *b;
-    
-    if (!head || !(head->next)) { return; }
-    
-    render_queue_split(head, &a, &b);
-    
-    render_queue_merge_sort(&a);
-    render_queue_merge_sort(&b);
-    
-    *head_reference = render_queue_sorted_merge(a, b);
+    prev->next = NULL;
+    return list.next;
 }
 
 internal void
 sort_render_queue(RenderQueue *queue)
 {
-    render_queue_merge_sort(&(queue->start));
+    RenderMessage lists[256];
+    RenderMessage *tails[256];
+    
+    for (U32 n = 0;
+         n < 256;
+         ++n)
+    {
+        lists[n].next = NULL;
+        tails[n] = &lists[n];
+    }
+    
+    queue->head = _sort_render_queue(queue->head, lists, tails, 0);
+    queue->head = _sort_render_queue(queue->head, lists, tails, 8);
+    queue->head = _sort_render_queue(queue->head, lists, tails, 16);
+    queue->head = _sort_render_queue(queue->head, lists, tails, 24);
+    
     // NOTE(tbt): does not update the end pointer of the queue
     // NOTE(tbt): fine for now because only sorted at the end of every frame
     queue->end = NULL;
