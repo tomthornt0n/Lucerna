@@ -1,0 +1,24 @@
+version(1);
+
+project_name = "Lucerna";
+
+patterns = {
+	"*.c",
+	"*.lcd",
+	"*.h",
+	"*.bat",
+	"*.sh",
+	"*.4coder",
+	"*.frag",
+	"*.vert",
+};
+
+blacklist_patterns = {
+	".*",
+};
+
+load_paths = {
+	{
+		{ {"."}, .recursive = true, .relative = true }, .os = "win"
+	},
+};

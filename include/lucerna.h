@@ -2,7 +2,7 @@
 #define LUCENRA_H
 
 #include "glcorearb.h"
-#include "khrplatform.h"
+#include "KHR/khrplatform.h"
 #include "stdint.h"
 
 #define true  1
@@ -31,75 +31,75 @@ internal inline F64
 min_f(F64 a,
       F64 b)
 {
-    return a < b ? a : b;
+ return a < b ? a : b;
 }
 
 internal inline F64
 max_f(F64 a,
       F64 b)
 {
-    return a > b ? a : b;
+ return a > b ? a : b;
 }
 
 internal inline F64
 clamp_f(F64 n,
         F64 min, F64 max)
 {
-    return max_f(min, min_f(n, max));
+ return max_f(min, min_f(n, max));
 }
 
 internal F32
 reciprocal_sqrt_f(F32 n)
 {
-    union FloatAsInt { F32 f; I32 i; } i;
-    
-    i.f = n;
-    i.i = 0x5f375a86 - (i.i >> 1);
-    i.f *= 1.5f - (i.f * 0.5f * i.f * i.f);
-    
-    return i.f;
+ union FloatAsInt { F32 f; I32 i; } i;
+ 
+ i.f = n;
+ i.i = 0x5f375a86 - (i.i >> 1);
+ i.f *= 1.5f - (i.f * 0.5f * i.f * i.f);
+ 
+ return i.f;
 }
 
 internal inline I64
 min_i(I64 a,
       I64 b)
 {
-    return a < b ? a : b;
+ return a < b ? a : b;
 }
 
 internal inline I64
 max_i(I64 a,
       I64 b)
 {
-    return a > b ? a : b;
+ return a > b ? a : b;
 }
 
 internal inline I64
 clamp_i(I64 n,
         I64 min, I64 max)
 {
-    return max_f(min, min_f(n, max));
+ return max_f(min, min_f(n, max));
 }
 
 internal inline U64
 min_u(U64 a,
       U64 b)
 {
-    return a < b ? a : b;
+ return a < b ? a : b;
 }
 
 internal inline U64
 max_u(U64 a,
       U64 b)
 {
-    return a > b ? a : b;
+ return a > b ? a : b;
 }
 
 internal inline U64
 clamp_u(U64 n,
         U64 min, U64 max)
 {
-    return max_f(min, min_f(n, max));
+ return max_f(min, min_f(n, max));
 }
 
 #define bit(_n) (1 << (_n))
@@ -107,20 +107,30 @@ clamp_u(U64 n,
 #define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
-    F32 x, y;
-    F32 w, h;
+ F32 x, y;
+ F32 w, h;
 } Rect;
+
+internal inline Rect
+offset_rectangle(Rect rectangle,
+                 F32 offset_x, F32 offset_y)
+{
+ return rectangle_literal(rectangle.x + offset_x,
+                          rectangle.y + offset_y,
+                          rectangle.w,
+                          rectangle.h);
+}
 
 #define colour_literal(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
 typedef struct
 {
-    F32 r, g, b, a;
+ F32 r, g, b, a;
 } Colour;
 
 #define gradient_literal(_tl, _tr, _bl, _br) ((Gradient){ (_tl), (_tr), (_bl), (_br) })
 typedef struct
 {
-    Colour tl, tr, bl, br;
+ Colour tl, tr, bl, br;
 } Gradient;
 
 
@@ -128,23 +138,23 @@ internal B32
 rectangles_are_intersecting(Rect a,
                             Rect b)
 {
-    if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
-    if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
-    return true;
+ if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
+ if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
+ return true;
 }
 
 internal B32
 point_is_in_region(F32 x, F32 y,
                    Rect region)
 {
-    if (x < region.x              ||
-        y < region.y              ||
-        x > (region.x + region.w) ||
-        y > (region.y + region.h))
-    {
-        return false;
-    }
-    return true;
+ if (x < region.x              ||
+     y < region.y              ||
+     x > (region.x + region.w) ||
+     y > (region.y + region.h))
+ {
+  return false;
+ }
+ return true;
 }
 
 #define KEY_none                0
@@ -288,84 +298,87 @@ point_is_in_region(F32 x, F32 y,
 typedef struct KeyTyped KeyTyped;
 struct KeyTyped
 {
-    KeyTyped *next;
-    I8 key;
+ KeyTyped *next;
+ I8 key;
 };
 
 // NOTE(tbt): input recorded by the platform layer in the main event processing loop
 typedef struct
 {
-    B32 is_key_pressed[256];
-    KeyTyped *keys_typed;
-    B32 is_mouse_button_pressed[8];
-    I16 mouse_x, mouse_y;
-    I32 mouse_scroll;
-    U32 window_width, window_height;
+ B32 is_key_pressed[256];
+ KeyTyped *keys_typed;
+ B32 is_mouse_button_pressed[8];
+ I16 mouse_x, mouse_y;
+ I32 mouse_scroll;
+ U32 window_width, window_height;
 } PlatformState;
 
 internal B32
 is_key_typed(PlatformState *input,
              U8 key)
 {
-    for (KeyTyped *key_typed = input->keys_typed;
-         NULL != key_typed;
-         key_typed = key_typed->next)
-    {
-        if (key_typed->key == key)
-        {
-            return true;
-        }
-    }
-    return false;
+ for (KeyTyped *key_typed = input->keys_typed;
+      NULL != key_typed;
+      key_typed = key_typed->next)
+ {
+  if (key_typed->key == key)
+  {
+   return true;
+  }
+ }
+ return false;
 }
 
 // NOTE(tbt): functions loaded by the platform layer before the game begins
 typedef struct
 {
-    PFNGLATTACHSHADERPROC            AttachShader;
-    PFNGLBINDBUFFERPROC              BindBuffer;
-    PFNGLBINDFRAMEBUFFERPROC         BindFramebuffer;
-    PFNGLBINDTEXTUREPROC             BindTexture;
-    PFNGLBINDVERTEXARRAYPROC         BindVertexArray;
-    PFNGLBLENDFUNCPROC               BlendFunc;
-    PFNGLBLITFRAMEBUFFERPROC         BlitFramebuffer;
-    PFNGLBUFFERDATAPROC              BufferData;
-    PFNGLBUFFERSUBDATAPROC           BufferSubData;
-    PFNGLCLEARPROC                   Clear;
-    PFNGLCLEARCOLORPROC              ClearColor;
-    PFNGLCOMPILESHADERPROC           CompileShader;
-    PFNGLCREATEPROGRAMPROC           CreateProgram;
-    PFNGLCREATESHADERPROC            CreateShader;
-    PFNGLDELETEBUFFERSPROC           DeleteBuffers;
-    PFNGLDELETEPROGRAMPROC           DeleteProgram;
-    PFNGLDELETESHADERPROC            DeleteShader;
-    PFNGLDELETETEXTURESPROC          DeleteTextures;
-    PFNGLDELETEVERTEXARRAYSPROC      DeleteVertexArrays;
-    PFNGLDETACHSHADERPROC            DetachShader;
-    PFNGLDISABLEPROC                 Disable;
-    PFNGLDRAWELEMENTSPROC            DrawElements;
-    PFNGLENABLEPROC                  Enable;
-    PFNGLENABLEVERTEXATTRIBARRAYPROC EnableVertexAttribArray;
-    PFNGLFRAMEBUFFERTEXTURE2DPROC    FramebufferTexture2D;
-    PFNGLGENBUFFERSPROC              GenBuffers;
-    PFNGLGENFRAMEBUFFERSPROC         GenFramebuffers;
-    PFNGLGENTEXTURESPROC             GenTextures;
-    PFNGLGENVERTEXARRAYSPROC         GenVertexArrays;
-    PFNGLGETERRORPROC                GetError;
-    PFNGLGETPROGRAMIVPROC            GetProgramiv;
-    PFNGLGETUNIFORMLOCATIONPROC      GetUniformLocation;
-    PFNGLGETSHADERINFOLOGPROC        GetShaderInfoLog;
-    PFNGLGETSHADERIVPROC             GetShaderiv;
-    PFNGLLINKPROGRAMPROC             LinkProgram;
-    PFNGLSCISSORPROC                 Scissor;
-    PFNGLSHADERSOURCEPROC            ShaderSource;
-    PFNGLTEXIMAGE2DPROC              TexImage2D;
-    PFNGLTEXPARAMETERIPROC           TexParameteri;
-    PFNGLUNIFORMMATRIX4FVPROC        UniformMatrix4fv;
-    PFNGLUNIFORM2FPROC               Uniform2f;
-    PFNGLUSEPROGRAMPROC              UseProgram;
-    PFNGLVERTEXATTRIBPOINTERPROC     VertexAttribPointer;
-    PFNGLVIEWPORTPROC                Viewport;
+ PFNGLACTIVETEXTUREPROC           ActiveTexture;
+ PFNGLATTACHSHADERPROC            AttachShader;
+ PFNGLBINDBUFFERPROC              BindBuffer;
+ PFNGLBINDFRAMEBUFFERPROC         BindFramebuffer;
+ PFNGLBINDTEXTUREPROC             BindTexture;
+ PFNGLBINDVERTEXARRAYPROC         BindVertexArray;
+ PFNGLBLENDFUNCPROC               BlendFunc;
+ PFNGLBLITFRAMEBUFFERPROC         BlitFramebuffer;
+ PFNGLBUFFERDATAPROC              BufferData;
+ PFNGLBUFFERSUBDATAPROC           BufferSubData;
+ PFNGLCLEARPROC                   Clear;
+ PFNGLCLEARCOLORPROC              ClearColor;
+ PFNGLCOMPILESHADERPROC           CompileShader;
+ PFNGLCREATEPROGRAMPROC           CreateProgram;
+ PFNGLCREATESHADERPROC            CreateShader;
+ PFNGLDELETEBUFFERSPROC           DeleteBuffers;
+ PFNGLDELETEPROGRAMPROC           DeleteProgram;
+ PFNGLDELETESHADERPROC            DeleteShader;
+ PFNGLDELETETEXTURESPROC          DeleteTextures;
+ PFNGLDELETEVERTEXARRAYSPROC      DeleteVertexArrays;
+ PFNGLDETACHSHADERPROC            DetachShader;
+ PFNGLDISABLEPROC                 Disable;
+ PFNGLDRAWELEMENTSPROC            DrawElements;
+ PFNGLDRAWARRAYSPROC              DrawArrays;
+ PFNGLENABLEPROC                  Enable;
+ PFNGLENABLEVERTEXATTRIBARRAYPROC EnableVertexAttribArray;
+ PFNGLFRAMEBUFFERTEXTURE2DPROC    FramebufferTexture2D;
+ PFNGLGENBUFFERSPROC              GenBuffers;
+ PFNGLGENFRAMEBUFFERSPROC         GenFramebuffers;
+ PFNGLGENTEXTURESPROC             GenTextures;
+ PFNGLGENVERTEXARRAYSPROC         GenVertexArrays;
+ PFNGLGETERRORPROC                GetError;
+ PFNGLGETPROGRAMIVPROC            GetProgramiv;
+ PFNGLGETUNIFORMLOCATIONPROC      GetUniformLocation;
+ PFNGLGETSHADERINFOLOGPROC        GetShaderInfoLog;
+ PFNGLGETSHADERIVPROC             GetShaderiv;
+ PFNGLLINKPROGRAMPROC             LinkProgram;
+ PFNGLSCISSORPROC                 Scissor;
+ PFNGLSHADERSOURCEPROC            ShaderSource;
+ PFNGLTEXIMAGE2DPROC              TexImage2D;
+ PFNGLTEXPARAMETERIPROC           TexParameteri;
+ PFNGLUNIFORMMATRIX4FVPROC        UniformMatrix4fv;
+ PFNGLUNIFORM1IPROC               Uniform1i;
+ PFNGLUNIFORM2FPROC               Uniform2f;
+ PFNGLUSEPROGRAMPROC              UseProgram;
+ PFNGLVERTEXATTRIBPOINTERPROC     VertexAttribPointer;
+ PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
 
 #include "../game/arena.c"

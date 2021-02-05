@@ -560,6 +560,8 @@ do_slider_l(PlatformState *input,
         
         if (node->dragging)
         {
+            global_is_mouse_over_ui = true;
+            
             F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
                                   0.0f, width - SLIDER_THUMB_SIZE);
             
@@ -635,16 +637,26 @@ do_slider_i(PlatformState *input,
         
         if (node->dragging)
         {
+            global_is_mouse_over_ui = true;
+            
             F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
                                   0.0f, width - SLIDER_THUMB_SIZE);
             
-            *value = thumb_x / (width - SLIDER_THUMB_SIZE) *
-                (node->max - node->min) + node->min;
+            I32 tmp;
+            
+            tmp = thumb_x / (width - SLIDER_THUMB_SIZE) * (node->max - node->min) + node->min;
             
             if (snap > 0.0f)
             {
-                *value = floor(*value / snap) * snap;
+                tmp = (tmp / snap) * snap;
+                if (tmp != *value)
+                {
+                    play_audio_source(asset_from_path(s8_literal("../assets/audio/click_subtle.wav")));
+                    fprintf(stderr, "click\n");
+                }
             }
+            
+            *value = tmp;
             
             if (!global_hot_widget)
             {
@@ -709,6 +721,8 @@ do_slider_lf(PlatformState *input,
         
         if (node->dragging)
         {
+            global_is_mouse_over_ui = true;
+            
             F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
                                   0.0f, width - SLIDER_THUMB_SIZE);
             
@@ -783,6 +797,8 @@ do_slider_f(PlatformState *input,
         
         if (node->dragging)
         {
+            global_is_mouse_over_ui = true;
+            
             F32 thumb_x = clamp_f(input->mouse_x - node->bounds.x,
                                   0.0f, width - SLIDER_THUMB_SIZE);
             
