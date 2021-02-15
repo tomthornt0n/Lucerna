@@ -1,47 +1,31 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Lucerna
-
-  Author  : Tom Thornton
-  Updated : 04 Jan 2021
-  License : N/A
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-#include <immintrin.h>
 #include <ctype.h>
 
-#define LC_GAME
+#include <immintrin.h>
+
 #include "lucerna.h"
 
-internal void
-print_opengl_errors(OpenGLFunctions *gl)
-{
-#ifdef LUCERNA_DEBUG
- GLenum error;
- while ((error = gl->GetError()) != GL_NO_ERROR)
- {
-  fprintf(stderr,
-          "OpenGL error: %s\n",
-          error == GL_INVALID_ENUM ? "GL_INVALID_ENUM" :
-          error == GL_INVALID_VALUE ? "GL_INVALID_VALUE":
-          error == GL_INVALID_OPERATION ? "GL_INVALID_OPERATION":
-          error == GL_INVALID_FRAMEBUFFER_OPERATION ? "GL_INVALID_FRAMEBUFFER_OPERATION":
-          error == GL_OUT_OF_MEMORY ? "GL_OUT_OF_MEMORY":
-          error == GL_STACK_UNDERFLOW ? "GL_STACK_UNDERFLOW":
-          error == GL_STACK_OVERFLOW ? "GL_STACK_OVERFLOW":
-          NULL);
- }
-#endif
-}
+/*
+TODO list:
+- audio streaming? (if there is some long music and it becomes an issue)
+- multithreaded asset loading?
+- gameplay!!!!!!!
+*/
+
+internal F64 global_time = 0.0;
+
+#define DEFAULT_EXPOSURE 0.7f
+internal F32 global_exposure = DEFAULT_EXPOSURE;
 
 internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
+#include "util.c"
 #include "asset_manager.c"
 #include "audio.c"
 
@@ -49,67 +33,66 @@ internal Font *global_ui_font;
 
 #include "renderer.c"
 #include "dev_ui.c"
-#include "tiles.c"
-#include "tile_map_editor.c"
+#include "player.c"
+#include "types.gen.h"
+#include "funcs.gen.h"
 #include "entities.c"
-#include "serialisation.c"
-#include "maps.c"
-
-internal TileMap global_tile_map;
+#include "levels.c"
+#include "editor.c"
 
 void
 game_init(OpenGLFunctions *gl)
 {
- initialise_arena_with_new_memory(&global_static_memory, ONE_GB);
+ initialise_arena_with_new_memory(&global_static_memory, 1 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
- initialise_arena_with_new_memory(&global_level_memory, 2 * ONE_MB);
+ initialise_arena_with_new_memory(&global_level_memory, 27 * ONE_MB);
  
  global_ui_font = load_font(gl, s8_literal("../assets/fonts/mononoki.ttf"), 19);
  
- initialise_auto_tiler(gl);
- if (!deserialise_tile_map(&global_static_memory, &global_tile_map, s8_literal("test.tile_map")))
- {
-  initialise_tile_map(&global_static_memory, &global_tile_map, 100, 100);
- }
- 
  initialise_renderer(gl);
  
- push_player(&global_static_memory, 128.0f, 128.0f);
+ load_player_art(gl);
+ 
+ set_current_level(gl, s8_literal("../assets/levels/office_1.level"));
 }
-
 
 void
 game_update_and_render(OpenGLFunctions *gl,
                        PlatformState *input,
                        F64 frametime_in_s)
 {
- set_renderer_window_size(gl, input->window_width,
-                          input->window_height);
+ enum
+ {
+  GAME_STATE_playing,
+  GAME_STATE_editor,
+ };
+ 
+ static I32 game_state = GAME_STATE_playing;
+ 
+ set_renderer_window_size(gl,
+                          input->window_w,
+                          input->window_h);
  
  prepare_ui();
  
- static B32 editor_mode = false;
- 
- if (is_key_typed(input, ctrl('e')))
+ if (game_state == GAME_STATE_playing)
  {
-  editor_mode = !editor_mode;
+  do_current_level(gl, input, frametime_in_s);
+  do_post_processing(global_exposure, UI_SORT_DEPTH - 1);
+ }
+ else if (game_state == GAME_STATE_editor)
+ {
+  do_level_editor(input, frametime_in_s);
  }
  
- if (editor_mode)
- {
-  edit_tile_map(input, frametime_in_s, &global_tile_map);
- }
- else
- {
-  world_draw_sub_texture(rectangle_literal(0.0f, 0.0f, global_renderer_window_w, global_renderer_window_h), colour_literal(1.0f, 1.0f, 1.0f, 1.0f), asset_from_path(s8_literal("../assets/textures/office_1/background.png")), ENTIRE_TEXTURE);
-  process_entities(gl, input, frametime_in_s);
-  world_draw_sub_texture(rectangle_literal(0.0f, 0.0f, global_renderer_window_w, global_renderer_window_h), colour_literal(1.0f, 1.0f, 1.0f, 1.0f), asset_from_path(s8_literal("../assets/textures/office_1/foreground.png")), ENTIRE_TEXTURE);
-  do_bloom(UI_SORT_DEPTH - 1);
- }
  
  I8 fps_str[128];
  snprintf(fps_str, 128, "%f ms (%f fps)", frametime_in_s * 1000.0, 1.0 / frametime_in_s);
- ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, colour_literal(0.0f, 0.0f, 0.0f, 1.0f), s8_from_cstring(&global_frame_memory, fps_str));
+ ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(fps_str));
+ 
+ I8 pos_str[128];
+ snprintf(pos_str, 128, "%f %f", global_current_level->level.player.x, global_current_level->level.player.y);
+ ui_draw_text(global_ui_font, 16.0f, 64.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(pos_str));
  
  if (is_key_typed(input, ctrl('v')))
  {
@@ -123,15 +106,24 @@ game_update_and_render(OpenGLFunctions *gl,
  {
   platform_toggle_fullscreen();
  }
+ else if (is_key_typed(input, ctrl('e')))
+ {
+  game_state = !game_state; // NOTE(tbt): just because the only two states are 0 and 1
+  
+  // NOTE(tbt): reset camera position
+  set_camera_position(global_current_level->level.bg->texture.width >> 1,
+                      global_current_level->level.bg->texture.height >> 1);
+ }
  
  finish_ui(input);
  
  process_render_queue(gl);
+ 
+ global_time += frametime_in_s;
 }
 
 void
 game_cleanup(OpenGLFunctions *gl)
 {
- serialise_tile_map(&global_tile_map, s8_literal("test.tile_map"));
 }
 

@@ -1,11 +1,3 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Lucerna
-
-  Author  : Tom Thornton
-  Updated : 04 Jan 2021
-  License : N/A
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 #define BATCH_SIZE 1024
 
 typedef U32 ShaderID;
@@ -43,7 +35,7 @@ typedef enum
  RENDER_MESSAGE_mask_rectangle_begin,
  RENDER_MESSAGE_mask_rectangle_end,
  RENDER_MESSAGE_draw_gradient,
- RENDER_MESSAGE_do_bloom,
+ RENDER_MESSAGE_do_post_processing,
 } RenderMessageKind;
 
 typedef struct RenderMessage RenderMessage;
@@ -53,30 +45,40 @@ struct RenderMessage
  RenderMessageKind kind;
  U8 sort;
  Rect rectangle;
- F32 *projection_matrix;
  
  union
  {
   struct
   {
-   Font *font;
-   S8 string;
+   F32 *projection_matrix;
+   union
+   {
+    struct
+    {
+     Font *font;
+     S8 string;
+    };
+    
+    struct
+    {
+     Asset *texture;
+     SubTexture sub_texture;
+     F32 angle;
+     F32 stroke_width;
+    };
+    
+   };
+   
+   union
+   {
+    Colour colour;
+    Gradient gradient;
+   };
   };
   
-  struct
-  {
-   Asset *texture;
-   SubTexture sub_texture;
-   F32 angle;
-   F32 stroke_width;
-  };
+  U32 strength;
   
- };
- 
- union
- {
-  Colour colour;
-  Gradient gradient;
+  F32 exposure;
  };
 };
 
@@ -97,7 +99,7 @@ internal U32 global_vertex_buffer_id;
 internal ShaderID global_default_shader;
 internal ShaderID global_text_shader;
 internal ShaderID global_blur_shader;
-internal ShaderID global_bloom_mix_shader;
+internal ShaderID global_post_processing_shader;
 
 internal ShaderID global_currently_bound_shader = 0;
 
@@ -105,6 +107,10 @@ internal ShaderID global_currently_bound_shader = 0;
 internal I32 global_default_shader_proj_matrix_location;
 internal I32 global_text_shader_proj_matrix_location;
 internal I32 global_blur_shader_direction_location;
+internal I32 global_post_processing_shader_time_location;
+internal I32 global_post_processing_shader_exposure_location;
+internal I32 global_post_processing_shader_screen_texture_location;
+internal I32 global_post_processing_shader_blur_texture_location;
 
 internal Texture global_flat_colour_texture;
 
@@ -115,14 +121,14 @@ internal F32 global_camera_x = 0.0f, global_camera_y = 0.0f;
 internal F32 global_projection_matrix[16];
 internal F32 global_ui_projection_matrix[16];
 
-#define BLUR_TEXTURE_SCALE 4 // NOTE(tbt): bitshift window dimensions right by this much to get size of blur texture
+#define BLUR_TEXTURE_SCALE 1 // NOTE(tbt): bitshift window dimensions right by this much to get size of blur texture
 internal U32 global_blur_target_a;
 internal U32 global_blur_target_b;
 internal TextureID global_blur_texture_a;
 internal TextureID global_blur_texture_b;
 
-internal U32 global_bloom_mix_target;
-internal TextureID global_bloom_mix_texture;
+internal U32 global_post_processing_target;
+internal TextureID global_post_processing_texture;
 
 internal void
 generate_orthographic_projection_matrix(F32 *matrix,
@@ -149,9 +155,10 @@ initialise_renderer(OpenGLFunctions *gl)
  I32 indices[BATCH_SIZE * 6];
  void *render_queue_backing_memory;
  
- U32 flat_colour_texture_data = 0xffffffff;
+ //
+ // NOTE(tbt): general OpenGL setup
+ //
  
- // NOTE(tbt): setup vao, vbo and ibo
  gl->GenVertexArrays(1, &global_vao_id);
  gl->BindVertexArray(global_vao_id);
  
@@ -208,7 +215,17 @@ initialise_renderer(OpenGLFunctions *gl)
                 NULL,
                 GL_DYNAMIC_DRAW);
  
+ gl->ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+ 
+ gl->Enable(GL_BLEND);
+ gl->BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+ 
+ //
  // NOTE(tbt): setup 1x1 white texture for rendering flat colours
+ //
+ 
+ U32 flat_colour_texture_data = 0xffffffff;
+ 
  global_flat_colour_texture.width = 1;
  global_flat_colour_texture.height = 1;
  
@@ -231,14 +248,14 @@ initialise_renderer(OpenGLFunctions *gl)
                 &flat_colour_texture_data);
  
  //
- // NOTE(tbt): compile shaders
+ // NOTE(tbt): shader compilation
  //
  
  I32 status;
  global_default_shader = gl->CreateProgram();
  global_blur_shader = gl->CreateProgram();
  global_text_shader = gl->CreateProgram();
- global_bloom_mix_shader = gl->CreateProgram();
+ global_post_processing_shader = gl->CreateProgram();
  const GLchar *shader_src;
  ShaderID vertex_shader, fullscreen_vertex_shader;
  ShaderID fragment_shader;
@@ -300,7 +317,7 @@ initialise_renderer(OpenGLFunctions *gl)
  gl->AttachShader(global_default_shader, vertex_shader);
  gl->AttachShader(global_blur_shader, fullscreen_vertex_shader);
  gl->AttachShader(global_text_shader, vertex_shader);
- gl->AttachShader(global_bloom_mix_shader, fullscreen_vertex_shader);
+ gl->AttachShader(global_post_processing_shader, fullscreen_vertex_shader);
  
  // NOTE(tbt): compile default fragment shader
  shader_src = cstring_from_s8(&global_static_memory,
@@ -449,10 +466,10 @@ initialise_renderer(OpenGLFunctions *gl)
  gl->DetachShader(global_text_shader, fragment_shader);
  gl->DeleteShader(fragment_shader);
  
- // NOTE(tbt): compile bloom fragment shader
+ // NOTE(tbt): compile post processing fragment shader
  shader_src = cstring_from_s8(&global_static_memory,
                               platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/bloom_mix.frag")));
+                                                        s8_literal("../assets/shaders/post_processing.frag")));
  
  fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
  gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
@@ -469,24 +486,24 @@ initialise_renderer(OpenGLFunctions *gl)
                        msg);
   gl->DeleteShader(fragment_shader);
   
-  fprintf(stderr, "bloom fragment shader compilation failure. '%s'\n", msg);
+  fprintf(stderr, "post processing fragment shader compilation failure. '%s'\n", msg);
   exit(-1);
  }
- gl->AttachShader(global_bloom_mix_shader, fragment_shader);
+ gl->AttachShader(global_post_processing_shader, fragment_shader);
  
- // NOTE(tbt): link bloom shader
- gl->LinkProgram(global_bloom_mix_shader);
+ // NOTE(tbt): link post processing shader
+ gl->LinkProgram(global_post_processing_shader);
  
- gl->GetProgramiv(global_bloom_mix_shader, GL_LINK_STATUS, &status);
+ gl->GetProgramiv(global_post_processing_shader, GL_LINK_STATUS, &status);
  if (status == GL_FALSE)
  {
   I8 msg[SHADER_INFO_LOG_MAX_LEN];
   
-  gl->GetShaderInfoLog(global_bloom_mix_shader,
+  gl->GetShaderInfoLog(global_post_processing_shader,
                        SHADER_INFO_LOG_MAX_LEN,
                        NULL,
                        msg);
-  gl->DeleteProgram(global_bloom_mix_shader);
+  gl->DeleteProgram(global_post_processing_shader);
   gl->DeleteShader(fullscreen_vertex_shader);
   gl->DeleteShader(fragment_shader);
   
@@ -494,8 +511,8 @@ initialise_renderer(OpenGLFunctions *gl)
   exit(-1);
  }
  
- gl->DetachShader(global_bloom_mix_shader, fullscreen_vertex_shader);
- gl->DetachShader(global_bloom_mix_shader, fragment_shader);
+ gl->DetachShader(global_post_processing_shader, fullscreen_vertex_shader);
+ gl->DetachShader(global_post_processing_shader, fragment_shader);
  gl->DeleteShader(fragment_shader);
  
  // NOTE(tbt): cleanup shader stuff
@@ -516,13 +533,25 @@ initialise_renderer(OpenGLFunctions *gl)
   gl->GetUniformLocation(global_blur_shader,
                          "u_direction");
  
- // NOTE(tbt): reset currently bounds shader
+ global_post_processing_shader_time_location =
+  gl->GetUniformLocation(global_post_processing_shader,
+                         "u_time");
+ 
+ global_post_processing_shader_screen_texture_location =
+  gl->GetUniformLocation(global_post_processing_shader,
+                         "u_screen_texture");
+ 
+ global_post_processing_shader_blur_texture_location =
+  gl->GetUniformLocation(global_post_processing_shader,
+                         "u_blur_texture");
+ 
+ global_post_processing_shader_exposure_location =
+  gl->GetUniformLocation(global_post_processing_shader,
+                         "u_exposure");
+ 
+ // NOTE(tbt): reset currently bound shader
  gl->UseProgram(global_currently_bound_shader);
  
- gl->ClearColor(0.92f, 0.88f, 0.9f, 1.0f);
- 
- gl->Enable(GL_BLEND);
- gl->BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
  
  //
  // NOTE(tbt): setup framebuffers
@@ -547,6 +576,8 @@ initialise_renderer(OpenGLFunctions *gl)
  
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
  gl->FramebufferTexture2D(GL_FRAMEBUFFER,
                           GL_COLOR_ATTACHMENT0,
@@ -573,6 +604,8 @@ initialise_renderer(OpenGLFunctions *gl)
  
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
  gl->FramebufferTexture2D(GL_FRAMEBUFFER,
                           GL_COLOR_ATTACHMENT0,
@@ -580,12 +613,12 @@ initialise_renderer(OpenGLFunctions *gl)
                           global_blur_texture_b,
                           0);
  
- // NOTE(tbt): framebuffer for bloom mixing
- gl->GenFramebuffers(1, &global_bloom_mix_target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_bloom_mix_target);
+ // NOTE(tbt): framebuffer for post processing
+ gl->GenFramebuffers(1, &global_post_processing_target);
+ gl->BindFramebuffer(GL_FRAMEBUFFER, global_post_processing_target);
  
- gl->GenTextures(1, &global_bloom_mix_texture);
- gl->BindTexture(GL_TEXTURE_2D, global_bloom_mix_texture);
+ gl->GenTextures(1, &global_post_processing_texture);
+ gl->BindTexture(GL_TEXTURE_2D, global_post_processing_texture);
  
  gl->TexImage2D(GL_TEXTURE_2D,
                 0,
@@ -599,11 +632,13 @@ initialise_renderer(OpenGLFunctions *gl)
  
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
  gl->FramebufferTexture2D(GL_FRAMEBUFFER,
                           GL_COLOR_ATTACHMENT0,
                           GL_TEXTURE_2D,
-                          global_bloom_mix_texture,
+                          global_post_processing_texture,
                           0);
  
  gl->BindTexture(GL_TEXTURE_2D, 0);
@@ -814,25 +849,49 @@ end_rectangle_mask(U8 sort)
 
 internal void
 blur_screen_region(Rect region,
+                   U32 strength,
                    U8 sort)
 {
  RenderMessage message = {0};
  
  message.kind = RENDER_MESSAGE_blur_screen_region;
  message.rectangle = region;
+ message.strength = strength;
  message.sort = sort;
  
  enqueue_render_message(&global_render_queue, message);
 }
 
 internal void
-do_bloom(U8 sort)
+do_post_processing(F32 exposure,
+                   U8 sort)
 {
  RenderMessage message = {0};
  
- message.kind = RENDER_MESSAGE_do_bloom;
+ message.sort = sort;
+ message.kind = RENDER_MESSAGE_do_post_processing;
+ message.exposure = exposure;
  
  enqueue_render_message(&global_render_queue, message);
+}
+
+#define SCREEN_WIDTH_IN_WORLD_UNITS 1920
+
+#define MOUSE_WORLD_X ((((F32)input->mouse_x / (F32)global_renderer_window_w) - 0.5f) * SCREEN_WIDTH_IN_WORLD_UNITS + global_camera_x)
+#define MOUSE_WORLD_Y ((((F32)input->mouse_y / (F32)global_renderer_window_h) - 0.5f) * (SCREEN_WIDTH_IN_WORLD_UNITS * ((F32)global_renderer_window_h / (F32)global_renderer_window_w)) + global_camera_y)
+
+internal void
+_regenerate_world_projection_matrix(void)
+{
+ static F32 half_screen_width_in_world_units = (F32)(SCREEN_WIDTH_IN_WORLD_UNITS >> 1);
+ 
+ F32 aspect = (F32)global_renderer_window_h / (F32)global_renderer_window_w;
+ 
+ generate_orthographic_projection_matrix(global_projection_matrix,
+                                         global_camera_x - half_screen_width_in_world_units,
+                                         global_camera_x + half_screen_width_in_world_units,
+                                         global_camera_y - half_screen_width_in_world_units * aspect,
+                                         global_camera_y + half_screen_width_in_world_units * aspect);
 }
 
 internal void
@@ -843,8 +902,7 @@ set_renderer_window_size(OpenGLFunctions *gl,
  global_renderer_window_w = width;
  global_renderer_window_h = height;
  
- gl->Viewport(0,
-              0,
+ gl->Viewport(0, 0,
               width,
               height);
  
@@ -872,7 +930,7 @@ set_renderer_window_size(OpenGLFunctions *gl,
                 GL_UNSIGNED_BYTE,
                 NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_bloom_mix_texture);
+ gl->BindTexture(GL_TEXTURE_2D, global_post_processing_texture);
  
  gl->TexImage2D(GL_TEXTURE_2D,
                 0,
@@ -886,15 +944,11 @@ set_renderer_window_size(OpenGLFunctions *gl,
  
  gl->BindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
  
- generate_orthographic_projection_matrix(global_projection_matrix,
-                                         global_camera_x,
-                                         global_camera_x + width,
-                                         global_camera_y,
-                                         global_camera_y + height);
- 
  generate_orthographic_projection_matrix(global_ui_projection_matrix,
                                          0, width,
                                          0, height);
+ 
+ _regenerate_world_projection_matrix();
  
  gl->UseProgram(global_currently_bound_shader);
 }
@@ -906,9 +960,7 @@ set_camera_position(F32 x,
  global_camera_x = x;
  global_camera_y = y;
  
- generate_orthographic_projection_matrix(global_projection_matrix,
-                                         x, x + global_renderer_window_w,
-                                         y, y + global_renderer_window_h);
+ _regenerate_world_projection_matrix();
 }
 
 internal void
@@ -1017,22 +1069,15 @@ generate_rotated_quad(Rect rectangle,
 {
  Quad result;
  
- // NOTE(tbt): undecided as to whether it should be converted or not
- /* angle *= 3.1415926535f / 180.0f; // NOTE(tbt): convert degress to radians */
- 
  //
- // NOTE(tbt): we want to rotate about the centre of the quad, not the
- //            coordinates (0, 0) in the world, so first a quad is generated
- //            with it's centre at the origin, a rotation matrix is applied
+ // NOTE(tbt): we want to rotate about the quad's origin, not world's, so
+ //            first a quad is generated at (0, 0), a rotation matrix is applied
  //            and it is then translated to be at the intended position.
  //
  
- F32 x = -(rectangle.w * 0.5f), y = -(rectangle.h * 0.5f);
- F32 x_offset = rectangle.x - x, y_offset = rectangle.y - y;
+ Rect at_origin = rectangle_literal(0.0f, 0.0f, rectangle.w, rectangle.h);
  
- Rect centre_at_origin = rectangle_literal(x, y, rectangle.w, rectangle.h);
- 
- result = generate_quad(centre_at_origin, colour, sub_texture);
+ result = generate_quad(at_origin, colour, sub_texture);
  
  
  // NOTE(tbt): cast the quad to a vertex pointer, so we can iterate through
@@ -1048,8 +1093,8 @@ generate_rotated_quad(Rect rectangle,
   
   // NOTE(tbt): once a vertex has been rotated it can be translated to the
   //            intended position
-  vertices[i].x += x_offset;
-  vertices[i].y += y_offset;
+  vertices[i].x += rectangle.x;
+  vertices[i].y += rectangle.y;
  }
  
  return result;
@@ -1150,8 +1195,8 @@ process_render_queue(OpenGLFunctions *gl)
     
     batch.in_use = true;
     
-    if (message.angle >  0.01 ||
-        message.angle < -0.01)
+    if (message.angle >  0.001 ||
+        message.angle < -0.001)
     {
      batch.buffer[batch.quad_count++] =
       generate_rotated_quad(message.rectangle,
@@ -1337,19 +1382,24 @@ process_render_queue(OpenGLFunctions *gl)
                         GL_COLOR_BUFFER_BIT,
                         GL_LINEAR);
     
-    // NOTE(tbt): apply first (horizontal) blur pass
-    gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
-    gl->UseProgram(global_blur_shader);
-    gl->Uniform2f(global_blur_shader_direction_location, 1.0f, 0.0f);
-    gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_a);
-    gl->DrawArrays(GL_TRIANGLES, 0, 6);
-    
-    // NOTE(tbt): apply second (vertical) blur pass
-    gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_a);
-    gl->UseProgram(global_blur_shader);
-    gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
-    gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_b);
-    gl->DrawArrays(GL_TRIANGLES, 0, 6);
+    for (I32 i = 0;
+         i < message.strength;
+         ++i)
+    {
+     // NOTE(tbt): apply first (horizontal) blur pass
+     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
+     gl->UseProgram(global_blur_shader);
+     gl->Uniform2f(global_blur_shader_direction_location, 1.0f, 0.0f);
+     gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_a);
+     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     
+     // NOTE(tbt): apply second (vertical) blur pass
+     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_a);
+     gl->UseProgram(global_blur_shader);
+     gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
+     gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_b);
+     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+    }
     
     // NOTE(tbt): blit desired region back to screen
     gl->BindFramebuffer(GL_READ_FRAMEBUFFER, global_blur_target_a);
@@ -1449,15 +1499,14 @@ process_render_queue(OpenGLFunctions *gl)
     
     break;
    }
-   case RENDER_MESSAGE_do_bloom:
+   case RENDER_MESSAGE_do_post_processing:
    {
     flush_batch(gl, &batch);
-    
     
     // NOTE(tbt): blit screen to framebuffers
     gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_bloom_mix_target);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_post_processing_target);
     gl->BlitFramebuffer(0,
                         0,
                         global_renderer_window_w,
@@ -1467,7 +1516,7 @@ process_render_queue(OpenGLFunctions *gl)
                         global_renderer_window_w,
                         global_renderer_window_h,
                         GL_COLOR_BUFFER_BIT,
-                        GL_LINEAR);
+                        GL_NEAREST);
     
     gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_blur_target_a);
     
@@ -1485,35 +1534,41 @@ process_render_queue(OpenGLFunctions *gl)
                         global_renderer_window_w >> BLUR_TEXTURE_SCALE,
                         global_renderer_window_h >> BLUR_TEXTURE_SCALE,
                         GL_COLOR_BUFFER_BIT,
-                        GL_LINEAR);
-    
-    // NOTE(tbt): apply first (horizontal) blur pass
-    gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
-    gl->UseProgram(global_blur_shader);
-    gl->Uniform2f(global_blur_shader_direction_location, 1.0f, 0.0f);
-    gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_a);
-    gl->DrawArrays(GL_TRIANGLES, 0, 6);
-    
-    // NOTE(tbt): apply second (vertical) blur pass
-    gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_a);
-    gl->UseProgram(global_blur_shader);
-    gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
-    gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_b);
-    gl->DrawArrays(GL_TRIANGLES, 0, 6);
+                        GL_NEAREST);
+    const U32 blur_strength = 2;
+    for (I32 i = 0;
+         i < blur_strength;
+         ++i)
+    {
+     // NOTE(tbt): apply first (horizontal) blur pass
+     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_b);
+     gl->UseProgram(global_blur_shader);
+     gl->Uniform2f(global_blur_shader_direction_location, 1.0f, 0.0f);
+     gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_a);
+     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     
+     // NOTE(tbt): apply second (vertical) blur pass
+     gl->BindFramebuffer(GL_FRAMEBUFFER, global_blur_target_a);
+     gl->UseProgram(global_blur_shader);
+     gl->Uniform2f(global_blur_shader_direction_location, 0.0f, 1.0f);
+     gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_b);
+     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+    }
     
     // NOTE(tbt): blend back to screen
     gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    gl->UseProgram(global_bloom_mix_shader);
-    
-    I32 u_blur_texture_loc = gl->GetUniformLocation(global_bloom_mix_shader, "u_blur_texture");
-    I32 u_screen_texture_loc = gl->GetUniformLocation(global_bloom_mix_shader, "u_screen_texture");
+    gl->UseProgram(global_post_processing_shader);
     
     gl->ActiveTexture(GL_TEXTURE0);
     gl->BindTexture(GL_TEXTURE_2D, global_blur_texture_a);
-    gl->Uniform1i(u_blur_texture_loc, 0);
+    gl->Uniform1i(global_post_processing_shader_blur_texture_location, 0);
     gl->ActiveTexture(GL_TEXTURE1);
-    gl->BindTexture(GL_TEXTURE_2D, global_bloom_mix_texture);
-    gl->Uniform1i(u_screen_texture_loc, 1);
+    gl->BindTexture(GL_TEXTURE_2D, global_post_processing_texture);
+    gl->Uniform1i(global_post_processing_shader_screen_texture_location, 1);
+    
+    gl->Uniform1f(global_post_processing_shader_time_location, (F32)fmod(global_time, 1.0));
+    
+    gl->Uniform1f(global_post_processing_shader_exposure_location, message.exposure);
     
     gl->Viewport(0,
                  0,
@@ -1523,7 +1578,8 @@ process_render_queue(OpenGLFunctions *gl)
     gl->DrawArrays(GL_TRIANGLES, 0, 6);
     
     gl->ActiveTexture(GL_TEXTURE0);
-    gl->BindTexture(GL_TEXTURE0, global_currently_bound_shader);
+    gl->BindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
+    gl->UseProgram(global_currently_bound_shader);
     
     break;
    }

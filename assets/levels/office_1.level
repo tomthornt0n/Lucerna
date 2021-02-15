@@ -1,0 +1,5 @@
+fg: ../assets/textures/office_1/foreground.png
+bg: ../assets/textures/office_1/background.png
+music: ../assets/audio/office_1.wav
+player_start: 16, 580
+entities: ../assets/levels/office_1.entities

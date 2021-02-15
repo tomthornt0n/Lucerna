@@ -15,7 +15,7 @@ typedef uint16_t U16;
 typedef uint32_t U32;
 typedef uint64_t U64;
 
-typedef char     I8;
+typedef int8_t   I8;
 typedef int16_t  I16;
 typedef int32_t  I32;
 typedef int64_t  I64;
@@ -26,136 +26,6 @@ typedef double   F64;
 typedef uint32_t B32;
 
 #include "errno.h"
-
-internal inline F64
-min_f(F64 a,
-      F64 b)
-{
- return a < b ? a : b;
-}
-
-internal inline F64
-max_f(F64 a,
-      F64 b)
-{
- return a > b ? a : b;
-}
-
-internal inline F64
-clamp_f(F64 n,
-        F64 min, F64 max)
-{
- return max_f(min, min_f(n, max));
-}
-
-internal F32
-reciprocal_sqrt_f(F32 n)
-{
- union FloatAsInt { F32 f; I32 i; } i;
- 
- i.f = n;
- i.i = 0x5f375a86 - (i.i >> 1);
- i.f *= 1.5f - (i.f * 0.5f * i.f * i.f);
- 
- return i.f;
-}
-
-internal inline I64
-min_i(I64 a,
-      I64 b)
-{
- return a < b ? a : b;
-}
-
-internal inline I64
-max_i(I64 a,
-      I64 b)
-{
- return a > b ? a : b;
-}
-
-internal inline I64
-clamp_i(I64 n,
-        I64 min, I64 max)
-{
- return max_f(min, min_f(n, max));
-}
-
-internal inline U64
-min_u(U64 a,
-      U64 b)
-{
- return a < b ? a : b;
-}
-
-internal inline U64
-max_u(U64 a,
-      U64 b)
-{
- return a > b ? a : b;
-}
-
-internal inline U64
-clamp_u(U64 n,
-        U64 min, U64 max)
-{
- return max_f(min, min_f(n, max));
-}
-
-#define bit(_n) (1 << (_n))
-
-#define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
-typedef struct
-{
- F32 x, y;
- F32 w, h;
-} Rect;
-
-internal inline Rect
-offset_rectangle(Rect rectangle,
-                 F32 offset_x, F32 offset_y)
-{
- return rectangle_literal(rectangle.x + offset_x,
-                          rectangle.y + offset_y,
-                          rectangle.w,
-                          rectangle.h);
-}
-
-#define colour_literal(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
-typedef struct
-{
- F32 r, g, b, a;
-} Colour;
-
-#define gradient_literal(_tl, _tr, _bl, _br) ((Gradient){ (_tl), (_tr), (_bl), (_br) })
-typedef struct
-{
- Colour tl, tr, bl, br;
-} Gradient;
-
-
-internal B32
-rectangles_are_intersecting(Rect a,
-                            Rect b)
-{
- if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
- if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
- return true;
-}
-
-internal B32
-point_is_in_region(F32 x, F32 y,
-                   Rect region)
-{
- if (x < region.x              ||
-     y < region.y              ||
-     x > (region.x + region.w) ||
-     y > (region.y + region.h))
- {
-  return false;
- }
- return true;
-}
 
 #define KEY_none                0
 #define KEY_a                   4
@@ -293,6 +163,12 @@ point_is_in_region(F32 x, F32 y,
 
 #define ctrl(_char) ((_char) - 96)
 
+#define PLATFORM_LAYER_FRAME_MEMORY_SIZE 1 * ONE_MB
+#define PLATFORM_LAYER_STATIC_MEMORY_SIZE 1 * ONE_MB
+#define WINDOW_TITLE "Lucerna"
+#define DEFAULT_WINDOW_WIDTH 1920
+#define DEFAULT_WINDOW_HEIGHT 1040
+
 // NOTE(tbt): the platform layer constructs a linked list of the ASCII values relating
 //            to all of the key presses for a given frame
 typedef struct KeyTyped KeyTyped;
@@ -310,7 +186,7 @@ typedef struct
  B32 is_mouse_button_pressed[8];
  I16 mouse_x, mouse_y;
  I32 mouse_scroll;
- U32 window_width, window_height;
+ U32 window_w, window_h;
 } PlatformState;
 
 internal B32
@@ -375,12 +251,14 @@ typedef struct
  PFNGLTEXPARAMETERIPROC           TexParameteri;
  PFNGLUNIFORMMATRIX4FVPROC        UniformMatrix4fv;
  PFNGLUNIFORM1IPROC               Uniform1i;
+ PFNGLUNIFORM1FPROC               Uniform1f;
  PFNGLUNIFORM2FPROC               Uniform2f;
  PFNGLUSEPROGRAMPROC              UseProgram;
  PFNGLVERTEXATTRIBPOINTERPROC     VertexAttribPointer;
  PFNGLVIEWPORTPROC                Viewport;
 } OpenGLFunctions;
 
+// NOTE(tbt): used by both the game and platform layer
 #include "../game/arena.c"
 #include "../game/strings.c"
 
@@ -416,8 +294,13 @@ LC_API void platform_set_vsync(B32 enabled);
 LC_API void platform_toggle_fullscreen(void);
 
 // NOTE(tbt): basic file IO
-LC_API B32 platform_write_entire_file(S8 path, U8 *buffer, U64 size);
+typedef struct PlatformFile PlatformFile;
+
+LC_API B32 platform_write_entire_file(S8 path, void *buffer, U64 size);
 LC_API S8 platform_read_entire_file(MemoryArena *memory, S8 path);
+LC_API PlatformFile *platform_open_file(S8 path);
+LC_API B32 platform_append_to_file(PlatformFile *file, void *buffer, U64 size);
+LC_API void platform_close_file(PlatformFile **file);
 
 #endif
 

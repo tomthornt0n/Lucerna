@@ -1,0 +1,42 @@
+@c_struct @gen_editor_ui @serialisable
+Entity :: struct
+{
+	@no_ui
+	next : Entity*;
+
+	@no_ui
+	next_free : Entity*;
+
+	@no_ui
+	bounds : Rect;
+
+	@radio_dropdown_source="FadeOutDir"
+	fade_out_direction : I32;
+
+	teleport_to : [64]U8;
+	
+	@flag_dropdown_source="EntityFlags"
+	flags : U64;
+};
+
+@c_enum
+EntityFlags :: enum
+{
+	ENTITY_FLAG_fade_out;
+
+	@no_ui
+	ENTITY_FLAG_marked_for_removal;
+
+	ENTITY_FLAG_teleport;
+
+};
+
+@c_enum
+FadeOutDir :: enum
+{
+	FADE_OUT_DIR_n;
+	FADE_OUT_DIR_e;
+	FADE_OUT_DIR_s;
+	FADE_OUT_DIR_w;
+};
+

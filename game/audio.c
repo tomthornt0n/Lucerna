@@ -1,11 +1,3 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Lucerna
-
-  Author  : Tom Thornton
-  Updated : 01 Jan 2021
-  License : N/A
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 internal void
 process_source(AudioSource *source,
                I16 *buffer,

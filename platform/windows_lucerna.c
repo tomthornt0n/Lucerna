@@ -10,19 +10,189 @@
 
 internal MemoryArena global_platform_layer_frame_memory;
 
+internal void
+windows_print_error(U8 *function)
+{
+ void *message_buffer;
+ DWORD error = GetLastError(); 
+ 
+ FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+               FORMAT_MESSAGE_FROM_SYSTEM |
+               FORMAT_MESSAGE_IGNORE_INSERTS,
+               NULL,
+               error,
+               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+               (LPTSTR) &message_buffer,
+               0, 
+               NULL);
+ 
+ 
+ fprintf(stderr, "%s : %s", function, (char *)message_buffer);
+ 
+ LocalFree(message_buffer);
+}
+
+internal HANDLE
+windows_create_file(B32 *success,
+                    DWORD creation_disposition,
+                    U8 *path_cstr)
+{
+ HANDLE file;
+ 
+ DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
+ DWORD share_mode = 0;
+ SECURITY_ATTRIBUTES security_attributes =
+ {
+  (DWORD)sizeof(SECURITY_ATTRIBUTES),
+  0,
+  0,
+ };
+ DWORD flags_and_attributes = 0;
+ HANDLE template_file = 0;
+ 
+ file = CreateFile(path_cstr,
+                   desired_access,
+                   share_mode,
+                   &security_attributes,
+                   creation_disposition,
+                   flags_and_attributes,
+                   template_file);
+ 
+ *success = *success && (file != INVALID_HANDLE_VALUE);
+ 
+ return file;
+}
+
+S8
+platform_read_entire_file(MemoryArena *memory,
+                          S8 path)
+{
+ S8 result = {0};
+ B32 success = true;
+ 
+ temporary_memory_begin(&global_platform_layer_frame_memory);
+ 
+ char *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+ 
+ HANDLE file = windows_create_file(&success, OPEN_EXISTING, path_cstr);
+ 
+ if (success)
+ {
+  DWORD read_bytes = GetFileSize(file, 0);
+  if(read_bytes)
+  {
+   void *read_data = arena_allocate(memory, read_bytes);
+   DWORD bytes_read = 0;
+   OVERLAPPED overlapped = {0};
+   
+   ReadFile(file, read_data, read_bytes, &bytes_read, &overlapped);
+   
+   result.buffer = read_data;
+   result.len = (U64)bytes_read;
+   
+   if (read_bytes != bytes_read ||
+       !read_data ||
+       !bytes_read)
+   {
+    windows_print_error("ReadFile");
+   }
+  }
+  CloseHandle(file);
+ }
+ else
+ {
+  fprintf(stderr, "failure reading entire file '%s' - ", path_cstr);
+  windows_print_error("CreateFile");
+ }
+ 
+#if LUCERNA_DEBUG
+ if (success)
+ {
+  fprintf(stderr, "successfully read entire file '%s'\n", path_cstr);
+ }
+#endif
+ 
+ temporary_memory_end(&global_platform_layer_frame_memory);
+ 
+ return result;
+}
+
 B32
 platform_write_entire_file(S8 path,
-                           U8 *buffer,
+                           void *buffer,
                            U64 size)
 {
- B32 success = true;
  HANDLE file = {0};
+ B32 success = true;
  
  temporary_memory_begin(&global_platform_layer_frame_memory);
  
  I8 *temp_path = arena_allocate(&global_platform_layer_frame_memory, path.len + 2);
  memcpy(temp_path, path.buffer, path.len);
  strcat(temp_path, "~");
+ 
+ I8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+ 
+ windows_create_file(&success, CREATE_ALWAYS, temp_path);
+ 
+ if(success)
+ {
+  void *data_to_write = buffer;
+  DWORD data_to_write_size = (DWORD)size;
+  DWORD bytes_written = 0;
+  
+  success = success && WriteFile(file, data_to_write, data_to_write_size, &bytes_written, 0);
+  
+  if (!success)
+  {
+   fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+   windows_print_error("WriteFile");
+  }
+  
+  success = success && CloseHandle(file);
+  
+  if (success)
+  {
+   MoveFileEx(temp_path, path_cstr, MOVEFILE_REPLACE_EXISTING);
+  }
+  else
+  {
+   fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+   windows_print_error("CloseHandle");
+  }
+ }
+ else
+ {
+  fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+  windows_print_error("CreateFile");
+ }
+ 
+#if LUCERNA_DEBUG
+ if (success)
+ {
+  fprintf(stderr, "successfully wrote entire file '%s'\n", path_cstr);
+ }
+#endif
+ 
+ temporary_memory_end(&global_platform_layer_frame_memory);
+ return success;
+}
+
+struct PlatformFile
+{
+ HANDLE file;
+#ifdef LUCERNA_DEBUG
+ I8 *name;
+#endif
+};
+
+PlatformFile *
+platform_open_file(S8 path)
+{
+ PlatformFile *result = NULL;
+ HANDLE file = {0};
+ 
+ temporary_memory_begin(&global_platform_layer_frame_memory);
  
  I8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
  
@@ -34,80 +204,74 @@ platform_write_entire_file(S8 path,
   0,
   0,
  };
- DWORD creation_disposition = CREATE_ALWAYS;
+ DWORD creation_disposition = OPEN_ALWAYS;
  DWORD flags_and_attributes = 0;
  HANDLE template_file = 0;
  
- success =
-  success && ((file = CreateFile(temp_path,
-                                 desired_access,
-                                 share_mode,
-                                 &security_attributes,
-                                 creation_disposition,
-                                 flags_and_attributes,
-                                 template_file)) != INVALID_HANDLE_VALUE);
- if(success)
+ if ((file = CreateFile(path_cstr,
+                        desired_access,
+                        share_mode,
+                        &security_attributes,
+                        creation_disposition,
+                        flags_and_attributes,
+                        template_file)) != INVALID_HANDLE_VALUE)
  {
-  void *data_to_write = buffer;
-  DWORD data_to_write_size = (DWORD)size;
-  DWORD bytes_written = 0;
+  result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PlatformFile));
+  result->file = file;
+ }
+ 
+ 
+ temporary_memory_end(&global_platform_layer_frame_memory);
+ 
+#ifdef LUCERNA_DEBUG
+ result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.len + 1);
+ memcpy(result->name, path.buffer, path.len);
+ if (result)
+ {
+  fprintf(stderr, "successfully opened file '%.*s'\n", (I32)path.len, path.buffer);
+ }
+ else
+ {
+  fprintf(stderr, "failure opening file '%.*s'\n", (I32)path.len, path.buffer);
+ }
+#endif
+ 
+ return result;
+}
+
+B32 platform_append_to_file(PlatformFile *file,
+                            void *buffer,
+                            U64 size)
+{
+ DWORD bytes_written;
+ B32 success = true;
+ 
+ if (file && size && buffer)
+ {
+  success = WriteFile(file->file, buffer, size, &bytes_written, 0);
+  success = success && (bytes_written == size);
   
-  success = success && WriteFile(file, data_to_write, data_to_write_size, &bytes_written, 0);
-  
-  success = success && CloseHandle(file);
-  
-  if (success)
+  if (!success)
   {
-   fprintf(stderr, "succesfully wrote '%s'\n", path_cstr);
-   MoveFileEx(temp_path, path_cstr, MOVEFILE_REPLACE_EXISTING);
+#ifdef LUCERNA_DEBUG
+   fprintf(stderr, "failure appending to file '%s' - ", file->name);
+#endif
+   windows_print_error("WriteFile");
   }
  }
  
- temporary_memory_end(&global_platform_layer_frame_memory);
  return success;
 }
 
-S8
-platform_read_entire_file(MemoryArena *memory,
-                          S8 path)
+void
+platform_close_file(PlatformFile **file)
 {
- S8 result = {0};
- 
- HANDLE file = {0};
- 
- {
-  DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
-  DWORD share_mode = 0;
-  SECURITY_ATTRIBUTES security_attributes =
-  {
-   (DWORD)sizeof(SECURITY_ATTRIBUTES),
-   0,
-   0,
-  };
-  DWORD creation_disposition = OPEN_EXISTING;
-  DWORD flags_and_attributes = 0;
-  HANDLE template_file = 0;
-  
-  if((file = CreateFile(cstring_from_s8(&global_platform_layer_frame_memory, path), desired_access, share_mode, &security_attributes, creation_disposition, flags_and_attributes, template_file)) != INVALID_HANDLE_VALUE)
-  {
-   
-   DWORD read_bytes = GetFileSize(file, 0);
-   if(read_bytes)
-   {
-    void *read_data = arena_allocate(memory, read_bytes);
-    DWORD bytes_read = 0;
-    OVERLAPPED overlapped = {0};
-    
-    ReadFile(file, read_data, read_bytes, &bytes_read, &overlapped);
-    
-    result.buffer = read_data;
-    result.len = (U64)bytes_read;
-   }
-   CloseHandle(file);
-  }
- }
- 
- return result;
+ CloseHandle((*file)->file);
+#ifdef LUCERNA_DEBUG
+ HeapFree(GetProcessHeap(), 0, (*file)->name);
+#endif
+ HeapFree(GetProcessHeap(), 0, *file);
+ *file = NULL;
 }
 
 internal struct
@@ -243,6 +407,7 @@ windows_load_all_opengl_functions(OpenGLFunctions *result)
  result->TexParameteri           = (PFNGLTEXPARAMETERIPROC          )windows_load_opengl_function(opengl32, "glTexParameteri");
  result->UniformMatrix4fv        = (PFNGLUNIFORMMATRIX4FVPROC       )windows_load_opengl_function(opengl32, "glUniformMatrix4fv");
  result->Uniform1i               = (PFNGLUNIFORM1IPROC              )windows_load_opengl_function(opengl32, "glUniform1i");
+ result->Uniform1f               = (PFNGLUNIFORM1FPROC              )windows_load_opengl_function(opengl32, "glUniform1f");
  result->Uniform2f               = (PFNGLUNIFORM2FPROC              )windows_load_opengl_function(opengl32, "glUniform2f");
  result->UseProgram              = (PFNGLUSEPROGRAMPROC             )windows_load_opengl_function(opengl32, "glUseProgram");
  result->VertexAttribPointer     = (PFNGLVERTEXATTRIBPOINTERPROC    )windows_load_opengl_function(opengl32, "glVertexAttribPointer");
@@ -268,7 +433,7 @@ U8 key_lut[] =
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-internal B32 global_running = true;
+internal volatile B32 global_running = true;
 
 PlatformState global_platform_state = {0};
 
@@ -405,8 +570,8 @@ window_proc(HWND windowHandle,
   case WM_SIZE:
   {
    
-   global_platform_state.window_width = LOWORD(lParam);
-   global_platform_state.window_height = HIWORD(lParam);
+   global_platform_state.window_w = LOWORD(lParam);
+   global_platform_state.window_h = HIWORD(lParam);
    break;
   }
   case WM_DESTROY:
@@ -421,6 +586,11 @@ window_proc(HWND windowHandle,
     PostQuitMessage(0);
    }
    break;
+  }
+  case WM_KILLFOCUS:
+  {
+   ZeroMemory(&global_platform_state,
+              sizeof(global_platform_state) - 2 * sizeof(U32)); // NOTE(tbt): do not zero window width and height
   }
   default:
   {
@@ -467,7 +637,7 @@ windows_audio_thread_main(LPVOID arg)
                                                           DSSCL_PRIORITY)))
   {
    WAVEFORMATEX wave_format;
-   memset(&wave_format, 0, sizeof(wave_format));
+   ZeroMemory(&wave_format, sizeof(wave_format));
    wave_format.wFormatTag = WAVE_FORMAT_PCM;
    wave_format.nChannels = 2;
    wave_format.nSamplesPerSec = 44100;
@@ -478,7 +648,7 @@ windows_audio_thread_main(LPVOID arg)
    
    // NOTE(tbt): try to create the primary buffer
    DSBUFFERDESC primary_buffer_desc;
-   memset(&primary_buffer_desc, 0, sizeof(primary_buffer_desc));
+   ZeroMemory(&primary_buffer_desc, sizeof(primary_buffer_desc));
    primary_buffer_desc.dwSize = sizeof(primary_buffer_desc);
    primary_buffer_desc.dwFlags = DSBCAPS_PRIMARYBUFFER;
    
@@ -509,7 +679,7 @@ windows_audio_thread_main(LPVOID arg)
    
    //NOTE(tbt): try to create a secondary buffer (the one we actualy write to)
    DSBUFFERDESC secondary_buffer_desc;
-   memset(&secondary_buffer_desc, 0, sizeof(secondary_buffer_desc));
+   ZeroMemory(&secondary_buffer_desc, sizeof(secondary_buffer_desc));
    secondary_buffer_desc.dwSize = sizeof(secondary_buffer_desc);
    secondary_buffer_desc.dwBufferBytes = secondary_buffer_size;
    secondary_buffer_desc.lpwfxFormat = &wave_format;
@@ -549,7 +719,7 @@ windows_audio_thread_main(LPVOID arg)
  
  U32 output_byte_index = 0;
  
- U32 latency_bytes = 22050;
+ U32 latency_bytes = 44100;
  
  platform_release_audio_lock();
  
@@ -624,7 +794,7 @@ wWinMain(HINSTANCE hInstance,
  HGLRC render_context;
  LARGE_INTEGER clock_frequency;
  
- initialise_arena_with_new_memory(&global_platform_layer_frame_memory, ONE_MB);
+ initialise_arena_with_new_memory(&global_platform_layer_frame_memory, PLATFORM_LAYER_FRAME_MEMORY_SIZE);
  
  //
  // NOTE(tbt): load game dll
@@ -656,10 +826,10 @@ wWinMain(HINSTANCE hInstance,
  RegisterClass(&window_class);
  
  global_window_handle = CreateWindow("LUCERNA",
-                                     "lucerna test!",
+                                     WINDOW_TITLE,
                                      WS_OVERLAPPEDWINDOW,
                                      CW_USEDEFAULT, CW_USEDEFAULT,
-                                     1920, 1080,
+                                     DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
                                      NULL,
                                      NULL,
                                      hInstance,
@@ -746,10 +916,10 @@ wWinMain(HINSTANCE hInstance,
   DestroyWindow(global_window_handle);
   
   global_window_handle = CreateWindow("LUCERNA",
-                                      "lucerna test!",
+                                      WINDOW_TITLE,
                                       WS_OVERLAPPEDWINDOW,
                                       CW_USEDEFAULT, CW_USEDEFAULT,
-                                      1920, 1080,
+                                      DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
                                       NULL,
                                       NULL,
                                       hInstance,
@@ -786,6 +956,9 @@ wWinMain(HINSTANCE hInstance,
  windows_load_all_opengl_functions(&gl);
  
  platform_set_vsync(true);
+ 
+ global_platform_state.window_w = DEFAULT_WINDOW_WIDTH;
+ global_platform_state.window_h = DEFAULT_WINDOW_HEIGHT;
  
  //
  // NOTE(tbt): setup audio thread

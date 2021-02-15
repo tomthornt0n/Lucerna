@@ -1,18 +1,10 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Lucerna
-
-  Author  : Tom Thornton
-  Updated : 02 Jan 2021
-  License : N/A
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 #define WAV_IMPLEMENTATION
 #include "wav.h"
 
 internal void *
 malloc_for_stb(U64 size)
 {
- return arena_allocate(&global_static_memory, size);
+ return arena_allocate(&global_level_memory, size);
 }
 
 internal void *
@@ -20,7 +12,7 @@ realloc_for_stb(void *p,
                 U64 old_size,
                 U64 new_size)
 {
- void *result = arena_allocate(&global_static_memory, new_size);
+ void *result = arena_allocate(&global_level_memory, new_size);
  memcpy(result, p, old_size);
  return result;
 }
@@ -41,6 +33,8 @@ free_for_stb(void *p)
 #define STBTT_malloc(x, u) ((void)(u),malloc_for_stb(x))
 #define STBTT_free(x, u) ((void)(u),free_for_stb(x))
 #include "stb_truetype.h"
+
+typedef struct Asset Asset;
 
 typedef U32 TextureID;
 
@@ -78,16 +72,33 @@ struct AudioSource
  F32 pan;           // NOTE(tbt): as set by `set_audio source_pan`
 };
 
+typedef struct
+{
+ F32 x, y;
+ F32 x_velocity, y_velocity;
+ Rect collision_bounds;
+} Player;
+
+typedef struct Entity Entity;
+
+typedef struct
+{
+ Asset *bg, *fg;
+ Asset *music;
+ S8 entities_source_path;
+ Player player;
+ Entity *entities;
+} Level;
+
 enum
 {
  ASSET_KIND_none,
  
  ASSET_KIND_texture,
  ASSET_KIND_audio,
+ ASSET_KIND_level,
 };
 
-
-typedef struct Asset Asset;
 struct Asset
 {
  B32 touched;
@@ -101,6 +112,7 @@ struct Asset
  {
   Texture texture;
   AudioSource audio;
+  Level level;
  };
 };
 
@@ -119,25 +131,23 @@ asset_from_path(S8 path)
  if (result->touched)
  {
   Asset *prev = NULL;
-  for (; result; result = result->next_hash)
+  for (; NULL != result; prev = result, result = result->next_hash)
   {
    if (string_match(path, result->path))
    {
     return result;
    }
-   
-   prev = result;
   }
   
-  if (prev)
-  {
-   prev->next_hash = arena_allocate(&global_static_memory,
-                                    sizeof(*prev->next_hash));
-   result = prev->next_hash;
-   result->touched = true;
-   result->path = copy_string(&global_static_memory, path);
-   return result;
-  }
+  assert(prev);
+  
+  prev->next_hash = arena_allocate(&global_static_memory,
+                                   sizeof(*prev->next_hash));
+  result = prev->next_hash;
+  result->touched = true;
+  result->path = copy_string(&global_static_memory, path);
+  
+  return result;
  }
  else
  {
@@ -145,8 +155,6 @@ asset_from_path(S8 path)
   result->path = copy_string(&global_static_memory, path);
   return result;
  }
- 
- return NULL;
 }
 
 #define ENTIRE_TEXTURE ((SubTexture){ 0.0f, 0.0f, 1.0f, 1.0f })
@@ -161,6 +169,7 @@ typedef struct
  Texture texture;
  stbtt_bakedchar char_data[96];
  U32 size;
+ F32 estimate_char_width;
 } Font;
 
 internal void
@@ -172,10 +181,12 @@ load_texture(OpenGLFunctions *gl,
  if (!asset) { return; }
  if (!asset->touched || asset->loaded) { return; }
  
- temporary_memory_begin(&global_static_memory);
  
- I8 path_cstr[512] = {0};
- snprintf(path_cstr, 512, "%.*s", (I32)asset->path.len, asset->path.buffer);
+ I8 path_cstr[1024] = {0};
+ snprintf(path_cstr, 1024, "%.*s", (I32)asset->path.len, asset->path.buffer);
+ 
+ temporary_memory_begin(&global_level_memory);
+ 
  pixels = stbi_load(path_cstr,
                     &(asset->texture.width),
                     &(asset->texture.height),
@@ -183,7 +194,7 @@ load_texture(OpenGLFunctions *gl,
  
  if (!pixels)
  {
-  temporary_memory_end(&global_static_memory);
+  fprintf(stderr, "Error loading texture '%s'\n", path_cstr);
   return;
  }
  
@@ -205,7 +216,7 @@ load_texture(OpenGLFunctions *gl,
                 GL_UNSIGNED_BYTE,
                 pixels);
  
- temporary_memory_end(&global_static_memory);
+ temporary_memory_end(&global_level_memory);
  
  asset->kind = ASSET_KIND_texture;
  asset->loaded = true;
@@ -231,24 +242,30 @@ unload_texture(OpenGLFunctions *gl,
 }
 
 internal SubTexture
-sub_texture_from_texture(Texture texture,
+sub_texture_from_texture(OpenGLFunctions *gl,
+                         Asset *texture,
                          F32 x, F32 y,
                          F32 w, F32 h)
 {
  SubTexture result;
  
- result.min_x = x / texture.width;
- result.min_y = y / texture.height;
+ if (texture->kind != ASSET_KIND_texture && texture->loaded) { return ENTIRE_TEXTURE; }
  
- result.max_x = (x + w) / texture.width;
- result.max_y = (y + h) / texture.height;
+ load_texture(gl, texture);
+ 
+ result.min_x = x / texture->texture.width;
+ result.min_y = y / texture->texture.height;
+ 
+ result.max_x = (x + w) / texture->texture.width;
+ result.max_y = (y + h) / texture->texture.height;
  
  return result;
 }
 
 internal void
-slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horizontal_count * vertical_count` elements
-                Texture texture,      // NOTE(tbt): the texture to slice from
+slice_animation(OpenGLFunctions *gl,
+                SubTexture *result,   // NOTE(tbt): must be an array with `horizontal_count * vertical_count` elements
+                Asset *texture,       // NOTE(tbt): the texture to slice from
                 F32 x, F32 y,         // NOTE(tbt): the coordinate in pixels of the top left corner of the top left frame
                 F32 w, F32 h,         // NOTE(tbt): the size in pixels of each frame
                 U32 horizontal_count, // NOTE(tbt): the number of frames horizontally
@@ -265,7 +282,8 @@ slice_animation(SubTexture *result,   // NOTE(tbt): must be an array with `horiz
        x_index < horizontal_count;
        ++x_index)
   {
-   result[index++] = sub_texture_from_texture(texture,
+   result[index++] = sub_texture_from_texture(gl,
+                                              texture,
                                               x + x_index * w,
                                               y + y_index * h,
                                               w, h);
@@ -282,7 +300,7 @@ load_font(OpenGLFunctions *gl,
  
  U8 pixels[1024 * 1024];
  
- temporary_memory_begin(&global_static_memory);
+ temporary_memory_begin(&global_level_memory);
  
  S8 file = platform_read_entire_file(&global_static_memory, path);
  
@@ -312,7 +330,21 @@ load_font(OpenGLFunctions *gl,
                 GL_UNSIGNED_BYTE,
                 pixels);
  
- temporary_memory_end(&global_static_memory);
+ F32 x = 0.0f, y = 0.0f;
+ stbtt_aligned_quad q;
+ stbtt_GetBakedQuad(result->char_data,
+                    result->texture.width,
+                    result->texture.height,
+                    'e' - 32,
+                    &x,
+                    &y,
+                    &q);
+ 
+ result->estimate_char_width = x;
+ 
+ fprintf(stderr, "%f\n", result->estimate_char_width);
+ 
+ temporary_memory_end(&global_level_memory);
  
  return result;
 }
@@ -363,12 +395,14 @@ unload_audio(Asset *asset)
  // NOTE(tbt): remove source from list of playing sources
  if (asset->audio.flags & SOURCE_FLAG_ACTIVE)
  {
+  platform_get_audio_lock();
   AudioSource **indirect_source = &global_playing_sources;
   while (*indirect_source != &asset->audio) { indirect_source = &(*indirect_source)->next; }
   *indirect_source = (*indirect_source)->next;
   
   asset->audio.flags &= ~SOURCE_FLAG_ACTIVE;
   asset->audio.flags |= SOURCE_FLAG_REWIND;
+  platform_release_audio_lock();
  }
  
  asset->loaded = false;
@@ -379,6 +413,128 @@ unload_audio(Asset *asset)
  Asset **indirect_asset = &global_loaded_assets;
  while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
  *indirect_asset = (*indirect_asset)->next_loaded;
+}
+
+internal void unload_all_assets(OpenGLFunctions *gl);
+
+internal void
+load_level(Asset *asset)
+{
+ 
+ if (!asset) { return; }
+ if (!asset->touched || asset->loaded) { return; }
+ 
+ S8 file = platform_read_entire_file(&global_level_memory, asset->path);
+ 
+ memset(&asset->level, 0, sizeof(asset->level));
+ 
+ U64 i = 0;
+ while (i < file.len)
+ {
+  if (0 == strncmp(&(file.buffer[i]), "bg: ", 4))
+  {
+   i += 4;
+   
+   S8 bg_path = {0};
+   bg_path.buffer = &(file.buffer[i]);
+   
+   while (file.buffer[i] != '\n' &&
+          file.buffer[i] != '\r')
+   {
+    bg_path.len += 1;
+    ++i;
+   }
+   
+   asset->level.bg = asset_from_path(bg_path);
+  }
+  else if (0 == strncmp(&(file.buffer[i]), "fg: ", 4))
+  {
+   i += 4;
+   
+   S8 fg_path = {0};
+   fg_path.buffer = &(file.buffer[i]);
+   
+   while (file.buffer[i] != '\n' &&
+          file.buffer[i] != '\r')
+   {
+    fg_path.len += 1;
+    ++i;
+   }
+   
+   asset->level.fg = asset_from_path(fg_path);
+  }
+  else if (0 == strncmp(&(file.buffer[i]), "music: ", 7))
+  {
+   i += 7;
+   
+   S8  music_path = {0};
+   music_path.buffer = &(file.buffer[i]);
+   
+   while (file.buffer[i] != '\n' &&
+          file.buffer[i] != '\r')
+   {
+    music_path.len += 1;
+    ++i;
+   }
+   
+   asset->level.music = asset_from_path(music_path);
+  }
+  else if (0 == strncmp(&(file.buffer[i]), "player_start: ", 14))
+  {
+   i += 14;
+   
+   memset(&(asset->level.player), 0, sizeof(asset->level.player));
+   
+   while (file.buffer[i] != ',')
+   {
+    if (isdigit(file.buffer[i]))
+    {
+     asset->level.player.x *= 10;
+     asset->level.player.x += file.buffer[i] - 48;
+    }
+    ++i;
+   }
+   
+   ++i;
+   ++i;
+   
+   while (file.buffer[i] != '\n' &&
+          file.buffer[i] != '\r')
+   {
+    if (isdigit(file.buffer[i]))
+    {
+     asset->level.player.y *= 10;
+     asset->level.player.y += file.buffer[i] - 48;
+    }
+    ++i;
+   }
+  }
+  else if (0 == strncmp(&(file.buffer[i]), "entities: ", 10))
+  {
+   i += 10;
+   
+   S8  entities_source_path = {0};
+   entities_source_path.buffer = &(file.buffer[i]);
+   
+   while (file.buffer[i] != '\n' &&
+          file.buffer[i] != '\r')
+   {
+    entities_source_path.len += 1;
+    ++i;
+   }
+   
+   asset->level.entities_source_path = entities_source_path;
+  }
+  else
+  {
+   ++i;
+  }
+ }
+ 
+ asset->loaded = true;
+ asset->kind = ASSET_KIND_level;
+ asset->next_loaded = global_loaded_assets;
+ global_loaded_assets = asset;
 }
 
 internal void
@@ -397,6 +553,16 @@ unload_all_assets(OpenGLFunctions *gl)
    case ASSET_KIND_audio:
    {
     unload_audio(loaded_asset);
+    break;
+   }
+   case ASSET_KIND_level:
+   {
+    loaded_asset->loaded = false;
+    
+    Asset **indirect_asset = &global_loaded_assets;
+    while (*indirect_asset != loaded_asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
+    *indirect_asset = (*indirect_asset)->next_loaded;
+    
     break;
    }
    default:

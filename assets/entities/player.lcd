@@ -1,4 +1,0 @@
-player :: Entity {
-    test : F32 = 1.0;
-};
-

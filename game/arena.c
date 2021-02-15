@@ -1,11 +1,3 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Lucerna
-
-  Author  : Tom Thornton
-  Updated : 01 Jan 2021
-  License : N/A
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 #define initialise_arena(_arena, _backing_memory, _size) initialise_memory_arena(_arena, #_arena, _backing_memory, _size)
 #define initialise_arena_with_new_memory(_arena, _size) initialise_memory_arena(_arena, #_arena, malloc(_size), _size)
 
@@ -31,13 +23,13 @@
 
 typedef struct
 {
-    U8 *buffer;         // NOTE(tbt): backing memory
-    U64 buffer_size;    // NOTE(tbt): size of the backing memory in bytes
-    U64 current_offset; // NOTE(tbt): index to allocate from
-    U64 saved_offset;   // NOTE(tbt): 'checkpoint' to return to when the temporary memory scope exits
-
+ U8 *buffer;         // NOTE(tbt): backing memory
+ U64 buffer_size;    // NOTE(tbt): size of the backing memory in bytes
+ U64 current_offset; // NOTE(tbt): index to allocate from
+ U64 saved_offset;   // NOTE(tbt): 'checkpoint' to return to when the temporary memory scope exits
+ 
 #ifdef LUCERNA_DEBUG
-    I8 name[ARENA_NAME_MAX];
+ I8 name[ARENA_NAME_MAX];
 #endif
 } MemoryArena;
 
@@ -47,34 +39,36 @@ initialise_memory_arena(MemoryArena *arena,
                         void *backing_memory,
                         U64 size)
 {
-    arena->buffer = backing_memory;
-    arena->buffer_size = size;
-    arena->current_offset = 0;
-    arena->saved_offset = 0;
-
+ assert(backing_memory);
+ 
+ arena->buffer = backing_memory;
+ arena->buffer_size = size;
+ arena->current_offset = 0;
+ arena->saved_offset = 0;
+ 
 #ifdef LUCERNA_DEBUG
-    U32 len = strlen(name) + 1;
-    memcpy(arena->name, name, len < ARENA_NAME_MAX ? len : ARENA_NAME_MAX);
+ U32 len = strlen(name) + 1;
+ memcpy(arena->name, name, len < ARENA_NAME_MAX ? len : ARENA_NAME_MAX);
 #endif
 }
 
 internal U64
 align_forward(uintptr_t pointer, U64 align)
 {
-    uintptr_t result, alignment, modulo;
-
-    assert((align & (align - 1)) == 0 && "alignment must be power of two");
-
-    result = (uintptr_t)pointer;
-    alignment = (uintptr_t)align;
-    modulo = result & (alignment - 1);
-
-    if (modulo != 0)
-    {
-        result += alignment - modulo;
-    }
-
-    return result;
+ uintptr_t result, alignment, modulo;
+ 
+ assert((align & (align - 1)) == 0 && "alignment must be power of two");
+ 
+ result = (uintptr_t)pointer;
+ alignment = (uintptr_t)align;
+ modulo = result & (alignment - 1);
+ 
+ if (modulo != 0)
+ {
+  result += alignment - modulo;
+ }
+ 
+ return result;
 }
 
 internal void *
@@ -84,53 +78,53 @@ _arena_allocate(MemoryArena *arena,
                 I8 *file,
                 I32 line)
 {
-    uintptr_t current_pointer = (uintptr_t)arena->buffer +
-                                (uintptr_t)arena->current_offset;
-
-    uintptr_t offset = align_forward(current_pointer, alignment) -
-                       (uintptr_t)arena->buffer;
-
-    if (offset + size <= arena->buffer_size)
-    {
-        void *result = arena->buffer + offset;
-        arena->current_offset = offset + size;
-
-        memset(result, 0, size);
-
-        return result;
-    }
-    else
-    {
+ uintptr_t current_pointer = (uintptr_t)arena->buffer +
+  (uintptr_t)arena->current_offset;
+ 
+ uintptr_t offset = align_forward(current_pointer, alignment) -
+  (uintptr_t)arena->buffer;
+ 
+ if (offset + size <= arena->buffer_size)
+ {
+  void *result = arena->buffer + offset;
+  arena->current_offset = offset + size;
+  
+  memset(result, 0, size);
+  
+  return result;
+ }
+ else
+ {
 #ifdef LUCERNA_DEBUG
-        fprintf(stderr,
-                "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
-                "last allocation was at line %d of file %s\n",
-                arena->name,
-                line,
-                file);
+  fprintf(stderr,
+          "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
+          "last allocation was at line %d of file %s\n",
+          arena->name,
+          line,
+          file);
 #else
-        fprintf(stderr, "\x1b[31mOUT OF MEMORY!\x1b[0m\n");
+  fprintf(stderr, "\x1b[31mOUT OF MEMORY!\x1b[0m\n");
 #endif
-        exit(-1);
-    }
+  exit(-1);
+ }
 }
 
 internal void
 arena_free_all(MemoryArena *arena)
 {
-    arena->current_offset = 0;
-    arena->saved_offset = 0;
+ arena->current_offset = 0;
+ arena->saved_offset = 0;
 }
 
 internal void
 temporary_memory_begin(MemoryArena *arena)
 {
-    arena->saved_offset = arena->current_offset;
+ arena->saved_offset = arena->current_offset;
 }
 
 internal void
 temporary_memory_end(MemoryArena *arena)
 {
-    arena->current_offset = arena->saved_offset;
+ arena->current_offset = arena->saved_offset;
 }
 
