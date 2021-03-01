@@ -13,7 +13,15 @@ Entity :: struct
 	@radio_dropdown_source="FadeOutDir"
 	fade_out_direction : I32;
 
-	teleport_to : [64]U8;
+	teleport_to_level : [64]U8;
+
+	teleport_to_default_spawn : B32;
+
+	@min=0 @max=1920 @snap=1
+	teleport_to_x : F32;
+
+ @min=0 @max=1080 @snap=1
+	teleport_to_y : F32;
 	
 	@flag_dropdown_source="EntityFlags"
 	flags : U64;

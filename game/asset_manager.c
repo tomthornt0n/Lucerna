@@ -72,23 +72,7 @@ struct AudioSource
  F32 pan;           // NOTE(tbt): as set by `set_audio source_pan`
 };
 
-typedef struct
-{
- F32 x, y;
- F32 x_velocity, y_velocity;
- Rect collision_bounds;
-} Player;
-
 typedef struct Entity Entity;
-
-typedef struct
-{
- Asset *bg, *fg;
- Asset *music;
- S8 entities_source_path;
- Player player;
- Entity *entities;
-} Level;
 
 enum
 {
@@ -112,7 +96,7 @@ struct Asset
  {
   Texture texture;
   AudioSource audio;
-  Level level;
+  LevelDescriptor level_descriptor;
  };
 };
 
@@ -202,7 +186,7 @@ load_texture(OpenGLFunctions *gl,
  gl->BindTexture(GL_TEXTURE_2D, asset->texture.id);
  
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+ gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
  
@@ -342,8 +326,6 @@ load_font(OpenGLFunctions *gl,
  
  result->estimate_char_width = x;
  
- fprintf(stderr, "%f\n", result->estimate_char_width);
- 
  temporary_memory_end(&global_level_memory);
  
  return result;
@@ -418,118 +400,14 @@ unload_audio(Asset *asset)
 internal void unload_all_assets(OpenGLFunctions *gl);
 
 internal void
-load_level(Asset *asset)
+load_level_descriptor(Asset *asset)
 {
  
  if (!asset) { return; }
  if (!asset->touched || asset->loaded) { return; }
  
  S8 file = platform_read_entire_file(&global_level_memory, asset->path);
- 
- memset(&asset->level, 0, sizeof(asset->level));
- 
- U64 i = 0;
- while (i < file.len)
- {
-  if (0 == strncmp(&(file.buffer[i]), "bg: ", 4))
-  {
-   i += 4;
-   
-   S8 bg_path = {0};
-   bg_path.buffer = &(file.buffer[i]);
-   
-   while (file.buffer[i] != '\n' &&
-          file.buffer[i] != '\r')
-   {
-    bg_path.len += 1;
-    ++i;
-   }
-   
-   asset->level.bg = asset_from_path(bg_path);
-  }
-  else if (0 == strncmp(&(file.buffer[i]), "fg: ", 4))
-  {
-   i += 4;
-   
-   S8 fg_path = {0};
-   fg_path.buffer = &(file.buffer[i]);
-   
-   while (file.buffer[i] != '\n' &&
-          file.buffer[i] != '\r')
-   {
-    fg_path.len += 1;
-    ++i;
-   }
-   
-   asset->level.fg = asset_from_path(fg_path);
-  }
-  else if (0 == strncmp(&(file.buffer[i]), "music: ", 7))
-  {
-   i += 7;
-   
-   S8  music_path = {0};
-   music_path.buffer = &(file.buffer[i]);
-   
-   while (file.buffer[i] != '\n' &&
-          file.buffer[i] != '\r')
-   {
-    music_path.len += 1;
-    ++i;
-   }
-   
-   asset->level.music = asset_from_path(music_path);
-  }
-  else if (0 == strncmp(&(file.buffer[i]), "player_start: ", 14))
-  {
-   i += 14;
-   
-   memset(&(asset->level.player), 0, sizeof(asset->level.player));
-   
-   while (file.buffer[i] != ',')
-   {
-    if (isdigit(file.buffer[i]))
-    {
-     asset->level.player.x *= 10;
-     asset->level.player.x += file.buffer[i] - 48;
-    }
-    ++i;
-   }
-   
-   ++i;
-   ++i;
-   
-   while (file.buffer[i] != '\n' &&
-          file.buffer[i] != '\r')
-   {
-    if (isdigit(file.buffer[i]))
-    {
-     asset->level.player.y *= 10;
-     asset->level.player.y += file.buffer[i] - 48;
-    }
-    ++i;
-   }
-  }
-  else if (0 == strncmp(&(file.buffer[i]), "entities: ", 10))
-  {
-   i += 10;
-   
-   S8  entities_source_path = {0};
-   entities_source_path.buffer = &(file.buffer[i]);
-   
-   while (file.buffer[i] != '\n' &&
-          file.buffer[i] != '\r')
-   {
-    entities_source_path.len += 1;
-    ++i;
-   }
-   
-   asset->level.entities_source_path = entities_source_path;
-  }
-  else
-  {
-   ++i;
-  }
- }
+ asset->level_descriptor = parse_level_descriptor(file);
  
  asset->loaded = true;
  asset->kind = ASSET_KIND_level;

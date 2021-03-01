@@ -957,9 +957,6 @@ wWinMain(HINSTANCE hInstance,
  
  platform_set_vsync(true);
  
- global_platform_state.window_w = DEFAULT_WINDOW_WIDTH;
- global_platform_state.window_h = DEFAULT_WINDOW_HEIGHT;
- 
  //
  // NOTE(tbt): setup audio thread
  //

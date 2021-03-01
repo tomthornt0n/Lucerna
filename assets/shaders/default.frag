@@ -9,6 +9,9 @@ uniform sampler2D u_texture;
 
 void main()
 {
-    o_colour = texture2D(u_texture, v_texture_coordinates) * v_colour;
+	vec4 tex_col = texture2D(u_texture, v_texture_coordinates);
+ vec3 rgb = tex_col.rgb * v_colour.rgb;
+	float alpha = tex_col.a * v_colour.a;
+	o_colour = vec4(rgb * alpha, alpha);
 }
 

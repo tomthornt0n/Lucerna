@@ -1,3 +1,10 @@
+typedef struct
+{
+ F32 x, y;
+ F32 x_velocity, y_velocity;
+ Rect collision_bounds;
+} Player;
+
 internal struct
 {
  Asset *texture;
@@ -95,7 +102,7 @@ do_player(OpenGLFunctions *gl,
   world_draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f,
                                                    player->y + 28.0f + animation_y_offset,
                                                    42.0f, 213.0f),
-                                 frametime_in_s * sin(global_time * 2.8f) * 7.0f,
+                                 sin(global_time * 2.8f) * 0.12f,
                                  WHITE,
                                  global_player_art.texture,
                                  global_player_art.right_arm);
@@ -135,7 +142,7 @@ do_player(OpenGLFunctions *gl,
   world_draw_rotated_sub_texture(rectangle_literal(player->x + 86.0f,
                                                    player->y + 28.0f + animation_y_offset,
                                                    42.0f, 213.0f),
-                                 frametime_in_s * sin(global_time * 2.8f) * 7.0f,
+                                 sin(global_time * 2.8f) * 0.12f,
                                  WHITE,
                                  global_player_art.texture,
                                  global_player_art.left_arm);

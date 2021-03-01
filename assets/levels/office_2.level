@@ -1,5 +1,5 @@
-fg: ../assets/textures/office_2/foreground.png
-bg: ../assets/textures/office_2/background.png
-music: ../assets/audio/office_1.wav
-player_start: 1210, 705
-entities: ../assets/levels/office_2.entities
+fg: "../assets/textures/office_2/foreground.png"
+bg: "../assets/textures/office_2/background.png"
+music: "../assets/audio/office_1.wav"
+player_spawn: 1210, 705
+entities: "../assets/levels/office_2.entities"

@@ -83,9 +83,9 @@ gen_editor_ui(LcddlNode *node,
  write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
  fprintf(file, "_editor_ui(PlatformState *input,\n%s *x)\n{\n", node->declaration.name);
  
- fprintf(file, "begin_window(input, s8_literal(\"gen %s %d\"), s8_literal(\"", node->declaration.name, rand());
+ fprintf(file, "begin_window(input, s8_literal(\"gen %s editor\"), s8_literal(\"", node->declaration.name, rand());
  write_string_as_lowercase_with_spaces_f(file, node->declaration.name);
- fprintf(file, " editor\"), 32.0f, 32.0f, 600.0f);\ndo_line_break();\n");
+ fprintf(file, " editor\"), 32.0f, 32.0f, 800.0f);\ndo_line_break();\n");
  
  for (LcddlNode *child = node->first_child;
       NULL != child;
@@ -184,27 +184,35 @@ gen_editor_ui(LcddlNode *node,
     }
     else
     {
-     char slider_kind[3] = {0};
+     enum
+     {
+      SLIDER_KIND_none,
+      SLIDER_KIND_double,
+      SLIDER_KIND_float,
+      SLIDER_KIND_long,
+      SLIDER_KIND_int,
+     };
+     
+     int slider_kind = 0;
      
      if (0 == strcmp(child->declaration.type->type.type_name, "F64"))
      {
-      slider_kind[0] = 'l';
-      slider_kind[1] = 'f';
+      slider_kind = SLIDER_KIND_double;
      }
      else if (0 == strcmp(child->declaration.type->type.type_name, "F32"))
      {
-      slider_kind[0] = 'f';
+      slider_kind = SLIDER_KIND_float;
      }
      else if (0 == strcmp(child->declaration.type->type.type_name, "I64"))
      {
-      slider_kind[0] = 'l';
+      slider_kind = SLIDER_KIND_long;
      }
      else if (0 == strcmp(child->declaration.type->type.type_name, "I32"))
      {
-      slider_kind[0] = 'i';
+      slider_kind = SLIDER_KIND_int;
      }
      
-     if (slider_kind[0])
+     if (slider_kind)
      {
       float min = 0.0f;
       float max = 100.0f;
@@ -221,8 +229,12 @@ gen_editor_ui(LcddlNode *node,
       write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
       fprintf(file, ":\"), 100.0f);\n", child->declaration.name);
       fprintf(file,
-              "do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, 200.0f, &x->%s);\ndo_line_break();\n",
-              slider_kind,
+              "do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, 200.0f, &x->%s);\n"
+              "do_line_break();\n",
+              slider_kind == SLIDER_KIND_int    ? "i"  :
+              slider_kind == SLIDER_KIND_long   ? "l"  :
+              slider_kind == SLIDER_KIND_float  ? "f"  :
+              slider_kind == SLIDER_KIND_double ? "lf" : NULL,
               child->declaration.name,
               rand(),
               min,

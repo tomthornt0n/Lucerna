@@ -18,7 +18,8 @@ TODO list:
 
 internal F64 global_time = 0.0;
 
-#define DEFAULT_EXPOSURE 0.7f
+// TODO(tbt): separate exposure for world and memories
+#define DEFAULT_EXPOSURE 2.0f
 internal F32 global_exposure = DEFAULT_EXPOSURE;
 
 internal MemoryArena global_static_memory;
@@ -26,6 +27,7 @@ internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
 #include "util.c"
+#include "level_descriptor_parser.c"
 #include "asset_manager.c"
 #include "audio.c"
 
@@ -37,7 +39,7 @@ internal Font *global_ui_font;
 #include "types.gen.h"
 #include "funcs.gen.h"
 #include "entities.c"
-#include "levels.c"
+#include "levels.c" // TODO(tbt): differentiate between 'world' and 'memory' levels
 #include "editor.c"
 
 void
@@ -77,8 +79,16 @@ game_update_and_render(OpenGLFunctions *gl,
  
  if (game_state == GAME_STATE_playing)
  {
+  // TODO(tbt): level should handle post-processing, so post processing kind can be linked to level kind
   do_current_level(gl, input, frametime_in_s);
-  do_post_processing(global_exposure, UI_SORT_DEPTH - 1);
+  if (!input->is_key_pressed[KEY_p])
+  {
+   do_post_processing(global_exposure, POST_PROCESSING_KIND_memory, UI_SORT_DEPTH - 1);
+  }
+  else
+  {
+   do_post_processing(global_exposure, POST_PROCESSING_KIND_world, UI_SORT_DEPTH - 1);
+  }
  }
  else if (game_state == GAME_STATE_editor)
  {
@@ -91,7 +101,7 @@ game_update_and_render(OpenGLFunctions *gl,
  ui_draw_text(global_ui_font, 16.0f, 16.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(fps_str));
  
  I8 pos_str[128];
- snprintf(pos_str, 128, "%f %f", global_current_level->level.player.x, global_current_level->level.player.y);
+ snprintf(pos_str, 128, "%f %f", global_current_level.player.x, global_current_level.player.y);
  ui_draw_text(global_ui_font, 16.0f, 64.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(pos_str));
  
  if (is_key_typed(input, ctrl('v')))
@@ -108,11 +118,15 @@ game_update_and_render(OpenGLFunctions *gl,
  }
  else if (is_key_typed(input, ctrl('e')))
  {
-  game_state = !game_state; // NOTE(tbt): just because the only two states are 0 and 1
+  game_state = (game_state == GAME_STATE_editor) ? GAME_STATE_playing : GAME_STATE_editor;
+  
+  // NOTE(tbt): save entities
+  serialise_entities(global_current_level.entities,
+                     global_current_level.entities_path);
   
   // NOTE(tbt): reset camera position
-  set_camera_position(global_current_level->level.bg->texture.width >> 1,
-                      global_current_level->level.bg->texture.height >> 1);
+  set_camera_position(global_current_level.bg->texture.width >> 1,
+                      global_current_level.bg->texture.height >> 1);
  }
  
  finish_ui(input);

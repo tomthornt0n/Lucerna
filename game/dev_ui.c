@@ -146,6 +146,8 @@ struct UINode
  Asset *texture;
  U32 cursor;
  F32 animation_transition;
+ U8 temp_buffer[8];
+ B32 enter; // NOTE(tbt): true for the frame a text entry is clicked out of or return is typed
 };
 
 #define UI_HASH_TABLE_SIZE (1024)
@@ -250,6 +252,18 @@ _ui_insert_node(UINode *node)
  node->last_child = NULL;
  node->next_sibling = NULL;
  node->next_under_mouse = NULL;
+}
+
+internal B32
+delete_ui_node(S8 name)
+{
+ UINode *node = ui_node_from_string(name);
+ if (node)
+ {
+  memset(node, 0, sizeof(*node));
+  return true;
+ }
+ return false;
 }
 
 #define do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
@@ -560,6 +574,8 @@ begin_dropdown(PlatformState *input,
  }
 }
 
+internal UINode *do_text_entry(PlatformState *input, S8 name, U8 *buffer, U64 *len, U64 capacity);
+
 internal void
 do_slider_lf(PlatformState *input,
              S8 name,
@@ -572,9 +588,11 @@ do_slider_lf(PlatformState *input,
  
  *value = clamp_i(*value, min, max);
  
+ 
  if (!(node = ui_node_from_string(name)))
  {
   node = new_ui_node_from_string(&global_static_memory, name);
+  snprintf(node->temp_buffer, 8, "%f", *value);
  }
  
  _ui_insert_node(node);
@@ -586,6 +604,13 @@ do_slider_lf(PlatformState *input,
  
  if (!node->hidden)
  {
+  S8 text_name;
+  text_name.buffer = arena_allocate(&global_frame_memory, name.len + 1);
+  text_name.len = name.len + 1;
+  memcpy(text_name.buffer, name.buffer, name.len);
+  text_name.buffer[name.len] = '~';
+  UINode *text = do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
+  
   if (is_point_in_region(input->mouse_x,
                          input->mouse_y,
                          node->interactable) &&
@@ -619,6 +644,8 @@ do_slider_lf(PlatformState *input,
     *value = floor(*value / snap) * snap;
    }
    
+   snprintf(node->temp_buffer, 8, "%f", *value);
+   
    if (!global_hot_widget)
    {
     global_active_widget = node;
@@ -630,6 +657,15 @@ do_slider_lf(PlatformState *input,
     play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
    }
   }
+  else if (text->enter)
+  {
+   *value = atof(node->temp_buffer);
+  }
+  else if (!text->toggled)
+  {
+   snprintf(node->temp_buffer, 8, "%f", *value);
+  }
+  
   node->slider_value = *value;
  }
 }
@@ -801,7 +837,7 @@ do_sprite_picker(PlatformState *input,
  }
 }
 
-internal void
+internal UINode *
 do_text_entry(PlatformState *input,
               S8 name,
               U8 *buffer,
@@ -820,6 +856,8 @@ do_text_entry(PlatformState *input,
  node->kind = UI_NODE_KIND_text_entry;
  node->wrap_width = capacity * global_ui_font->estimate_char_width + PADDING * 2;
  
+ node->enter = false;
+ 
  if (!node->hidden)
  {
   if (global_active_widget == node)
@@ -827,11 +865,16 @@ do_text_entry(PlatformState *input,
    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
    {
     node->toggled = !node->toggled;
+    if (!node->toggled)
+    {
+     node->enter = true;
+    }
     play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
    }
   }
-  else if (global_active_widget)
+  else if (global_active_widget && node->toggled)
   {
+   node->enter = true;
    node->toggled = false;
   }
   
@@ -867,6 +910,11 @@ do_text_entry(PlatformState *input,
      index -= 1;
      buffer[index] = 0;
     }
+    else if (key->key == '\r')
+    {
+     node->enter = true;
+     node->toggled = false;
+    }
    }
   }
   
@@ -884,6 +932,8 @@ do_text_entry(PlatformState *input,
    global_active_widget = node;
   }
  }
+ 
+ return node;
 }
 
 

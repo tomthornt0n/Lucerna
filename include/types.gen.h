@@ -17,7 +17,10 @@ typedef struct Entity Entity;
 struct Entity
 {
 	U64 flags;
-	U8 teleport_to[64];
+	F32 teleport_to_y;
+	F32 teleport_to_x;
+	B32 teleport_to_default_spawn;
+	U8 teleport_to_level[64];
 	I32 fade_out_direction;
 	Rect bounds;
 	Entity *next_free;

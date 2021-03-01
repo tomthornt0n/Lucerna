@@ -6,14 +6,14 @@ internal Entity *_global_entity_free_list = NULL;
 
 internal void
 push_entity(Entity *entity,
-            Level *level)
+            Entity **entities)
 {
- entity->next = level->entities;
- level->entities = entity;
+ entity->next = *entities;
+ *entities = entity;
 }
 
 internal Entity *
-allocate_and_push_entity(Level *level)
+allocate_and_push_entity(Entity **entities)
 {
  Entity *result;
  
@@ -33,7 +33,7 @@ allocate_and_push_entity(Level *level)
  
  memset(result, 0, sizeof(*result));
  
- push_entity(result, level);
+ push_entity(result, entities);
  
  return result;
 }
@@ -55,7 +55,7 @@ serialise_entities(Entity *entities,
 }
 
 internal void
-deserialise_entities(Asset *level,
+deserialise_entities(Entity **entities,
                      S8 path)
 {
  temporary_memory_begin(&global_static_memory);
@@ -69,7 +69,7 @@ deserialise_entities(Asset *level,
   
   while (buffer - file.buffer < file.len)
   {
-   Entity *e = allocate_and_push_entity(&level->level);
+   Entity *e = allocate_and_push_entity(entities);
    deserialise_entity(e, &buffer);
   }
  }
@@ -97,31 +97,36 @@ do_entities(OpenGLFunctions *gl,
     F32 player_centre_x = player->collision_bounds.x + (player->collision_bounds.w / 2.0f);
     F32 player_centre_y = player->collision_bounds.y + (player->collision_bounds.h / 2.0f);
     
+    F32 fade;
+    
     switch(e->fade_out_direction)
     {
      case FADE_OUT_DIR_n:
      {
-      global_exposure = (player_centre_y - e->bounds.y) / e->bounds.h * DEFAULT_EXPOSURE;
+      fade = (player_centre_y - e->bounds.y) / e->bounds.h;
       break;
      }
      case FADE_OUT_DIR_e:
      {
-      global_exposure = ((e->bounds.x + e->bounds.w) - player_centre_x) / e->bounds.w * DEFAULT_EXPOSURE;
+      fade = ((e->bounds.x + e->bounds.w) - player_centre_x) / e->bounds.w;
       break;
      }
      case FADE_OUT_DIR_s:
      {
-      global_exposure = ((e->bounds.y + e->bounds.h) - player_centre_y) / e->bounds.h * DEFAULT_EXPOSURE;
+      fade = ((e->bounds.y + e->bounds.h) - player_centre_y) / e->bounds.h;
       break;
      }
      case FADE_OUT_DIR_w:
      {
-      global_exposure = (player_centre_x - e->bounds.x) / e->bounds.w * DEFAULT_EXPOSURE;
+      fade = (player_centre_x - e->bounds.x) / e->bounds.w;
       break;
      }
     }
     
-    global_exposure = min(global_exposure, DEFAULT_EXPOSURE);
+    fade = clamp_f(fade, 0.0f, 1.0f);
+    
+    global_exposure = fade * DEFAULT_EXPOSURE;
+    set_audio_master_level(fade * DEFAULT_AUDIO_MASTER_LEVEL);
    }
    
   }
@@ -129,7 +134,13 @@ do_entities(OpenGLFunctions *gl,
   if (e->flags & (1 << ENTITY_FLAG_teleport) &&
       colliding_with_player)
   {
-   set_current_level(gl, s8_literal(e->teleport_to));
+   Entity old_entity = *e;
+   set_current_level(gl, s8_literal(e->teleport_to_level));
+   if (!old_entity.teleport_to_default_spawn)
+   {
+    player->x = old_entity.teleport_to_x;
+    player->y = old_entity.teleport_to_y;
+   }
   }
  }
 }
