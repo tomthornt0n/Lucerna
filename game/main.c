@@ -18,9 +18,7 @@ TODO list:
 
 internal F64 global_time = 0.0;
 
-// TODO(tbt): separate exposure for world and memories
-#define DEFAULT_EXPOSURE 2.0f
-internal F32 global_exposure = DEFAULT_EXPOSURE;
+internal F32 global_exposure = 1.0;
 
 internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
@@ -39,7 +37,6 @@ internal Font *global_ui_font;
 #include "types.gen.h"
 #include "funcs.gen.h"
 #include "entities.c"
-#include "levels.c" // TODO(tbt): differentiate between 'world' and 'memory' levels
 #include "editor.c"
 
 void
@@ -55,7 +52,7 @@ game_init(OpenGLFunctions *gl)
  
  load_player_art(gl);
  
- set_current_level(gl, s8_literal("../assets/levels/office_1.level"));
+ set_current_level(gl, asset_from_path(s8_literal("../assets/levels/office_1.level")));
 }
 
 void
@@ -79,20 +76,11 @@ game_update_and_render(OpenGLFunctions *gl,
  
  if (game_state == GAME_STATE_playing)
  {
-  // TODO(tbt): level should handle post-processing, so post processing kind can be linked to level kind
   do_current_level(gl, input, frametime_in_s);
-  if (!input->is_key_pressed[KEY_p])
-  {
-   do_post_processing(global_exposure, POST_PROCESSING_KIND_memory, UI_SORT_DEPTH - 1);
-  }
-  else
-  {
-   do_post_processing(global_exposure, POST_PROCESSING_KIND_world, UI_SORT_DEPTH - 1);
-  }
  }
  else if (game_state == GAME_STATE_editor)
  {
-  do_level_editor(input, frametime_in_s);
+  do_level_editor(gl, input, frametime_in_s);
  }
  
  

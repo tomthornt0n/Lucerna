@@ -15,6 +15,11 @@ const float vignette_radius = 0.5;
 const float gamma = 2.2;
 const float overall_strength = 0.95;
 
+float fmod(float x, float y)
+{
+	return x - y * (floor(x / y));
+}
+
 float rand(vec2 co)
 {
 	return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
@@ -33,8 +38,8 @@ void main()
 
 	float blur_luminance_squared = dot(blur_col, vec3(0.2125, 0.7154, 0.0721));
 	blur_luminance_squared = blur_luminance_squared * blur_luminance_squared;
-
-	vec3 noise = vec3(rand(v_texture_coordinates + vec2(u_time))) * noise_intensity;
+	// NOTE(tbt): wrap u_time at 100 seconds because the super jank noise function starts going a bit weird for large input numbers
+	vec3 noise = vec3(rand(v_texture_coordinates + vec2(fmod(u_time, 100.0)))) * noise_intensity;
 
  vec3 vignette_col = vec3(vignette(v_texture_coordinates, vignette_radius, 0.5));
 

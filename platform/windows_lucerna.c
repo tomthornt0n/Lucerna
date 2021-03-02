@@ -47,7 +47,7 @@ windows_create_file(B32 *success,
   0,
   0,
  };
- DWORD flags_and_attributes = 0;
+ DWORD flags_and_attributes = FILE_ATTRIBUTE_NORMAL;
  HANDLE template_file = 0;
  
  file = CreateFile(path_cstr,
@@ -133,7 +133,7 @@ platform_write_entire_file(S8 path,
  
  I8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
  
- windows_create_file(&success, CREATE_ALWAYS, temp_path);
+ file = windows_create_file(&success, CREATE_ALWAYS, temp_path);
  
  if(success)
  {
@@ -145,7 +145,7 @@ platform_write_entire_file(S8 path,
   
   if (!success)
   {
-   fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+   fprintf(stderr, "failure writing entire file '%s' - ", temp_path);
    windows_print_error("WriteFile");
   }
   
@@ -153,17 +153,21 @@ platform_write_entire_file(S8 path,
   
   if (success)
   {
-   MoveFileEx(temp_path, path_cstr, MOVEFILE_REPLACE_EXISTING);
+   if (!MoveFileEx(temp_path, path_cstr, MOVEFILE_REPLACE_EXISTING))
+   {
+    fprintf(stderr, "failure renaming file '%s' over '%s' - ", temp_path, path_cstr);
+    windows_print_error("MoveFileEx");
+   }
   }
   else
   {
-   fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+   fprintf(stderr, "failure writing entire file '%s'", temp_path);
    windows_print_error("CloseHandle");
   }
  }
  else
  {
-  fprintf(stderr, "failure writing entire file '%s' - ", path_cstr);
+  fprintf(stderr, "failure writing entire file '%s' - ", temp_path);
   windows_print_error("CreateFile");
  }
  
@@ -224,10 +228,10 @@ platform_open_file(S8 path)
  temporary_memory_end(&global_platform_layer_frame_memory);
  
 #ifdef LUCERNA_DEBUG
- result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.len + 1);
- memcpy(result->name, path.buffer, path.len);
  if (result)
  {
+  result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.len + 1);
+  memcpy(result->name, path.buffer, path.len);
   fprintf(stderr, "successfully opened file '%.*s'\n", (I32)path.len, path.buffer);
  }
  else
@@ -268,6 +272,7 @@ platform_close_file(PlatformFile **file)
 {
  CloseHandle((*file)->file);
 #ifdef LUCERNA_DEBUG
+ fprintf(stderr, "Successfully closed file %s\n", (*file)->name);
  HeapFree(GetProcessHeap(), 0, (*file)->name);
 #endif
  HeapFree(GetProcessHeap(), 0, *file);
@@ -798,7 +803,7 @@ wWinMain(HINSTANCE hInstance,
  
  //
  // NOTE(tbt): load game dll
- //
+ //~
  
  HMODULE game = LoadLibrary("lucerna.dll");
  
@@ -812,9 +817,39 @@ wWinMain(HINSTANCE hInstance,
  assert(_game_audio_callback);
  assert(_game_cleanup);
  
+#if defined LUCERNA_DEBUG
+ AllocConsole();
+ 
+ {
+  HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
+  if (stderr_handle != INVALID_HANDLE_VALUE)
+  {
+   DWORD output_mode;
+   if (GetConsoleMode(stderr_handle, &output_mode))
+   {
+    output_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING; // NOTE(tbt): enable ANSI escape sequences
+    SetConsoleMode(stderr_handle, output_mode);
+   }
+  }
+ }
+ 
+ {
+  HANDLE stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (stdout_handle != INVALID_HANDLE_VALUE)
+  {
+   DWORD output_mode;
+   if (GetConsoleMode(stdout_handle, &output_mode))
+   {
+    output_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING; // NOTE(tbt): enable ANSI escape sequences
+    SetConsoleMode(stdout_handle, output_mode);
+   }
+  }
+ }
+#endif
+ 
  //
  // NOTE(tbt): setup window and opengl context
- //
+ //~
  
  ZeroMemory(&window_class, sizeof(window_class));
  
@@ -883,7 +918,7 @@ wWinMain(HINSTANCE hInstance,
  
  //
  // NOTE(tbt): recreate the context if the correct extensions are supported
- //
+ //~
  
  if (recreate_context)
  {
@@ -959,14 +994,14 @@ wWinMain(HINSTANCE hInstance,
  
  //
  // NOTE(tbt): setup audio thread
- //
+ //~
  
  InitializeCriticalSection(&global_audio_lock);
  CreateThread(NULL, 0, windows_audio_thread_main, _game_audio_callback, 0, NULL);
  
  //
  // NOTE(tbt): main loop
- //
+ //~
  
  _game_init(&gl);
  

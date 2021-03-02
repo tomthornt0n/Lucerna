@@ -115,39 +115,45 @@ typedef enum
  UI_NODE_KIND_text_entry,
 } UINodeKind;
 
+#define UI_NODE_TEMP_BUFFER_SIZE 8
 
 typedef struct UINode UINode;
 struct UINode
 {
- B32 exists;
- UINodeKind kind;
- UINode *first_child, *last_child, *next_sibling;
- UINode *next_insertion_point; // NOTE(tbt): form a stack of where to insert new nodes
- S8 key;
- UINode *next_hash;
- UINode *next_under_mouse;
+ B32 exists;                               // NOTE(tbt): mark when a slot in the hash map is in use
+ UINodeKind kind;                          // NOTE(tbt): the subtype of widget
  
- Rect bounds;       // NOTE(tbt): the total area on the screen taken up by the widget
- Rect interactable; // NOTE(tbt): the area that can be interacted with
- Rect bg;           // NOTE(tbt): an area that is rendered but not able to be interacted with
+ // NOTE(tbt): form a tree
+ UINode *parent;
+ UINode *first_child;
+ UINode *last_child;
+ UINode *next_sibling;
  
- F32 drag_x, drag_y;
- F32 wrap_width;
- F32 texture_width;
- F32 texture_height;
- I32 sort;
- B32 toggled;
- B32 dragging;
- S8 label;
- F64 slider_value;
- F32 scroll;
- B32 hidden;
- F32 min, max;
- Asset *texture;
- U32 cursor;
- F32 animation_transition;
- U8 temp_buffer[8];
- B32 enter; // NOTE(tbt): true for the frame a text entry is clicked out of or return is typed
+ UINode *next_insertion_point;             // NOTE(tbt): form a stack of where to insert new nodes
+ S8 key;                                   // NOTE(tbt): the string used to uniquely identify the widget
+ UINode *next_hash;                        // NOTE(tbt): chaining for hash collisions
+ UINode *next_under_mouse;                 // NOTE(tbt): linked list of all nodes under the mouse - active widget is the widget in this list with the highest sort depth
+ 
+ Rect bounds;                              // NOTE(tbt): the total area on the screen taken up by the widget
+ Rect interactable;                        // NOTE(tbt): the area that can be interacted with
+ Rect bg;                                  // NOTE(tbt): an area that is rendered but not able to be interacted with
+ 
+ F32 drag_x, drag_y;                       // NOTE(tbt): mouse coordinates for sliders and windows
+ F32 wrap_width;                           // NOTE(tbt): the maximum width for a widget before it begins to wrap
+ F32 texture_width;                        // NOTE(tbt): for sprite pickers
+ F32 texture_height;                       // NOTE(tbt): for sprite pickers
+ I32 sort;                                 // NOTE(tbt): sort depth for rendering
+ B32 toggled;                              // NOTE(tbt): true when a button is enabled
+ B32 dragging;                             // NOTE(tbt): true while a window or slider is being dragged
+ S8 label;                                 // NOTE(tbt): text displayed on the widget
+ F64 slider_value;                         // NOTE(tbt): needs no explanation
+ B32 hidden;                               // NOTE(tbt): true if the node exists in the UI tree but should be ignored
+ F32 min, max;                             // NOTE(tbt): minimum and maximum value for sliders
+ Asset *texture;                           // NOTE(tbt): texture drawn by the widget
+ F32 animation_transition;                 // NOTE(tbt): between 0.0 and 1.0 - used to fade between active, hovered and default colours
+ U8 temp_buffer[UI_NODE_TEMP_BUFFER_SIZE]; // NOTE(tbt): put random data that needs to be retained with the widget here, e.g. used as a character buffer for the text entries next to sliders
+ B32 enter;                                // NOTE(tbt): true for the frame a text entry is clicked out of or return is typed
+ B32 draw_horizontal_rule;                 // NOTE(tbt): whether a line break should draw a horizontal line
 };
 
 #define UI_HASH_TABLE_SIZE (1024)
@@ -248,22 +254,34 @@ _ui_insert_node(UINode *node)
   global_ui_insertion_point->first_child = node;
   global_ui_insertion_point->last_child = node;
  }
+ node->parent = global_ui_insertion_point;
  node->first_child = NULL;
  node->last_child = NULL;
  node->next_sibling = NULL;
  node->next_under_mouse = NULL;
 }
 
-internal B32
-delete_ui_node(S8 name)
+internal void
+_delete_ui_node(UINode *node)
 {
- UINode *node = ui_node_from_string(name);
  if (node)
  {
   memset(node, 0, sizeof(*node));
-  return true;
+  
+  for (UINode *child = node->first_child;
+       NULL != child;
+       child = child->next_sibling)
+  {
+   _delete_ui_node(child);
+  }
  }
- return false;
+}
+
+internal void
+delete_ui_node(S8 name)
+{
+ UINode *node = ui_node_from_string(name);
+ _delete_ui_node(node);
 }
 
 #define do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
@@ -307,7 +325,7 @@ begin_window(PlatformState *input,
  
  if (is_point_in_region(input->mouse_x,
                         input->mouse_y,
-                        node->interactable) &&
+                        node->bounds) &&
      !global_hot_widget)
  {
   node->next_under_mouse = global_widgets_under_mouse;
@@ -411,7 +429,8 @@ do_bit_toggle_button(PlatformState *input,
  return node->toggled;
 }
 
-internal void
+// NOTE(tbt): returns true when clicked, just like a normal button
+internal B32
 do_toggle_button(PlatformState *input,
                  S8 name,
                  S8 label,
@@ -419,6 +438,7 @@ do_toggle_button(PlatformState *input,
                  B32 *toggle)
 {
  UINode *node;
+ B32 clicked = false;
  
  if (!(node = ui_node_from_string(name)))
  {
@@ -440,6 +460,7 @@ do_toggle_button(PlatformState *input,
   {
    *toggle = !(*toggle);
    play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+   clicked = true;
   }
   
   if (is_point_in_region(input->mouse_x,
@@ -456,6 +477,8 @@ do_toggle_button(PlatformState *input,
    global_active_widget = node;
   }
  }
+ 
+ return clicked;
 }
 
 internal B32
@@ -586,13 +609,12 @@ do_slider_lf(PlatformState *input,
 {
  UINode *node;
  
- *value = clamp_i(*value, min, max);
- 
+ *value = clamp_f(*value, min, max);
  
  if (!(node = ui_node_from_string(name)))
  {
   node = new_ui_node_from_string(&global_static_memory, name);
-  snprintf(node->temp_buffer, 8, "%f", *value);
+  snprintf(node->temp_buffer, UI_NODE_TEMP_BUFFER_SIZE, "%f", *value);
  }
  
  _ui_insert_node(node);
@@ -730,16 +752,29 @@ do_label(S8 name,
 }
 
 internal void
-do_line_break(void)
+_do_line_break(B32 rule)
 {
  UINode *node;
  
  node = arena_allocate(&global_frame_memory,
                        sizeof(*node));
+ node->draw_horizontal_rule = rule;
  
  _ui_insert_node(node);
  
  node->kind = UI_NODE_KIND_line_break;
+}
+
+internal void
+do_line_break(void)
+{
+ _do_line_break(false);
+}
+
+internal void
+do_horizontal_rule(void)
+{
+ _do_line_break(true);
 }
 
 internal void
@@ -1303,7 +1338,7 @@ layout_and_render_ui_node(PlatformState *input,
    
    fill_rectangle(node->bounds,
                   colour_lerp(FG_COL_1,
-                              colour_literal(0.0f, 0.0f, 0.0f, 0.0f),
+                              BG_COL_1,
                               node->animation_transition),
                   node->sort,
                   global_ui_projection_matrix);
@@ -1317,6 +1352,17 @@ layout_and_render_ui_node(PlatformState *input,
              node->label,
              node->sort,
              global_ui_projection_matrix);
+  }
+  case UI_NODE_KIND_line_break:
+  {
+   if (node->draw_horizontal_rule)
+   {
+    fill_rectangle(rectangle_literal(x, y - (PADDING - STROKE_WIDTH) / 2, node->parent->bounds.w - PADDING * 2, STROKE_WIDTH),
+                   FG_COL_1,
+                   node->parent->sort + 1,
+                   global_ui_projection_matrix);
+   }
+   break;
   }
   default:
   {

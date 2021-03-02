@@ -1,11 +1,37 @@
+#define LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE 64
+
+typedef struct
+{
+ F32 spawn_x;
+ F32 spawn_y;
+ char bg_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
+ char fg_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
+ char music_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
+ char entities_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
+ F32 exposure;
+ B32 is_memory;
+} EditorLevelMetadata;;
+
 internal void
-do_level_editor(PlatformState *input,
+do_level_editor(OpenGLFunctions *gl,
+                PlatformState *input,
                 F64 frametime_in_s)
 {
  F32 aspect;
  stop_audio_source(global_current_level.music);
  
+ //
+ // NOTE(tbt): editor state
+ //~
+ 
+ static B32 editing_entities = false;
+ static B32 editing_level_meta = false;
+ static EditorLevelMetadata level_metadata = {0};
+ 
+ //
  // NOTE(tbt): draw background
+ //~
+ 
  aspect =
   (F32)global_current_level.bg->texture.height /
   (F32)global_current_level.bg->texture.width;
@@ -17,7 +43,128 @@ do_level_editor(PlatformState *input,
                         global_current_level.bg,
                         ENTIRE_TEXTURE);
  
+ //
+ // NOTE(tbt): main editor window
+ //~
+ 
+ do_window(input,
+           s8_literal("main editor window"),
+           s8_literal("editor"),
+           900.0f, 256.0f,
+           400.0f)
+ {
+  if (do_toggle_button(input,
+                       s8_literal("toggle entity edit mode"),
+                       s8_literal("edit entities"),
+                       150.0f,
+                       &editing_entities))
+  {
+   if (!editing_entities)
+   {
+    delete_ui_node(s8_literal("gen Entity editor"));
+    global_editor_selected_entity = false;
+   }
+  }
+  
+  if (do_button(input,
+                s8_literal("edit level meta button"),
+                s8_literal("edit level"),
+                150.0f))
+  {
+   if (!editing_level_meta)
+   {
+    editing_level_meta = true;
+    
+    LevelDescriptor *ld = &(global_current_level.level_descriptor->level_descriptor);
+    level_metadata.spawn_x = ld->player_spawn_x;
+    level_metadata.spawn_y = ld->player_spawn_y;
+    memcpy(level_metadata.bg_buffer, ld->bg_path.buffer, ld->bg_path.len);
+    memcpy(level_metadata.fg_buffer, ld->fg_path.buffer, ld->fg_path.len);
+    memcpy(level_metadata.music_buffer, ld->music_path.buffer, ld->music_path.len);
+    memcpy(level_metadata.entities_buffer, ld->entities_path.buffer, ld->entities_path.len);
+    level_metadata.exposure = ld->exposure;
+    level_metadata.is_memory = ld->is_memory;
+   }
+  }
+ }
+ 
+ //
+ // NOTE(tbt): edit level meta
+ //~
+ 
+ if (editing_level_meta)
+ {
+  do_window(input,
+            s8_literal("level meta editor window"),
+            s8_literal("level meta editor"),
+            64.0f, 64.0f,
+            1000.0f)
+  {
+   
+   do_line_break();
+   do_slider_f(input, s8_literal("level meta editor spawn x slider"), 0.0f, 1920.0f, 1.0f, 523.0f, &level_metadata.spawn_x);
+   do_label(s8_literal("level meta editor spawn x slider label"), s8_literal("player spawn x"), -1.0f);
+   
+   do_line_break();
+   do_slider_f(input, s8_literal("level meta editor spawn y slider"), 0.0f, 1080.0f, 1.0f, 523.0f, &level_metadata.spawn_y);
+   do_label(s8_literal("level meta editor spawn y slider label"), s8_literal("player spawn y"), -1.0f);
+   
+   do_line_break();
+   do_text_entry(input, s8_literal("level meta editor bg entry"), level_metadata.bg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   do_label(s8_literal("level meta editor bg entry label"), s8_literal("background path"), -1.0f);
+   
+   do_line_break();
+   do_text_entry(input, s8_literal("level meta editor fg entry"), level_metadata.fg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   do_label(s8_literal("level meta editor fg entry label"), s8_literal("foreground path"), -1.0f);
+   
+   do_line_break();
+   do_text_entry(input, s8_literal("level meta editor music entry"), level_metadata.music_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   do_label(s8_literal("level meta editor music entry label"), s8_literal("music path"), -1.0f);
+   
+   do_line_break();
+   do_text_entry(input, s8_literal("level meta editor entities entry"), level_metadata.entities_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   do_label(s8_literal("level meta editor entities entry label"), s8_literal("entities path"), -1.0f);
+   
+   do_line_break();
+   do_slider_f(input, s8_literal("level meta editor exposure slider"), 0.0f, 3.0f, 0.05f, 150.0f, &level_metadata.exposure);
+   do_label(s8_literal("level meta editor exposure label"), s8_literal("exposure"), -1.0f);
+   
+   do_line_break();
+   do_toggle_button(input, s8_literal("level meta editor is memory toggle"), s8_literal("is memory?"), 150.0f, &level_metadata.is_memory);
+   
+   do_horizontal_rule();
+   
+   if (do_button(input,
+                 s8_literal("save level meta button"),
+                 s8_literal("save"),
+                 150.0f))
+   {
+    LevelDescriptor *ld = &(global_current_level.level_descriptor->level_descriptor);
+    ld->player_spawn_x = level_metadata.spawn_x;
+    ld->player_spawn_y = level_metadata.spawn_y;
+    ld->bg_path = s8_from_cstring(&global_level_memory, level_metadata.bg_buffer);
+    ld->fg_path = s8_from_cstring(&global_level_memory, level_metadata.fg_buffer);
+    ld->music_path = s8_from_cstring(&global_level_memory, level_metadata.music_buffer);
+    ld->entities_path = s8_from_cstring(&global_level_memory, level_metadata.entities_buffer);
+    ld->exposure = level_metadata.exposure;
+    ld->is_memory = level_metadata.is_memory;
+    serialise_level_descriptor(global_current_level.level_descriptor);
+    
+    editing_level_meta = false;
+    delete_ui_node(s8_literal("level meta editor window"));
+    memset(&level_metadata, 0, sizeof(level_metadata));
+    
+    unload_level_descriptor(global_current_level.level_descriptor);
+    set_current_level(gl, global_current_level.level_descriptor);
+   }
+  }
+ }
+ 
+ //
  // NOTE(tbt): edit entities
+ //~
+ 
+ if (editing_entities)
  {
   static Entity *active = NULL;
   static Entity *dragging = NULL;
@@ -25,9 +172,9 @@ do_level_editor(PlatformState *input,
   Entity *selected = global_editor_selected_entity;
   
   do_window(input,
-            s8_literal("editor main window"),
-            s8_literal("editor"),
-            900.0f, 256.0f,
+            s8_literal("entity editor window"),
+            s8_literal("entity editor"),
+            64.0f, 64.0f,
             400.0f)
   {
    if (do_button(input, s8_literal("create entity button"), s8_literal("create entity"), 150.0f))
@@ -84,7 +231,8 @@ do_level_editor(PlatformState *input,
    
    if (is_point_in_region(MOUSE_WORLD_X,
                           MOUSE_WORLD_Y,
-                          e->bounds))
+                          e->bounds) &&
+       !global_is_mouse_over_ui)
    {
     fill_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.15f), UI_SORT_DEPTH, global_projection_matrix);
     if (input->is_mouse_button_pressed[MOUSE_BUTTON_left])
@@ -112,20 +260,23 @@ do_level_editor(PlatformState *input,
    dragging = NULL;
   }
   
-  if (dragging)
+  if (!global_is_mouse_over_ui)
   {
-   dragging->bounds.x = MOUSE_WORLD_X - dragging->bounds.w / 2;
-   dragging->bounds.y = MOUSE_WORLD_Y - dragging->bounds.h / 2;
-  }
-  
-  if (resizing)
-  {
-   resizing->bounds.w = MOUSE_WORLD_X - resizing->bounds.x;
-   resizing->bounds.h = MOUSE_WORLD_Y - resizing->bounds.y;
-   
-   if (!input->is_mouse_button_pressed[MOUSE_BUTTON_right])
+   if (dragging)
    {
-    resizing = NULL;
+    dragging->bounds.x = MOUSE_WORLD_X - dragging->bounds.w / 2;
+    dragging->bounds.y = MOUSE_WORLD_Y - dragging->bounds.h / 2;
+   }
+   
+   if (resizing)
+   {
+    resizing->bounds.w = MOUSE_WORLD_X - resizing->bounds.x;
+    resizing->bounds.h = MOUSE_WORLD_Y - resizing->bounds.y;
+    
+    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_right])
+    {
+     resizing = NULL;
+    }
    }
   }
   
@@ -137,7 +288,7 @@ do_level_editor(PlatformState *input,
   global_editor_selected_entity = selected;
  }
  
- // NOTE(tbt): draw foreground
+ //~NOTE(tbt): draw foreground
  aspect =
   (F32)global_current_level.fg->texture.height /
   (F32)global_current_level.fg->texture.width;
@@ -149,7 +300,7 @@ do_level_editor(PlatformState *input,
                         global_current_level.fg,
                         ENTIRE_TEXTURE);
  
- // NOTE(tbt): camera movement
+ //~NOTE(tbt): camera movement
  {
   F32 speed = 256.0f * frametime_in_s;
   

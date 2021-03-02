@@ -206,6 +206,8 @@ load_texture(OpenGLFunctions *gl,
  asset->loaded = true;
  asset->next_loaded = global_loaded_assets;
  global_loaded_assets = asset;
+ 
+ fprintf(stderr, "Successfully loaded texture: '%s'\n", path_cstr);
 }
 
 internal void
@@ -223,6 +225,8 @@ unload_texture(OpenGLFunctions *gl,
  Asset **indirect = &global_loaded_assets;
  while (*indirect != asset) { indirect = &(*indirect)->next_loaded; }
  *indirect = (*indirect)->next_loaded;
+ 
+ fprintf(stderr, "Unloaded texture: '%.*s'\n", (I32)asset->path.len, asset->path.buffer);
 }
 
 internal SubTexture
@@ -328,6 +332,7 @@ load_font(OpenGLFunctions *gl,
  
  temporary_memory_end(&global_level_memory);
  
+ fprintf(stderr, "Sucessfully loaded font: '%.*s'\n", (I32)path.len, path.buffer);
  return result;
 }
 
@@ -369,6 +374,8 @@ load_audio(Asset *asset)
  asset->loaded = true;
  asset->next_loaded = global_loaded_assets;
  global_loaded_assets = asset;
+ 
+ fprintf(stderr, "Sucessfully loaded audio: '%s'\n", path_cstr);
 }
 
 internal void
@@ -395,6 +402,8 @@ unload_audio(Asset *asset)
  Asset **indirect_asset = &global_loaded_assets;
  while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
  *indirect_asset = (*indirect_asset)->next_loaded;
+ 
+ fprintf(stderr, "Unloaded audio: '%.*s'\n", (I32)asset->path.len, asset->path.buffer);
 }
 
 internal void unload_all_assets(OpenGLFunctions *gl);
@@ -406,7 +415,9 @@ load_level_descriptor(Asset *asset)
  if (!asset) { return; }
  if (!asset->touched || asset->loaded) { return; }
  
- S8 file = platform_read_entire_file(&global_level_memory, asset->path);
+ fprintf(stderr, "Parsing level descriptor: '%.*s'\n", (I32)asset->path.len, asset->path.buffer);
+ 
+ S8 file = platform_read_entire_file(&global_static_memory, asset->path);
  asset->level_descriptor = parse_level_descriptor(file);
  
  asset->loaded = true;
@@ -416,8 +427,53 @@ load_level_descriptor(Asset *asset)
 }
 
 internal void
+unload_level_descriptor(Asset *asset)
+{
+ asset->loaded = false;
+ 
+ Asset **indirect_asset = &global_loaded_assets;
+ while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
+ *indirect_asset = (*indirect_asset)->next_loaded;
+}
+
+internal void
+serialise_level_descriptor(Asset *asset)
+{
+ fprintf(stderr, "Serialising level descriptor %.*s\n", (I32)asset->path.len, asset->path.buffer);
+ 
+ U8 buffer[1024];
+ U64 length = snprintf(buffer,
+                       1024,
+                       "player_spawn: %f, %f\n"
+                       "bg: \"%.*s\"\n"
+                       "fg: \"%.*s\"\n"
+                       "music: \"%.*s\"\n"
+                       "entities: \"%.*s\"\n"
+                       "exposure: %f\n"
+                       "kind: %s\n",
+                       asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,
+                       (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer,
+                       (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer,
+                       (I32)asset->level_descriptor.music_path.len, asset->level_descriptor.music_path.buffer,
+                       (I32)asset->level_descriptor.entities_path.len, asset->level_descriptor.entities_path.buffer,
+                       asset->level_descriptor.exposure,
+                       asset->level_descriptor.is_memory ? "memory" : "world");
+ 
+ if (length < 1024)
+ {
+  platform_write_entire_file(asset->path, buffer, length);
+ }
+ else
+ {
+  fprintf(stderr, "Error serialising level descriptor - buffer too small");
+ }
+}
+
+internal void
 unload_all_assets(OpenGLFunctions *gl)
 {
+ fprintf(stderr, "Unloading all assets...\n");
+ 
  Asset *loaded_asset = global_loaded_assets;
  while (loaded_asset)
  {
@@ -435,12 +491,7 @@ unload_all_assets(OpenGLFunctions *gl)
    }
    case ASSET_KIND_level:
    {
-    loaded_asset->loaded = false;
-    
-    Asset **indirect_asset = &global_loaded_assets;
-    while (*indirect_asset != loaded_asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
-    *indirect_asset = (*indirect_asset)->next_loaded;
-    
+    unload_level_descriptor(loaded_asset);
     break;
    }
    default:

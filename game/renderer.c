@@ -309,6 +309,8 @@ initialise_renderer(OpenGLFunctions *gl)
   exit(-1);
  }
  
+ fprintf(stderr, "sucessfully compiled default vertex shader\n");
+ 
  // NOTE(tbt): compile the fullscreen vertex shader
  shader_src = cstring_from_s8(&global_static_memory,
                               platform_read_entire_file(&global_static_memory,
@@ -334,6 +336,7 @@ initialise_renderer(OpenGLFunctions *gl)
   exit(-1);
  }
  
+ fprintf(stderr, "sucessfully compiled fullscreen vertex shader\n");
  
  // NOTE(tbt): attach vertex shaders to shader programs
  gl->AttachShader(global_default_shader, vertex_shader);
