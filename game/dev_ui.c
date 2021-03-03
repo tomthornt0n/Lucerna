@@ -12,9 +12,9 @@
 
 #define CURSOR_THICKNESS 2.0f
 
-#define BG_COL_1 colour_literal(0.0f, 0.0f, 0.0f, 0.4f)
-#define BG_COL_2 colour_literal(0.0f, 0.0f, 0.0f, 0.8f)
-#define FG_COL_1 colour_literal(1.0f, 1.0f, 1.0f, 0.9f)
+#define BG_COL_1 colour_literal(0.05f, 0.05f, 0.05f, 0.9f)
+#define BG_COL_2 colour_literal(0.0f, 0.0f, 0.0f, 0.95f)
+#define FG_COL_1 colour_literal(1.0f, 1.0f, 1.0f, 1.0f)
 
 #define BLUR_STRENGTH 1
 
@@ -22,10 +22,10 @@
 
 
 internal Rect
-get_text_bounds(Font *font,
-                F32 x, F32 y,
-                U32 wrap_width,
-                S8 string)
+_ui_measure_text(Font *font,
+                 F32 x, F32 y,
+                 U32 wrap_width,
+                 S8 string)
 {
  Rect result;
  stbtt_aligned_quad q;
@@ -163,8 +163,8 @@ struct UINode
 internal UINode global_ui_state_dict[UI_HASH_TABLE_SIZE] = {{0}};
 
 internal UINode *
-new_ui_node_from_string(MemoryArena *memory,
-                        S8 string)
+_ui_new_node_from_string(MemoryArena *memory,
+                         S8 string)
 {
  U64 index = ui_hash(string);
  UINode *result = global_ui_state_dict + index;
@@ -201,7 +201,7 @@ new_ui_node_from_string(MemoryArena *memory,
 }
 
 internal UINode *
-ui_node_from_string(S8 string)
+_ui_node_from_string(S8 string)
 {
  U64 index = ui_hash(string);
  UINode *result = global_ui_state_dict + index;
@@ -278,27 +278,27 @@ _delete_ui_node(UINode *node)
 }
 
 internal void
-delete_ui_node(S8 name)
+ui_delete_node(S8 name)
 {
- UINode *node = ui_node_from_string(name);
+ UINode *node = _ui_node_from_string(name);
  _delete_ui_node(node);
 }
 
-#define do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
+#define ui_do_window(_input, _name, _title, _init_x, _init_y, _max_w) for (I32 i = (_ui_begin_window((_input), (_name), (_title), (_init_x), (_init_y), (_max_w)), 0); !i; (++i, _ui_pop_insertion_point()))
 
 internal void
-begin_window(PlatformState *input,
-             S8 name,
-             S8 title,
-             F32 initial_x, F32 initial_y,
-             F32 max_w)
+_ui_begin_window(PlatformState *input,
+                 S8 name,
+                 S8 title,
+                 F32 initial_x, F32 initial_y,
+                 F32 max_w)
 {
  UINode *node;
  static UINode *last_active_window = NULL;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
   node->drag_x = initial_x;
   node->drag_y = initial_y;
  }
@@ -369,18 +369,18 @@ begin_window(PlatformState *input,
 }
 
 internal B32
-do_bit_toggle_button(PlatformState *input,
-                     S8 name,
-                     S8 label,
-                     U64 *mask,
-                     I32 bit,
-                     F32 width)
+ui_do_bit_toggle_button(PlatformState *input,
+                        S8 name,
+                        S8 label,
+                        U64 *mask,
+                        I32 bit,
+                        F32 width)
 {
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  node->label = copy_string(&global_frame_memory, label);
  
@@ -431,18 +431,18 @@ do_bit_toggle_button(PlatformState *input,
 
 // NOTE(tbt): returns true when clicked, just like a normal button
 internal B32
-do_toggle_button(PlatformState *input,
-                 S8 name,
-                 S8 label,
-                 F32 width,
-                 B32 *toggle)
+ui_do_toggle_button(PlatformState *input,
+                    S8 name,
+                    S8 label,
+                    F32 width,
+                    B32 *toggle)
 {
  UINode *node;
  B32 clicked = false;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  node->label = copy_string(&global_frame_memory, label);
  
@@ -482,27 +482,27 @@ do_toggle_button(PlatformState *input,
 }
 
 internal B32
-do_toggle_button_temp(PlatformState *input,
-                      S8 name,
-                      S8 label,
-                      F32 width)
+ui_do_toggle_button_temp(PlatformState *input,
+                         S8 name,
+                         S8 label,
+                         F32 width)
 {
  B32 result;
- do_toggle_button(input, name, label, width, &result);
+ ui_do_toggle_button(input, name, label, width, &result);
  return result;
 }
 
 internal B32
-do_button(PlatformState *input,
-          S8 name,
-          S8 label,
-          F32 width)
+ui_do_button(PlatformState *input,
+             S8 name,
+             S8 label,
+             F32 width)
 {
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  node->label = copy_string(&global_frame_memory, label);
  
@@ -543,19 +543,19 @@ do_button(PlatformState *input,
  return node->toggled;
 }
 
-#define do_dropdown(_input, _name, _label, _width) for (I32 i = (begin_dropdown((_input), (_name), (_label), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
+#define ui_do_dropdown(_input, _name, _label, _width) for (I32 i = (begin_dropdown((_input), (_name), (_label), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
 
 internal void
-begin_dropdown(PlatformState *input,
-               S8 name,
-               S8 label,
-               F32 width)
+_ui_begin_dropdown(PlatformState *input,
+                   S8 name,
+                   S8 label,
+                   F32 width)
 {  
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  
  _ui_insert_node(node);
@@ -597,23 +597,23 @@ begin_dropdown(PlatformState *input,
  }
 }
 
-internal UINode *do_text_entry(PlatformState *input, S8 name, U8 *buffer, U64 *len, U64 capacity);
+internal UINode *ui_do_text_entry(PlatformState *input, S8 name, U8 *buffer, U64 *len, U64 capacity);
 
 internal void
-do_slider_lf(PlatformState *input,
-             S8 name,
-             F32 min, F32 max,
-             F32 snap,
-             F32 width,
-             F64 *value)
+ui_do_slider_lf(PlatformState *input,
+                S8 name,
+                F32 min, F32 max,
+                F32 snap,
+                F32 width,
+                F64 *value)
 {
  UINode *node;
  
  *value = clamp_f(*value, min, max);
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
   snprintf(node->temp_buffer, UI_NODE_TEMP_BUFFER_SIZE, "%f", *value);
  }
  
@@ -631,7 +631,7 @@ do_slider_lf(PlatformState *input,
   text_name.len = name.len + 1;
   memcpy(text_name.buffer, name.buffer, name.len);
   text_name.buffer[name.len] = '~';
-  UINode *text = do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
+  UINode *text = ui_do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
   
   if (is_point_in_region(input->mouse_x,
                          input->mouse_y,
@@ -693,54 +693,54 @@ do_slider_lf(PlatformState *input,
 }
 
 internal void
-do_slider_f(PlatformState *input,
-            S8 name,
-            F32 min, F32 max,
-            F32 snap,
-            F32 width,
-            F32 *value)
+ui_do_slider_f(PlatformState *input,
+               S8 name,
+               F32 min, F32 max,
+               F32 snap,
+               F32 width,
+               F32 *value)
 {
  F64 x = (F64) *value;
- do_slider_lf(input, name, min, max, snap, width, &x);
+ ui_do_slider_lf(input, name, min, max, snap, width, &x);
  *value = (F32)x;
 }
 
 internal void
-do_slider_l(PlatformState *input,
-            S8 name,
-            F32 min, F32 max,
-            F32 snap,
-            F32 width,
-            I64 *value)
+ui_do_slider_l(PlatformState *input,
+               S8 name,
+               F32 min, F32 max,
+               F32 snap,
+               F32 width,
+               I64 *value)
 {
  F64 x = (F64) *value;
- do_slider_lf(input, name, min, max, snap, width, &x);
+ ui_do_slider_lf(input, name, min, max, snap, width, &x);
  *value = (I64)x;
 }
 
 internal void
-do_slider_i(PlatformState *input,
-            S8 name,
-            F32 min, F32 max,
-            F32 snap,
-            F32 width,
-            I32 *value)
+ui_do_slider_i(PlatformState *input,
+               S8 name,
+               F32 min, F32 max,
+               F32 snap,
+               F32 width,
+               I32 *value)
 {
  F64 x = (F64) *value;
- do_slider_lf(input, name, min, max, snap, width, &x);
+ ui_do_slider_lf(input, name, min, max, snap, width, &x);
  *value = (I32)x;
 }
 
 internal void
-do_label(S8 name,
-         S8 label,
-         F32 width)
+ui_do_label(S8 name,
+            S8 label,
+            F32 width)
 {
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  
  node->label = copy_string(&global_frame_memory, label);
@@ -752,7 +752,7 @@ do_label(S8 name,
 }
 
 internal void
-_do_line_break(B32 rule)
+_ui_do_line_break(B32 rule)
 {
  UINode *node;
  
@@ -766,30 +766,30 @@ _do_line_break(B32 rule)
 }
 
 internal void
-do_line_break(void)
+ui_do_line_break(void)
 {
- _do_line_break(false);
+ _ui_do_line_break(false);
 }
 
 internal void
-do_horizontal_rule(void)
+ui_do_horizontal_rule(void)
 {
- _do_line_break(true);
+ _ui_do_line_break(true);
 }
 
 internal void
-do_sprite_picker(PlatformState *input,
-                 S8 name,
-                 Asset *texture,
-                 F32 width,
-                 F32 snap,
-                 SubTexture *sub_texture)
+ui_do_sprite_picker(PlatformState *input,
+                    S8 name,
+                    Asset *texture,
+                    F32 width,
+                    F32 snap,
+                    SubTexture *sub_texture)
 {
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  
  _ui_insert_node(node);
@@ -873,17 +873,17 @@ do_sprite_picker(PlatformState *input,
 }
 
 internal UINode *
-do_text_entry(PlatformState *input,
-              S8 name,
-              U8 *buffer,
-              U64 *len,
-              U64 capacity)
+ui_do_text_entry(PlatformState *input,
+                 S8 name,
+                 U8 *buffer,
+                 U64 *len,
+                 U64 capacity)
 {
  UINode *node;
  
- if (!(node = ui_node_from_string(name)))
+ if (!(node = _ui_node_from_string(name)))
  {
-  node = new_ui_node_from_string(&global_static_memory, name);
+  node = _ui_new_node_from_string(&global_static_memory, name);
  }
  
  _ui_insert_node(node);
@@ -973,19 +973,19 @@ do_text_entry(PlatformState *input,
 
 
 internal void
-layout_and_render_ui_node(PlatformState *input,
-                          UINode *node,
-                          F32 x, F32 y)
+_ui_layout_and_render_node(PlatformState *input,
+                           UINode *node,
+                           F32 x, F32 y)
 {
  switch (node->kind)
  {
   case UI_NODE_KIND_window:
   {
-   Rect title_bounds = get_text_bounds(global_ui_font,
-                                       node->drag_x,
-                                       node->drag_y,
-                                       node->wrap_width,
-                                       node->label);
+   Rect title_bounds = _ui_measure_text(global_ui_font,
+                                        node->drag_x,
+                                        node->drag_y,
+                                        node->wrap_width,
+                                        node->label);
    
    node->bounds = rectangle_literal(title_bounds.x,
                                     title_bounds.y,
@@ -1016,10 +1016,10 @@ layout_and_render_ui_node(PlatformState *input,
      tallest = 0.0f;
     }
     
-    layout_and_render_ui_node(input,
-                              child,
-                              current_x,
-                              current_y);
+    _ui_layout_and_render_node(input,
+                               child,
+                               current_x,
+                               current_y);
     
     if (child->kind != UI_NODE_KIND_window)
     {
@@ -1084,10 +1084,10 @@ layout_and_render_ui_node(PlatformState *input,
   }
   case UI_NODE_KIND_button:
   {
-   node->bounds = node->bg = node->interactable = get_text_bounds(global_ui_font,
-                                                                  x + PADDING, y + global_ui_font->size,
-                                                                  node->wrap_width,
-                                                                  node->label);
+   node->bounds = node->bg = node->interactable = _ui_measure_text(global_ui_font,
+                                                                   x + PADDING, y + global_ui_font->size,
+                                                                   node->wrap_width,
+                                                                   node->label);
    
    if (node->toggled)
    {
@@ -1173,10 +1173,10 @@ layout_and_render_ui_node(PlatformState *input,
      child->wrap_width = min_f(child->wrap_width,
                                node->bounds.w);
      
-     layout_and_render_ui_node(input,
-                               child,
-                               node->bg.x + PADDING,
-                               current_y);
+     _ui_layout_and_render_node(input,
+                                child,
+                                node->bg.x + PADDING,
+                                current_y);
      
      node->bg.h += child->bounds.h + PADDING;
      current_y += child->bounds.h + PADDING;
@@ -1260,10 +1260,10 @@ layout_and_render_ui_node(PlatformState *input,
   }
   case UI_NODE_KIND_label:
   {
-   Rect label_bounds = get_text_bounds(global_ui_font,
-                                       x, y,
-                                       node->wrap_width,
-                                       node->label);
+   Rect label_bounds = _ui_measure_text(global_ui_font,
+                                        x, y,
+                                        node->wrap_width,
+                                        node->label);
    
    
    node->bounds = rectangle_literal(label_bounds.x,
@@ -1320,12 +1320,6 @@ layout_and_render_ui_node(PlatformState *input,
    node->bounds.h += PADDING;
    node->bg = node->interactable = node->bounds;
    
-   stroke_rectangle(node->bounds,
-                    FG_COL_1,
-                    STROKE_WIDTH,
-                    node->sort,
-                    global_ui_projection_matrix);
-   
    if (node == global_hot_widget ||
        node->toggled)
    {
@@ -1343,6 +1337,12 @@ layout_and_render_ui_node(PlatformState *input,
                   node->sort,
                   global_ui_projection_matrix);
    
+   stroke_rectangle(node->bounds,
+                    FG_COL_1,
+                    STROKE_WIDTH,
+                    node->sort,
+                    global_ui_projection_matrix);
+   
    draw_text(global_ui_font,
              x + PADDING, y + global_ui_font->size,
              node->wrap_width,
@@ -1357,7 +1357,7 @@ layout_and_render_ui_node(PlatformState *input,
   {
    if (node->draw_horizontal_rule)
    {
-    fill_rectangle(rectangle_literal(x, y - (PADDING - STROKE_WIDTH) / 2, node->parent->bounds.w - PADDING * 2, STROKE_WIDTH),
+    fill_rectangle(rectangle_literal(x, y - (PADDING + STROKE_WIDTH) / 2, node->parent->bounds.w - PADDING * 2, STROKE_WIDTH),
                    FG_COL_1,
                    node->parent->sort + 1,
                    global_ui_projection_matrix);
@@ -1370,24 +1370,22 @@ layout_and_render_ui_node(PlatformState *input,
    
    while (child)
    {
-    layout_and_render_ui_node(input, child, x, y);
+    _ui_layout_and_render_node(input, child, x, y);
     child = child->next_sibling;
    }
   }
  }
 }
 
-#define do_ui(_input) for (I32 i = (prepare_ui(), 0); !i; (++i, finish_ui((_input))))
-
 internal void
-prepare_ui(void)
+ui_prepare(void)
 {
  global_widgets_under_mouse = NULL;
  global_is_mouse_over_ui = false;
 }
 
 internal void
-finish_ui(PlatformState *input)
+ui_finish(PlatformState *input)
 {
  global_is_mouse_over_ui = global_is_mouse_over_ui ||
   (global_widgets_under_mouse != NULL)              ||
@@ -1405,7 +1403,7 @@ finish_ui(PlatformState *input)
   widget_under_mouse = widget_under_mouse->next_under_mouse;
  }
  
- layout_and_render_ui_node(input, &global_ui_root, 0, 0);
+ _ui_layout_and_render_node(input, &global_ui_root, 0, 0);
  
  memset(&global_ui_root, 0, sizeof(global_ui_root));
  

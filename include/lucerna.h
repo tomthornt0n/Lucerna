@@ -285,6 +285,9 @@ typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);               
 #define LC_API 
 #endif
 
+// NOTE(tbt): signal to the platform layer to exit
+LC_API void platform_quit(void);
+
 // NOTE(tbt): control for a lock to be used with the audio thread
 LC_API void platform_get_audio_lock(void);
 LC_API void platform_release_audio_lock(void);

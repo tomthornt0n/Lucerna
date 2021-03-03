@@ -47,29 +47,29 @@ do_level_editor(OpenGLFunctions *gl,
  // NOTE(tbt): main editor window
  //~
  
- do_window(input,
-           s8_literal("main editor window"),
-           s8_literal("editor"),
-           900.0f, 256.0f,
-           400.0f)
+ ui_do_window(input,
+              s8_literal("main editor window"),
+              s8_literal("editor"),
+              900.0f, 256.0f,
+              400.0f)
  {
-  if (do_toggle_button(input,
-                       s8_literal("toggle entity edit mode"),
-                       s8_literal("edit entities"),
-                       150.0f,
-                       &editing_entities))
+  if (ui_do_toggle_button(input,
+                          s8_literal("toggle entity edit mode"),
+                          s8_literal("edit entities"),
+                          150.0f,
+                          &editing_entities))
   {
    if (!editing_entities)
    {
-    delete_ui_node(s8_literal("gen Entity editor"));
+    ui_delete_node(s8_literal("gen Entity editor"));
     global_editor_selected_entity = false;
    }
   }
   
-  if (do_button(input,
-                s8_literal("edit level meta button"),
-                s8_literal("edit level"),
-                150.0f))
+  if (ui_do_button(input,
+                   s8_literal("edit level meta button"),
+                   s8_literal("edit level"),
+                   150.0f))
   {
    if (!editing_level_meta)
    {
@@ -94,50 +94,50 @@ do_level_editor(OpenGLFunctions *gl,
  
  if (editing_level_meta)
  {
-  do_window(input,
-            s8_literal("level meta editor window"),
-            s8_literal("level meta editor"),
-            64.0f, 64.0f,
-            1000.0f)
+  ui_do_window(input,
+               s8_literal("level meta editor window"),
+               s8_literal("level meta editor"),
+               64.0f, 64.0f,
+               1000.0f)
   {
    
-   do_line_break();
-   do_slider_f(input, s8_literal("level meta editor spawn x slider"), 0.0f, 1920.0f, 1.0f, 523.0f, &level_metadata.spawn_x);
-   do_label(s8_literal("level meta editor spawn x slider label"), s8_literal("player spawn x"), -1.0f);
+   ui_do_line_break();
+   ui_do_slider_f(input, s8_literal("level meta editor spawn x slider"), 0.0f, 1920.0f, 1.0f, 523.0f, &level_metadata.spawn_x);
+   ui_do_label(s8_literal("level meta editor spawn x slider label"), s8_literal("player spawn x"), -1.0f);
    
-   do_line_break();
-   do_slider_f(input, s8_literal("level meta editor spawn y slider"), 0.0f, 1080.0f, 1.0f, 523.0f, &level_metadata.spawn_y);
-   do_label(s8_literal("level meta editor spawn y slider label"), s8_literal("player spawn y"), -1.0f);
+   ui_do_line_break();
+   ui_do_slider_f(input, s8_literal("level meta editor spawn y slider"), 0.0f, 1080.0f, 1.0f, 523.0f, &level_metadata.spawn_y);
+   ui_do_label(s8_literal("level meta editor spawn y slider label"), s8_literal("player spawn y"), -1.0f);
    
-   do_line_break();
-   do_text_entry(input, s8_literal("level meta editor bg entry"), level_metadata.bg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   do_label(s8_literal("level meta editor bg entry label"), s8_literal("background path"), -1.0f);
+   ui_do_line_break();
+   ui_do_text_entry(input, s8_literal("level meta editor bg entry"), level_metadata.bg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   ui_do_label(s8_literal("level meta editor bg entry label"), s8_literal("background path"), -1.0f);
    
-   do_line_break();
-   do_text_entry(input, s8_literal("level meta editor fg entry"), level_metadata.fg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   do_label(s8_literal("level meta editor fg entry label"), s8_literal("foreground path"), -1.0f);
+   ui_do_line_break();
+   ui_do_text_entry(input, s8_literal("level meta editor fg entry"), level_metadata.fg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   ui_do_label(s8_literal("level meta editor fg entry label"), s8_literal("foreground path"), -1.0f);
    
-   do_line_break();
-   do_text_entry(input, s8_literal("level meta editor music entry"), level_metadata.music_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   do_label(s8_literal("level meta editor music entry label"), s8_literal("music path"), -1.0f);
+   ui_do_line_break();
+   ui_do_text_entry(input, s8_literal("level meta editor music entry"), level_metadata.music_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   ui_do_label(s8_literal("level meta editor music entry label"), s8_literal("music path"), -1.0f);
    
-   do_line_break();
-   do_text_entry(input, s8_literal("level meta editor entities entry"), level_metadata.entities_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   do_label(s8_literal("level meta editor entities entry label"), s8_literal("entities path"), -1.0f);
+   ui_do_line_break();
+   ui_do_text_entry(input, s8_literal("level meta editor entities entry"), level_metadata.entities_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
+   ui_do_label(s8_literal("level meta editor entities entry label"), s8_literal("entities path"), -1.0f);
    
-   do_line_break();
-   do_slider_f(input, s8_literal("level meta editor exposure slider"), 0.0f, 3.0f, 0.05f, 150.0f, &level_metadata.exposure);
-   do_label(s8_literal("level meta editor exposure label"), s8_literal("exposure"), -1.0f);
+   ui_do_line_break();
+   ui_do_slider_f(input, s8_literal("level meta editor exposure slider"), 0.0f, 3.0f, 0.05f, 150.0f, &level_metadata.exposure);
+   ui_do_label(s8_literal("level meta editor exposure label"), s8_literal("exposure"), -1.0f);
    
-   do_line_break();
-   do_toggle_button(input, s8_literal("level meta editor is memory toggle"), s8_literal("is memory?"), 150.0f, &level_metadata.is_memory);
+   ui_do_line_break();
+   ui_do_toggle_button(input, s8_literal("level meta editor is memory toggle"), s8_literal("is memory?"), 150.0f, &level_metadata.is_memory);
    
-   do_horizontal_rule();
+   ui_do_horizontal_rule();
    
-   if (do_button(input,
-                 s8_literal("save level meta button"),
-                 s8_literal("save"),
-                 150.0f))
+   if (ui_do_button(input,
+                    s8_literal("save level meta button"),
+                    s8_literal("save"),
+                    150.0f))
    {
     LevelDescriptor *ld = &(global_current_level.level_descriptor->level_descriptor);
     ld->player_spawn_x = level_metadata.spawn_x;
@@ -151,11 +151,21 @@ do_level_editor(OpenGLFunctions *gl,
     serialise_level_descriptor(global_current_level.level_descriptor);
     
     editing_level_meta = false;
-    delete_ui_node(s8_literal("level meta editor window"));
+    ui_delete_node(s8_literal("level meta editor window"));
     memset(&level_metadata, 0, sizeof(level_metadata));
     
     unload_level_descriptor(global_current_level.level_descriptor);
     set_current_level(gl, global_current_level.level_descriptor);
+   }
+   
+   if (ui_do_button(input,
+                    s8_literal("cancel level meta edit button"),
+                    s8_literal("cancel"),
+                    15.0f))
+   {
+    editing_level_meta = false;
+    ui_delete_node(s8_literal("level meta editor window"));
+    memset(&level_metadata, 0, sizeof(level_metadata));
    }
   }
  }
@@ -171,13 +181,13 @@ do_level_editor(OpenGLFunctions *gl,
   static Entity *resizing = NULL;
   Entity *selected = global_editor_selected_entity;
   
-  do_window(input,
-            s8_literal("entity editor window"),
-            s8_literal("entity editor"),
-            64.0f, 64.0f,
-            400.0f)
+  ui_do_window(input,
+               s8_literal("entity editor window"),
+               s8_literal("entity editor"),
+               64.0f, 64.0f,
+               400.0f)
   {
-   if (do_button(input, s8_literal("create entity button"), s8_literal("create entity"), 150.0f))
+   if (ui_do_button(input, s8_literal("create entity button"), s8_literal("create entity"), 150.0f))
    {
     Entity *e = allocate_and_push_entity(&global_current_level.entities);
     
@@ -215,7 +225,7 @@ do_level_editor(OpenGLFunctions *gl,
        !input->is_mouse_button_pressed[MOUSE_BUTTON_left])
    {
     selected = e;
-    delete_ui_node(s8_literal("gen Entity editor"));
+    ui_delete_node(s8_literal("gen Entity editor"));
    }
    
    if (selected == e)

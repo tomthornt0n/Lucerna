@@ -30,6 +30,22 @@ internal MemoryArena global_level_memory;
 #include "audio.c"
 
 internal Font *global_ui_font;
+internal Font *global_title_font;
+internal Font *global_normal_font;
+
+typedef enum
+{
+ GAME_STATE_playing,
+ GAME_STATE_editor,
+ GAME_STATE_main_menu,
+ 
+ GAME_STATE_MAX,
+} GameState;
+
+internal GameState global_game_state = GAME_STATE_main_menu;
+
+typedef void ( *PerGameStateMainFunction)(OpenGLFunctions *, PlatformState *, F64);
+internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 
 #include "renderer.c"
 #include "dev_ui.c"
@@ -38,6 +54,7 @@ internal Font *global_ui_font;
 #include "funcs.gen.h"
 #include "entities.c"
 #include "editor.c"
+#include "main_menu.c"
 
 void
 game_init(OpenGLFunctions *gl)
@@ -47,12 +64,18 @@ game_init(OpenGLFunctions *gl)
  initialise_arena_with_new_memory(&global_level_memory, 27 * ONE_MB);
  
  global_ui_font = load_font(gl, s8_literal("../assets/fonts/mononoki.ttf"), 19);
+ global_title_font = load_font(gl, s8_literal("../assets/fonts/ShipporiMincho-Regular.ttf"), 72);
+ global_normal_font = load_font(gl, s8_literal("../assets/fonts/ShipporiMincho-Regular.ttf"), 28);
  
  initialise_renderer(gl);
  
  load_player_art(gl);
  
  set_current_level(gl, asset_from_path(s8_literal("../assets/levels/office_1.level")));
+ 
+ global_main_functions[GAME_STATE_playing] = do_current_level;
+ global_main_functions[GAME_STATE_editor] = do_level_editor;
+ global_main_functions[GAME_STATE_main_menu] = do_main_menu;
 }
 
 void
@@ -60,29 +83,13 @@ game_update_and_render(OpenGLFunctions *gl,
                        PlatformState *input,
                        F64 frametime_in_s)
 {
- enum
- {
-  GAME_STATE_playing,
-  GAME_STATE_editor,
- };
- 
- static I32 game_state = GAME_STATE_playing;
- 
  set_renderer_window_size(gl,
                           input->window_w,
                           input->window_h);
  
- prepare_ui();
+ ui_prepare();
  
- if (game_state == GAME_STATE_playing)
- {
-  do_current_level(gl, input, frametime_in_s);
- }
- else if (game_state == GAME_STATE_editor)
- {
-  do_level_editor(gl, input, frametime_in_s);
- }
- 
+ global_main_functions[global_game_state](gl, input, frametime_in_s);
  
  I8 fps_str[128];
  snprintf(fps_str, 128, "%f ms (%f fps)", frametime_in_s * 1000.0, 1.0 / frametime_in_s);
@@ -92,6 +99,10 @@ game_update_and_render(OpenGLFunctions *gl,
  snprintf(pos_str, 128, "%f %f", global_current_level.player.x, global_current_level.player.y);
  ui_draw_text(global_ui_font, 16.0f, 64.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(pos_str));
  
+ //
+ // NOTE(tbt): editor toggle
+ //~
+#ifdef LUCERNA_DEBUG
  if (is_key_typed(input, ctrl('v')))
  {
   platform_set_vsync(true);
@@ -106,7 +117,7 @@ game_update_and_render(OpenGLFunctions *gl,
  }
  else if (is_key_typed(input, ctrl('e')))
  {
-  game_state = (game_state == GAME_STATE_editor) ? GAME_STATE_playing : GAME_STATE_editor;
+  global_game_state = (global_game_state == GAME_STATE_editor) ? GAME_STATE_playing : GAME_STATE_editor;
   
   // NOTE(tbt): save entities
   serialise_entities(global_current_level.entities,
@@ -116,8 +127,9 @@ game_update_and_render(OpenGLFunctions *gl,
   set_camera_position(global_current_level.bg->texture.width >> 1,
                       global_current_level.bg->texture.height >> 1);
  }
+#endif
  
- finish_ui(input);
+ ui_finish(input);
  
  process_render_queue(gl);
  

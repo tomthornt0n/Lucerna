@@ -3,5 +3,5 @@ bg: "../assets/textures/office_1/background.png"
 fg: "../assets/textures/office_1/foreground.png"
 music: "../assets/audio/office_1.wav"
 entities: "../assets/levels/office_1.entities"
-exposure: 2.000000
-kind: memory
+exposure: 0.700000
+kind: world

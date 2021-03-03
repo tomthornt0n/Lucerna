@@ -1,7 +1,7 @@
-fg:           "../assets/textures/office_2/foreground.png"
-bg:           "../assets/textures/office_2/background.png"
-music:        "../assets/audio/office_1.wav"
-entities:     "../assets/levels/office_2.entities"
-player_spawn: 1230, 705
-exposure:     1.2
-kind:         memory
+player_spawn: 1230.000000, 705.000000
+bg: "../assets/textures/office_2/background.png"
+fg: "../assets/textures/office_2/foreground.png"
+music: "../assets/audio/office_1.wav"
+entities: "../assets/levels/office_2.entities"
+exposure: 2.000000
+kind: world

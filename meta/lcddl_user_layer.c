@@ -83,9 +83,9 @@ gen_editor_ui(LcddlNode *node,
  write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
  fprintf(file, "_editor_ui(PlatformState *input,\n%s *x)\n{\n", node->declaration.name);
  
- fprintf(file, "begin_window(input, s8_literal(\"gen %s editor\"), s8_literal(\"", node->declaration.name, rand());
+ fprintf(file, "_ui_begin_window(input, s8_literal(\"gen %s editor\"), s8_literal(\"", node->declaration.name, rand());
  write_string_as_lowercase_with_spaces_f(file, node->declaration.name);
- fprintf(file, " editor\"), 32.0f, 32.0f, 800.0f);\ndo_line_break();\n");
+ fprintf(file, " editor\"), 32.0f, 32.0f, 800.0f);\nui_do_line_break();\n");
  
  for (LcddlNode *child = node->first_child;
       NULL != child;
@@ -99,7 +99,7 @@ gen_editor_ui(LcddlNode *node,
     LcddlNode *dropdown_source = lcddl_find_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
-     fprintf(file, "begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
+     fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
      fprintf(file, "\"), 150.0f);\n");
      
@@ -110,7 +110,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "if (do_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), 150.0f)) { x->%s = %s; }\n",
+               "if (ui_do_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), 150.0f)) { x->%s = %s; }\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -120,7 +120,7 @@ gen_editor_ui(LcddlNode *node,
      }
      
      fprintf(file, "_ui_pop_insertion_point();\n");
-     fprintf(file, "do_line_break();\n");
+     fprintf(file, "ui_do_line_break();\n");
     }
    }
    else if (NULL != (dropdown_source_name = lcddl_get_annotation_value(child, "flag_dropdown_source")))
@@ -128,7 +128,7 @@ gen_editor_ui(LcddlNode *node,
     LcddlNode *dropdown_source = lcddl_find_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
-     fprintf(file, "begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
+     fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
      fprintf(file, "\"), 150.0f);\n");
      
@@ -139,7 +139,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "do_bit_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), &x->%s, %s, 150.0f);\n",
+               "ui_do_bit_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), &x->%s, %s, 150.0f);\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -149,14 +149,14 @@ gen_editor_ui(LcddlNode *node,
      }
      
      fprintf(file, "_ui_pop_insertion_point();\n");
-     fprintf(file, "do_line_break();\n");
+     fprintf(file, "ui_do_line_break();\n");
     }
    }
    else if (0 == strcmp(child->declaration.type->type.type_name, "U8") &&
             0 != child->declaration.type->type.array_count)
    {
     fprintf(file,
-            "do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
+            "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
             child->declaration.name,
             rand());
     write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
@@ -164,7 +164,7 @@ gen_editor_ui(LcddlNode *node,
     
     fprintf(file, "");
     fprintf(file,
-            "do_text_entry(input, s8_literal(\"gen %s entry %d\"), x->%s, NULL, %u);\ndo_line_break();\n",
+            "ui_do_text_entry(input, s8_literal(\"gen %s entry %d\"), x->%s, NULL, %u);\nui_do_line_break();\n",
             child->declaration.name,
             rand(),
             child->declaration.name,
@@ -176,11 +176,11 @@ gen_editor_ui(LcddlNode *node,
     if (0 == strcmp(child->declaration.type->type.type_name, "B32"))
     {
      fprintf(file,
-             "do_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"",
+             "ui_do_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"",
              child->declaration.name,
              rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-     fprintf(file, "\"), 150.0f, &x->%s);\ndo_line_break();\n", child->declaration.name);
+     fprintf(file, "\"), 150.0f, &x->%s);\nui_do_line_break();\n", child->declaration.name);
     }
     else
     {
@@ -223,14 +223,14 @@ gen_editor_ui(LcddlNode *node,
       float_from_annotation(child, "snap", &snap);
       
       fprintf(file,
-              "do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
+              "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
               child->declaration.name,
               rand());
       write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
       fprintf(file, ":\"), 100.0f);\n", child->declaration.name);
       fprintf(file,
-              "do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, 200.0f, &x->%s);\n"
-              "do_line_break();\n",
+              "ui_do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, 200.0f, &x->%s);\n"
+              "ui_do_line_break();\n",
               slider_kind == SLIDER_KIND_int    ? "i"  :
               slider_kind == SLIDER_KIND_long   ? "l"  :
               slider_kind == SLIDER_KIND_float  ? "f"  :

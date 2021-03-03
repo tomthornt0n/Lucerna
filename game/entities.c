@@ -147,7 +147,7 @@ do_entities(OpenGLFunctions *gl,
       NULL != e;
       e = e->next)
  {
-  B32 colliding_with_player = rectangles_are_intersecting(e->bounds, player->collision_bounds);
+  B32 colliding_with_player = are_rectangles_intersecting(e->bounds, player->collision_bounds);
   
   if (e->flags & (1 << ENTITY_FLAG_fade_out))
   {

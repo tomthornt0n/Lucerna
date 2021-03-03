@@ -1413,22 +1413,23 @@ process_render_queue(OpenGLFunctions *gl)
     
     batch.in_use = true;
     
-    if (message.angle >  0.001 ||
+    // NOTE(tbt): seems to not make any difference speed wise
+    /*if (message.angle >  0.001 ||
         message.angle < -0.001)
-    {
-     batch.buffer[batch.quad_count++] =
-      generate_rotated_quad(message.rectangle,
-                            message.angle,
-                            message.colour,
-                            message.sub_texture);
-    }
+    {*/
+    batch.buffer[batch.quad_count++] =
+     generate_rotated_quad(message.rectangle,
+                           message.angle,
+                           message.colour,
+                           message.sub_texture);
+    /*}
     else
     {
      batch.buffer[batch.quad_count++] =
       generate_quad(message.rectangle,
                     message.colour,
                     message.sub_texture);
-    }
+    }*/
     
     break;
    }

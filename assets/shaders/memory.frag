@@ -36,16 +36,16 @@ void main()
 {
 	vec2 warped_texture_coordinates = vec2(v_texture_coordinates.x - warp_amount * sin(u_time + v_texture_coordinates.y * warp_variance),
 	                                       v_texture_coordinates.y - warp_amount * cos(u_time + v_texture_coordinates.x * warp_variance));
-
+ 
 	vec3 screen_col = texture(u_screen_texture, warped_texture_coordinates).rgb;
 	vec3 bloom_col = texture(u_blur_texture, warped_texture_coordinates).rgb * bloom_tint;
-	// NOTE(tbt): wrap u_time at 100 seconds because the super jank noise function starts going a bit weird for large input numbers
-	vec3 noise = vec3(rand(warped_texture_coordinates + vec2(fmod(u_time, 100.0)))) * noise_intensity;
+	// NOTE(tbt): wrap u_time at 6 seconds because the super jank noise function starts going a bit weird for large input numbers
+	vec3 noise = vec3(rand(warped_texture_coordinates + vec2(fmod(u_time, 6.0)))) * noise_intensity;
 	vec3	vignette = vec3(vignette(warped_texture_coordinates, 0.5, 0.5)) * vignette_colour;
-
-
+ 
+ 
 	vec3 result = max(black_point,
 	                  vec3(1.0) - exp(-(screen_col + bloom_col + noise + vignette) * u_exposure));
-
+ 
 	o_colour = vec4(result, 1.0);
 }

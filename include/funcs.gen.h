@@ -2,31 +2,31 @@ internal void
 do_entity_editor_ui(PlatformState *input,
 Entity *x)
 {
-begin_window(input, s8_literal("gen Entity editor"), s8_literal("entity editor"), 32.0f, 32.0f, 800.0f);
-do_line_break();
-begin_dropdown(input, s8_literal("gen flags 18467"), s8_literal("flags"), 150.0f);
-do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_teleport 6334"), s8_literal("ENTITY_FLAG_teleport"), &x->flags, ENTITY_FLAG_teleport, 150.0f);
-do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_fade_out 26500"), s8_literal("ENTITY_FLAG_fade_out"), &x->flags, ENTITY_FLAG_fade_out, 150.0f);
+_ui_begin_window(input, s8_literal("gen Entity editor"), s8_literal("entity editor"), 32.0f, 32.0f, 800.0f);
+ui_do_line_break();
+_ui_begin_dropdown(input, s8_literal("gen flags 18467"), s8_literal("flags"), 150.0f);
+ui_do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_teleport 6334"), s8_literal("ENTITY_FLAG_teleport"), &x->flags, ENTITY_FLAG_teleport, 150.0f);
+ui_do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_fade_out 26500"), s8_literal("ENTITY_FLAG_fade_out"), &x->flags, ENTITY_FLAG_fade_out, 150.0f);
 _ui_pop_insertion_point();
-do_line_break();
-do_label(s8_literal("gen teleport_to_y label 19169"), s8_literal("teleport to y:"), 100.0f);
-do_slider_f(input, s8_literal("gen teleport_to_y slider 15724"), 0.000000f, 1080.000000f, 1.000000f, 200.0f, &x->teleport_to_y);
-do_line_break();
-do_label(s8_literal("gen teleport_to_x label 11478"), s8_literal("teleport to x:"), 100.0f);
-do_slider_f(input, s8_literal("gen teleport_to_x slider 29358"), 0.000000f, 1920.000000f, 1.000000f, 200.0f, &x->teleport_to_x);
-do_line_break();
-do_toggle_button(input, s8_literal("gen teleport_to_default_spawn 26962"), s8_literal("teleport to default spawn"), 150.0f, &x->teleport_to_default_spawn);
-do_line_break();
-do_label(s8_literal("gen teleport_to_level label 24464"), s8_literal("teleport to level:"), 100.0f);
-do_text_entry(input, s8_literal("gen teleport_to_level entry 5705"), x->teleport_to_level, NULL, 64);
-do_line_break();
-begin_dropdown(input, s8_literal("gen fade_out_direction 28145"), s8_literal("fade out direction"), 150.0f);
-if (do_button(input, s8_literal("gen FADE_OUT_DIR_w 23281"), s8_literal("FADE_OUT_DIR_w"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_w; }
-if (do_button(input, s8_literal("gen FADE_OUT_DIR_s 16827"), s8_literal("FADE_OUT_DIR_s"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_s; }
-if (do_button(input, s8_literal("gen FADE_OUT_DIR_e 9961"), s8_literal("FADE_OUT_DIR_e"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_e; }
-if (do_button(input, s8_literal("gen FADE_OUT_DIR_n 491"), s8_literal("FADE_OUT_DIR_n"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_n; }
+ui_do_line_break();
+ui_do_label(s8_literal("gen teleport_to_y label 19169"), s8_literal("teleport to y:"), 100.0f);
+ui_do_slider_f(input, s8_literal("gen teleport_to_y slider 15724"), 0.000000f, 1080.000000f, 1.000000f, 200.0f, &x->teleport_to_y);
+ui_do_line_break();
+ui_do_label(s8_literal("gen teleport_to_x label 11478"), s8_literal("teleport to x:"), 100.0f);
+ui_do_slider_f(input, s8_literal("gen teleport_to_x slider 29358"), 0.000000f, 1920.000000f, 1.000000f, 200.0f, &x->teleport_to_x);
+ui_do_line_break();
+ui_do_toggle_button(input, s8_literal("gen teleport_to_default_spawn 26962"), s8_literal("teleport to default spawn"), 150.0f, &x->teleport_to_default_spawn);
+ui_do_line_break();
+ui_do_label(s8_literal("gen teleport_to_level label 24464"), s8_literal("teleport to level:"), 100.0f);
+ui_do_text_entry(input, s8_literal("gen teleport_to_level entry 5705"), x->teleport_to_level, NULL, 64);
+ui_do_line_break();
+_ui_begin_dropdown(input, s8_literal("gen fade_out_direction 28145"), s8_literal("fade out direction"), 150.0f);
+if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_w 23281"), s8_literal("FADE_OUT_DIR_w"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_w; }
+if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_s 16827"), s8_literal("FADE_OUT_DIR_s"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_s; }
+if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_e 9961"), s8_literal("FADE_OUT_DIR_e"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_e; }
+if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_n 491"), s8_literal("FADE_OUT_DIR_n"), 150.0f)) { x->fade_out_direction = FADE_OUT_DIR_n; }
 _ui_pop_insertion_point();
-do_line_break();
+ui_do_line_break();
 _ui_pop_insertion_point();
 }
 

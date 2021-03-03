@@ -480,6 +480,13 @@ platform_toggle_fullscreen(void)
  }
 }
 
+void
+platform_quit(void)
+{
+ global_running = false;
+}
+
+
 LRESULT CALLBACK
 window_proc(HWND windowHandle,
             UINT message,

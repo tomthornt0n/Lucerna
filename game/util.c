@@ -104,7 +104,7 @@ offset_rectangle(Rect rectangle,
                           rectangle.h);
 }
 
-internal Colour
+internal inline Colour
 colour_lerp(Colour a,
             Colour b,
             F32 t)
@@ -120,8 +120,8 @@ colour_lerp(Colour a,
  return result;
 }
 
-internal B32
-rectangles_are_intersecting(Rect a,
+internal inline B32
+are_rectangles_intersecting(Rect a,
                             Rect b)
 {
  if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
@@ -129,7 +129,7 @@ rectangles_are_intersecting(Rect a,
  return true;
 }
 
-internal B32
+internal inline B32
 is_point_in_region(F32 x, F32 y,
                    Rect region)
 {
@@ -160,7 +160,7 @@ print_opengl_errors(OpenGLFunctions *gl)
 #endif
 }
 
-
+internal void
 matrix_transform_point(F32 x, F32 y,
                        F32 *matrix, // NOTE(tbt): 4x4 matrix
                        F32 *result_x,

@@ -290,7 +290,7 @@ load_font(OpenGLFunctions *gl,
  
  temporary_memory_begin(&global_level_memory);
  
- S8 file = platform_read_entire_file(&global_static_memory, path);
+ S8 file = platform_read_entire_file(&global_level_memory, path);
  
  assert(file.buffer);
  
@@ -450,7 +450,7 @@ serialise_level_descriptor(Asset *asset)
                        "music: \"%.*s\"\n"
                        "entities: \"%.*s\"\n"
                        "exposure: %f\n"
-                       "kind: %s\n",
+                       "kind: %s",
                        asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,
                        (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer,
                        (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer,
