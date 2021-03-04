@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include "lcddl.h"
 
-internal void
+static void
 _write_string_as_word_delimited_f(FILE *file,
                                   char *string,
                                   char delimiter)
@@ -31,51 +31,48 @@ _write_string_as_word_delimited_f(FILE *file,
  }
 }
 
-internal void
+static void
 write_string_as_lowercase_with_underscores_f(FILE *file,
                                              char *string)
 {
  _write_string_as_word_delimited_f(file, string, '_');
 }
 
-internal void
+static void
 write_string_as_lowercase_with_spaces_f(FILE *file,
                                         char *string)
 {
  _write_string_as_word_delimited_f(file, string, ' ');
 }
 
-internal void
+static void
 float_from_annotation(LcddlNode *node,
                       char *tag,
                       float *result)
 {
- // NOTE(tbt): very basic - only kind of expression evaluation done is unary '-'
- float negate = 1.0f;
- 
  LcddlNode *expr;
- 
  if (NULL != (expr = lcddl_get_annotation_value(node, tag)))
  {
-  if (expr->kind == LCDDL_NODE_KIND_unary_operator &&
-      expr->unary_operator.kind == LCDDL_UN_OP_KIND_negative)
-  {
-   expr = expr->unary_operator.operand;
-   negate = -1.0f;
-  }
-  
-  if (expr->kind == LCDDL_NODE_KIND_float_literal)
-  {
-   *result = atof(expr->literal.value) * negate;
-  }
-  else if (expr->kind == LCDDL_NODE_KIND_integer_literal)
-  {
-   *result = atoi(expr->literal.value) * negate;
-  }
+  *result = (float)lcddl_evaluate_expression(expr);
  }
 }
 
-internal void
+static LcddlNode *
+find_first_top_level_declaration(char *name)
+{
+ LcddlSearchResult *search_result = lcddl_find_top_level_declaration(name);
+ if (search_result)
+ {
+  return search_result->node;
+ }
+ else
+ {
+  fprintf(stderr, "could not find top level declaration '%s'\n", name);
+  return NULL;
+ }
+}
+
+static void
 gen_editor_ui(LcddlNode *node,
               FILE *file)
 {
@@ -96,7 +93,7 @@ gen_editor_ui(LcddlNode *node,
    LcddlNode *dropdown_source_name;
    if (NULL != (dropdown_source_name = lcddl_get_annotation_value(child, "radio_dropdown_source")))
    {
-    LcddlNode *dropdown_source = lcddl_find_top_level_declaration(dropdown_source_name->literal.value);
+    LcddlNode *dropdown_source = find_first_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
      fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
@@ -125,7 +122,7 @@ gen_editor_ui(LcddlNode *node,
    }
    else if (NULL != (dropdown_source_name = lcddl_get_annotation_value(child, "flag_dropdown_source")))
    {
-    LcddlNode *dropdown_source = lcddl_find_top_level_declaration(dropdown_source_name->literal.value);
+    LcddlNode *dropdown_source = find_first_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
      fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
@@ -251,7 +248,7 @@ gen_editor_ui(LcddlNode *node,
 }
 
 // NOTE(tbt): doesn't recursively enter sub structs / unions / whatever or do anything fancy
-internal void
+static void
 gen_serialisation_funcs(LcddlNode *node,
                         FILE *file)
 {

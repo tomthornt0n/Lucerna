@@ -10,6 +10,8 @@ typedef struct
  char entities_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
  F32 exposure;
  B32 is_memory;
+ F32 floor_gradient;
+ F32 player_scale;
 } EditorLevelMetadata;;
 
 internal void
@@ -84,6 +86,8 @@ do_level_editor(OpenGLFunctions *gl,
     memcpy(level_metadata.entities_buffer, ld->entities_path.buffer, ld->entities_path.len);
     level_metadata.exposure = ld->exposure;
     level_metadata.is_memory = ld->is_memory;
+    level_metadata.floor_gradient = ld->floor_gradient;
+    level_metadata.player_scale = ld->player_scale;
    }
   }
  }
@@ -94,13 +98,41 @@ do_level_editor(OpenGLFunctions *gl,
  
  if (editing_level_meta)
  {
+  // NOTE(tbt): preview player spawn location and scale
+  world_fill_rectangle(rectangle_literal(level_metadata.spawn_x - 1.0f,
+                                         0.0f,
+                                         2.0f,
+                                         global_renderer_window_h),
+                       colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
+  
+  F32 y_offset = 0.0f;
+  if (level_metadata.floor_gradient < -0.001 ||
+      level_metadata.floor_gradient > 0.001)
+  {
+   y_offset = level_metadata.spawn_x * tan(-level_metadata.floor_gradient);
+  }
+  
+  world_fill_rotated_rectangle(rectangle_literal(0.0f,
+                                                 level_metadata.spawn_y + y_offset - 1.0f,
+                                                 global_renderer_window_w * 2.0,
+                                                 2.0f),
+                               level_metadata.floor_gradient,
+                               colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
+  
+  F32 _player_scale = level_metadata.player_scale * (1.0f / (global_renderer_window_h - level_metadata.spawn_y));
+  world_stroke_rectangle(rectangle_literal(level_metadata.spawn_x + PLAYER_COLLISION_X * _player_scale,
+                                           level_metadata.spawn_y + PLAYER_COLLISION_Y * _player_scale,
+                                           PLAYER_COLLISION_W * _player_scale,
+                                           PLAYER_COLLISION_H * _player_scale),
+                         colour_literal(1.0f, 0.0f, 0.0f, 0.4f),
+                         2.0f);
+  
   ui_do_window(input,
                s8_literal("level meta editor window"),
-               s8_literal("level meta editor"),
+               s8_literal("level metadata editor"),
                64.0f, 64.0f,
                1000.0f)
   {
-   
    ui_do_line_break();
    ui_do_slider_f(input, s8_literal("level meta editor spawn x slider"), 0.0f, 1920.0f, 1.0f, 523.0f, &level_metadata.spawn_x);
    ui_do_label(s8_literal("level meta editor spawn x slider label"), s8_literal("player spawn x"), -1.0f);
@@ -132,6 +164,14 @@ do_level_editor(OpenGLFunctions *gl,
    ui_do_line_break();
    ui_do_toggle_button(input, s8_literal("level meta editor is memory toggle"), s8_literal("is memory?"), 150.0f, &level_metadata.is_memory);
    
+   ui_do_line_break();
+   ui_do_slider_f(input, s8_literal("level meta editor floor gradient slider"), -1.0f, 1.0f, -1.0f, 523.0f, &level_metadata.floor_gradient);
+   ui_do_label(s8_literal("level meta editor floor gradient slider label"), s8_literal("floor gradient"), -1.0f);
+   
+   ui_do_line_break();
+   ui_do_slider_f(input, s8_literal("level meta editor player scale slider"), 250.0f, 600.0f, 1.0f, 523.0f, &level_metadata.player_scale);
+   ui_do_label(s8_literal("level meta editor player scale slider label"), s8_literal("player scale"), -1.0f);
+   
    ui_do_horizontal_rule();
    
    if (ui_do_button(input,
@@ -148,6 +188,8 @@ do_level_editor(OpenGLFunctions *gl,
     ld->entities_path = s8_from_cstring(&global_level_memory, level_metadata.entities_buffer);
     ld->exposure = level_metadata.exposure;
     ld->is_memory = level_metadata.is_memory;
+    ld->floor_gradient = level_metadata.floor_gradient;
+    ld->player_scale = level_metadata.player_scale;
     serialise_level_descriptor(global_current_level.level_descriptor);
     
     editing_level_meta = false;

@@ -59,6 +59,7 @@ do_main_menu(OpenGLFunctions *gl,
   MAIN_MENU_BUTTON_NONE,
   
   MAIN_MENU_BUTTON_play,
+  MAIN_MENU_BUTTON_continue,
   MAIN_MENU_BUTTON_exit,
   
   MAIN_MENU_BUTTON_MAX,
@@ -87,7 +88,14 @@ do_main_menu(OpenGLFunctions *gl,
  }
  
  {
-  _MAIN_MENU_BUTTON(s8_literal("Exit"), 450.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
+  _MAIN_MENU_BUTTON(s8_literal("Continue"), 450.0f, keyboard_selection == MAIN_MENU_BUTTON_continue)
+  {
+   global_game_state = GAME_STATE_playing;
+  }
+ }
+ 
+ {
+  _MAIN_MENU_BUTTON(s8_literal("Exit"), 500.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
   {
    platform_quit();
   }

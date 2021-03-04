@@ -824,36 +824,6 @@ wWinMain(HINSTANCE hInstance,
  assert(_game_audio_callback);
  assert(_game_cleanup);
  
-#if defined LUCERNA_DEBUG
- AllocConsole();
- 
- {
-  HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
-  if (stderr_handle != INVALID_HANDLE_VALUE)
-  {
-   DWORD output_mode;
-   if (GetConsoleMode(stderr_handle, &output_mode))
-   {
-    output_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING; // NOTE(tbt): enable ANSI escape sequences
-    SetConsoleMode(stderr_handle, output_mode);
-   }
-  }
- }
- 
- {
-  HANDLE stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (stdout_handle != INVALID_HANDLE_VALUE)
-  {
-   DWORD output_mode;
-   if (GetConsoleMode(stdout_handle, &output_mode))
-   {
-    output_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING; // NOTE(tbt): enable ANSI escape sequences
-    SetConsoleMode(stdout_handle, output_mode);
-   }
-  }
- }
-#endif
- 
  //
  // NOTE(tbt): setup window and opengl context
  //~

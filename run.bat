@@ -1,5 +1,5 @@
 @echo off
 
-pushd bin
-.\platform_windows.exe
-popd
+PUSHD bin
+platform_windows.exe
+POPD

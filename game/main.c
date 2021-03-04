@@ -24,8 +24,10 @@ internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
+#define LCDDL_AS_LIBRARY
+#include "lcddl.c"
+
 #include "util.c"
-#include "level_descriptor_parser.c"
 #include "asset_manager.c"
 #include "audio.c"
 
@@ -49,7 +51,6 @@ internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 
 #include "renderer.c"
 #include "dev_ui.c"
-#include "player.c"
 #include "types.gen.h"
 #include "funcs.gen.h"
 #include "entities.c"
@@ -59,6 +60,8 @@ internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 void
 game_init(OpenGLFunctions *gl)
 {
+ lcddl_initialise();
+ 
  initialise_arena_with_new_memory(&global_static_memory, 1 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
  initialise_arena_with_new_memory(&global_level_memory, 27 * ONE_MB);
@@ -121,7 +124,7 @@ game_update_and_render(OpenGLFunctions *gl,
   
   // NOTE(tbt): save entities
   serialise_entities(global_current_level.entities,
-                     global_current_level.entities_path);
+                     global_current_level.level_descriptor->level_descriptor.entities_path);
   
   // NOTE(tbt): reset camera position
   set_camera_position(global_current_level.bg->texture.width >> 1,

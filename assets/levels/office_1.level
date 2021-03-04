@@ -1,7 +1,10 @@
-player_spawn: 920.000000, 580.000000
-bg: "../assets/textures/office_1/background.png"
-fg: "../assets/textures/office_1/foreground.png"
-music: "../assets/audio/office_1.wav"
-entities: "../assets/levels/office_1.entities"
-exposure: 0.700000
-kind: world
+player_spawn_x := 920.000000;
+player_spawn_y := 580.000000;
+bg := "../assets/textures/office_1/background.png";
+fg := "../assets/textures/office_1/foreground.png";
+music := "../assets/audio/office_1.wav";
+entities := "../assets/levels/office_1.entities";
+exposure := 0.700000;
+kind := world;
+floor_gradient := 0.000000;
+player_scale := 450.000000;

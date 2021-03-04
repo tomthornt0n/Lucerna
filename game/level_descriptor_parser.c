@@ -10,6 +10,7 @@ typedef struct
  S8 entities_path;
  F32 exposure;
  B32 is_memory;
+ F32 floor_gradient;
 } LevelDescriptor;
 
 typedef enum
@@ -340,6 +341,31 @@ parse_level_descriptor(S8 file)
     else
     {
      fprintf(stderr, "    Error parsing level descriptor: expected a colon after 'exposure'\n");
+    }
+   }
+   else if (0 == strncmp(token.string, "gradient", token.string_length))
+   {
+    token = get_next_level_descriptor_token(&buffer, &chars_remaining);
+    if (token.kind = LEVEL_DESCRIPTOR_TOKEN_KIND_symbol &&
+        token.string[0] == ':')
+    {
+     token = get_next_level_descriptor_token(&buffer, &chars_remaining);
+     if (token.kind == LEVEL_DESCRIPTOR_TOKEN_KIND_numeric_block)
+     {
+      char num_cstr_buf[512] = {0};
+      
+      snprintf(num_cstr_buf, 512, "%.*s", (I32)token.string_length, token.string);
+      result.floor_gradient = atof(num_cstr_buf);
+      fprintf(stderr, "    Floor gradient = %f\n", result.floor_gradient);
+     }
+     else
+     {
+      fprintf(stderr, "    Error parsing level descriptor: expected a numeric block as value for field 'floor_gradient'\n");
+     }
+    }
+    else
+    {
+     fprintf(stderr, "    Error parsing level descriptor: expected a colon after 'floor_gradient'\n");
     }
    }
    else if (0 == strncmp(token.string, "kind", token.string_length))

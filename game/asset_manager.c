@@ -57,6 +57,19 @@ enum
  SOURCE_FLAG_LOOPING = 1 << 2
 };
 
+typedef struct
+{
+ F32 player_spawn_x, player_spawn_y;
+ S8 bg_path;
+ S8 fg_path;
+ S8 music_path;
+ S8 entities_path;
+ F32 exposure;
+ B32 is_memory;
+ F32 floor_gradient;
+ F32 player_scale;
+} LevelDescriptor;
+
 typedef struct AudioSource AudioSource;
 struct AudioSource
 {
@@ -85,12 +98,13 @@ enum
 
 struct Asset
 {
- B32 touched;
+ S8 path;
  Asset *next_hash;
  Asset *next_loaded;
  I32 kind;
  B32 loaded;
- S8 path;
+ B32 touched;
+ B32 persist; // NOTE(tbt): do not unload at level change
  
  union
  {
@@ -105,6 +119,21 @@ internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {0};
 #define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
 
 Asset *global_loaded_assets = NULL;
+
+internal void
+set_asset_persist(Asset *asset,
+                  B32 persist)
+{
+ if (asset->kind == ASSET_KIND_level &&
+     persist)
+ {
+  fprintf(stderr, "Level descriptors cannot be persisted through level reloads.\n");
+ }
+ else
+ {
+  asset->persist = persist;
+ }
+}
 
 internal Asset *
 asset_from_path(S8 path)
@@ -361,7 +390,7 @@ load_audio(Asset *asset)
  assert(bits_per_sample == 16);
  assert(channels == 2);
  
- asset->audio.buffer = arena_allocate(&global_level_memory, data_size);
+ asset->audio.buffer = calloc(1, data_size);
  wav_read(path_cstr, NULL, NULL, NULL, NULL, asset->audio.buffer);
  
  asset->audio.buffer_size = data_size;
@@ -394,10 +423,9 @@ unload_audio(Asset *asset)
   platform_release_audio_lock();
  }
  
- asset->loaded = false;
- // NOTE(tbt): audio data is in memory with level duration so will be freed when the
- //            map is unloaded
+ free(asset->audio.buffer);
  asset->audio.buffer = NULL;
+ asset->loaded = false;
  
  Asset **indirect_asset = &global_loaded_assets;
  while (*indirect_asset != asset) { indirect_asset = &(*indirect_asset)->next_loaded; }
@@ -417,8 +445,80 @@ load_level_descriptor(Asset *asset)
  
  fprintf(stderr, "Parsing level descriptor: '%.*s'\n", (I32)asset->path.len, asset->path.buffer);
  
- S8 file = platform_read_entire_file(&global_static_memory, asset->path);
- asset->level_descriptor = parse_level_descriptor(file);
+ S8 file = platform_read_entire_file(&global_frame_memory, asset->path);
+ LcddlNode *level_descriptor_ast = lcddl_parse_from_memory(file.buffer, file.len);
+ 
+ fprintf(stderr, "LCDDL parsed level descriptor successfully.\n");
+ 
+ for (LcddlNode *field = level_descriptor_ast->first_child;
+      NULL != field;
+      field = field->next_sibling)
+ {
+  if (field->kind != LCDDL_NODE_KIND_declaration) { continue; }
+  
+  if (0 == strcmp(field->declaration.name, "player_spawn_x"))
+  {
+   asset->level_descriptor.player_spawn_x = lcddl_evaluate_expression(field->declaration.value);
+   fprintf(stderr, "\tplayer spawn x = %f\n", asset->level_descriptor.player_spawn_x);
+  }
+  else if (0 == strcmp(field->declaration.name, "player_spawn_y"))
+  {
+   asset->level_descriptor.player_spawn_y = lcddl_evaluate_expression(field->declaration.value);
+   fprintf(stderr, "\tplayer spawn y = %f\n", asset->level_descriptor.player_spawn_y);
+  }
+  else if (0 == strcmp(field->declaration.name, "bg") &&
+           field->declaration.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   asset->level_descriptor.bg_path = s8_from_cstring(&global_level_memory, field->declaration.value->literal.value);
+   fprintf(stderr, "\tbackground path = %.*s\n", (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer);
+  }
+  else if (0 == strcmp(field->declaration.name, "fg") &&
+           field->declaration.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   asset->level_descriptor.fg_path = s8_from_cstring(&global_level_memory, field->declaration.value->literal.value);
+   fprintf(stderr, "\tforeground path = %.*s\n", (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer);
+  }
+  else if (0 == strcmp(field->declaration.name, "music") &&
+           field->declaration.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   asset->level_descriptor.music_path = s8_from_cstring(&global_level_memory, field->declaration.value->literal.value);
+   fprintf(stderr, "\tmusic path = %.*s\n", (I32)asset->level_descriptor.music_path.len, asset->level_descriptor.music_path.buffer);
+  }
+  else if (0 == strcmp(field->declaration.name, "entities") &&
+           field->declaration.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   asset->level_descriptor.entities_path = s8_from_cstring(&global_level_memory, field->declaration.value->literal.value);
+   fprintf(stderr, "\tentities path = %.*s\n", (I32)asset->level_descriptor.entities_path.len, asset->level_descriptor.entities_path.buffer);
+  }
+  else if (0 == strcmp(field->declaration.name, "exposure"))
+  {
+   asset->level_descriptor.exposure = lcddl_evaluate_expression(field->declaration.value);
+   fprintf(stderr, "\texposure = %f\n", asset->level_descriptor.exposure);
+  }
+  else if (0 == strcmp(field->declaration.name, "kind") &&
+           field->declaration.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   if (0 == strcmp(field->declaration.value->literal.value, "memory"))
+   {
+    asset->level_descriptor.is_memory = true;
+   }
+   else if (0 == strcmp(field->declaration.value->literal.value, "world"))
+   {
+    asset->level_descriptor.is_memory = false;
+   }
+   fprintf(stderr, "\tis memory = %s\n", asset->level_descriptor.is_memory ? "true" : "false");
+  }
+  else if (0 == strcmp(field->declaration.name, "floor_gradient"))
+  {
+   asset->level_descriptor.floor_gradient = lcddl_evaluate_expression(field->declaration.value);
+   fprintf(stderr, "\tfloor gradient = %f\n", asset->level_descriptor.exposure);
+  }
+  else if (0 == strcmp(field->declaration.name, "player_scale"))
+  {
+   asset->level_descriptor.player_scale = lcddl_evaluate_expression(field->declaration.value);
+   fprintf(stderr, "\tplayer scale = %f\n", asset->level_descriptor.exposure);
+  }
+ }
  
  asset->loaded = true;
  asset->kind = ASSET_KIND_level;
@@ -444,20 +544,25 @@ serialise_level_descriptor(Asset *asset)
  U8 buffer[1024];
  U64 length = snprintf(buffer,
                        1024,
-                       "player_spawn: %f, %f\n"
-                       "bg: \"%.*s\"\n"
-                       "fg: \"%.*s\"\n"
-                       "music: \"%.*s\"\n"
-                       "entities: \"%.*s\"\n"
-                       "exposure: %f\n"
-                       "kind: %s",
+                       "player_spawn_x := %f;\n"
+                       "player_spawn_y := %f;\n"
+                       "bg := \"%.*s\";\n"
+                       "fg := \"%.*s\";\n"
+                       "music := \"%.*s\";\n"
+                       "entities := \"%.*s\";\n"
+                       "exposure := %f;\n"
+                       "kind := %s;\n"
+                       "floor_gradient := %f;\n"
+                       "player_scale := %f;\n",
                        asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,
                        (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer,
                        (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer,
                        (I32)asset->level_descriptor.music_path.len, asset->level_descriptor.music_path.buffer,
                        (I32)asset->level_descriptor.entities_path.len, asset->level_descriptor.entities_path.buffer,
                        asset->level_descriptor.exposure,
-                       asset->level_descriptor.is_memory ? "memory" : "world");
+                       asset->level_descriptor.is_memory ? "memory" : "world",
+                       asset->level_descriptor.floor_gradient,
+                       asset->level_descriptor.player_scale);
  
  if (length < 1024)
  {
@@ -470,40 +575,50 @@ serialise_level_descriptor(Asset *asset)
 }
 
 internal void
+unload_asset(OpenGLFunctions *gl,
+             Asset *asset)
+{
+ switch (asset->kind)
+ {
+  case ASSET_KIND_texture:
+  {
+   unload_texture(gl, asset);
+   break;
+  }
+  case ASSET_KIND_audio:
+  {
+   unload_audio(asset);
+   break;
+  }
+  case ASSET_KIND_level:
+  {
+   unload_level_descriptor(asset);
+   break;
+  }
+  default:
+  {
+   fprintf(stderr,
+           "skipping unloading asset '%.*s'...\n",
+           (I32)asset->path.len,
+           asset->path.buffer);
+   break;
+  }
+ }
+}
+
+internal void
 unload_all_assets(OpenGLFunctions *gl)
 {
  fprintf(stderr, "Unloading all assets...\n");
  
- Asset *loaded_asset = global_loaded_assets;
- while (loaded_asset)
+ Asset *asset = global_loaded_assets;
+ while (asset)
  {
-  switch (loaded_asset->kind)
+  if (!asset->persist)
   {
-   case ASSET_KIND_texture:
-   {
-    unload_texture(gl, loaded_asset);
-    break;
-   }
-   case ASSET_KIND_audio:
-   {
-    unload_audio(loaded_asset);
-    break;
-   }
-   case ASSET_KIND_level:
-   {
-    unload_level_descriptor(loaded_asset);
-    break;
-   }
-   default:
-   {
-    fprintf(stderr,
-            "skipping unloading asset '%.*s'...\n",
-            (I32)loaded_asset->path.len,
-            loaded_asset->path.buffer);
-    break;
-   }
+   unload_asset(gl, asset);
   }
-  loaded_asset = loaded_asset->next_loaded;
+  asset = asset->next_loaded;
  }
 }
 
