@@ -551,7 +551,7 @@ serialise_level_descriptor(Asset *asset)
                        "music := \"%.*s\";\n"
                        "entities := \"%.*s\";\n"
                        "exposure := %f;\n"
-                       "kind := %s;\n"
+                       "kind := \"%s\";\n"
                        "floor_gradient := %f;\n"
                        "player_scale := %f;\n",
                        asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,

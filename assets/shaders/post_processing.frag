@@ -15,6 +15,8 @@ const float vignette_radius = 0.5;
 const float gamma = 2.2;
 const float overall_strength = 0.95;
 
+const float desired_aspect = 9.0 / 16.0;
+
 float fmod(float x, float y)
 {
 	return x - y * (floor(x / y));

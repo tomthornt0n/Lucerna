@@ -82,9 +82,11 @@ do_player(OpenGLFunctions *gl,
           F64 frametime_in_s,
           Player *player)
 {
+ // TODO(tbt): better rotation function for legs
+ 
  F32 player_speed = (128.0f + sin(global_time * 0.2) * 5.0f) * frametime_in_s;
  
- F32 animation_y_offset = sin(global_time + 2.0f) * 3.0f;
+ F32 animation_y_offset = -sin(global_time * 6.0f) * 3.0f;
  
  player->x_velocity =
   input->is_key_pressed[KEY_a] * -player_speed +
@@ -101,7 +103,7 @@ do_player(OpenGLFunctions *gl,
  if (player->x_velocity >  0.01f)
  {
   world_draw_sub_texture(rectangle_literal(player->x + 32.0f * scale,
-                                           player->y - (153.0f + animation_y_offset) * scale,
+                                           player->y + (-153.0f + animation_y_offset) * scale,
                                            113.0f * scale, 203.0f * scale),
                          WHITE,
                          global_player_art.texture,
@@ -141,7 +143,7 @@ do_player(OpenGLFunctions *gl,
  else if (player->x_velocity < -0.01f)
  {
   world_draw_sub_texture(rectangle_literal(player->x + 32 * scale,
-                                           player->y - (153.0f + animation_y_offset) * scale,
+                                           player->y + (-153.0f + animation_y_offset) * scale,
                                            113.0f * scale, 203.0f * scale),
                          WHITE,
                          global_player_art.texture,

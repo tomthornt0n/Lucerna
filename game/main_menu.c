@@ -19,7 +19,7 @@ _measure_and_draw_text(Font *font,
 #define MAIN_MENU_BUTTON_SHIFT_AMOUNT 16.0f
 #define MAIN_MENU_BUTTON_SHIFT_SPEED 256.0f
 #define MAIN_MENU_TEXT_COLOUR colour_literal(0.92f, 0.97f, 0.92f, 1.0f)
-#define MAIN_MENU_BUTTON_REGION_TOLERANCE 8.0f
+#define MAIN_MENU_BUTTON_REGION_TOLERANCE 16.0f
 
 #define _MAIN_MENU_BUTTON(_text, _y, _selected_with_keyboard)                                                                                \
 Rect _button_bounds = _ui_measure_text(global_normal_font, global_renderer_window_w / 2.0f, (_y), -1.0f, (_text)); \
