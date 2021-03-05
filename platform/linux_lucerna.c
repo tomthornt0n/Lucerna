@@ -514,7 +514,7 @@ main(int argc,
  initialise_arena_with_new_memory(&platform_layer_frame_memory, PLATFORM_LAYER_FRAME_MEMORY_SIZE);
  initialise_arena_with_new_memory(&global_platform_static_memory, PLATFORM_LAYER_STATIC_MEMORY_SIZE);
  
- PlatformState input;
+ PlatformState input = {0};
  OpenGLFunctions gl;
  
  U32 window_width = DEFAULT_WINDOW_WIDTH;
@@ -570,8 +570,6 @@ main(int argc,
  GameUpdateAndRender game_update_and_render;
  
  linux_load_all_opengl_functions(&gl);
- 
- memset(&input, 0, sizeof(input));
  
  global_display = XOpenDisplay(0);
  assert(global_display && "could not open display");

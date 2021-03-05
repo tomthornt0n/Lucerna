@@ -86,14 +86,13 @@ do_player(OpenGLFunctions *gl,
  
  F32 player_speed = (128.0f + sin(global_time * 0.2) * 5.0f) * frametime_in_s;
  
- F32 animation_y_offset = -sin(global_time * 6.0f) * 3.0f;
+ F32 animation_y_offset = -sin(global_time * 6.0f) * 2.0f;
  
  player->x_velocity =
   input->is_key_pressed[KEY_a] * -player_speed +
   input->is_key_pressed[KEY_d] * player_speed;
  
  player->y_velocity = player->x_velocity * global_current_level.y_offset_per_x;
- fprintf(stderr, "%f\n", player->y_velocity);
  
  player->x += player->x_velocity;
  player->y += player->y_velocity;

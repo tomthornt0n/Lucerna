@@ -56,6 +56,31 @@ internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 #include "entities.c"
 #include "editor.c"
 #include "main_menu.c"
+#include "dialogue.c"
+
+internal void
+game_playing_main(OpenGLFunctions *gl,
+                  PlatformState *input,
+                  F64 frametime_in_s)
+{
+ static B32 played_intro_dialogue = false;
+ static DialogueState dialogue_state = {0};
+ 
+ if (!played_intro_dialogue)
+ {
+  S8List *dialogue = push_s8_to_list(&global_static_memory,
+                                     NULL,
+                                     s8_literal("this is a test!          "));
+  append_s8_to_list(&global_static_memory, dialogue, s8_literal("line two...          "));
+  append_s8_to_list(&global_static_memory, dialogue, s8_literal("line three!          "));
+  
+  played_intro_dialogue = true;
+  play_dialogue(&dialogue_state, dialogue);
+ }
+ 
+ do_current_level(gl, input, frametime_in_s);
+ do_dialogue(&dialogue_state);
+}
 
 void
 game_init(OpenGLFunctions *gl)
@@ -76,7 +101,7 @@ game_init(OpenGLFunctions *gl)
  
  set_current_level(gl, asset_from_path(s8_literal("../assets/levels/office_1.level")));
  
- global_main_functions[GAME_STATE_playing] = do_current_level;
+ global_main_functions[GAME_STATE_playing] = game_playing_main;
  global_main_functions[GAME_STATE_editor] = do_level_editor;
  global_main_functions[GAME_STATE_main_menu] = do_main_menu;
 }

@@ -184,7 +184,7 @@ typedef struct
  B32 is_key_pressed[256];
  KeyTyped *keys_typed;
  B32 is_mouse_button_pressed[8];
- I16 mouse_x, mouse_y;
+ F32 mouse_x, mouse_y;
  I32 mouse_scroll;
  U32 window_w, window_h;
 } PlatformState;

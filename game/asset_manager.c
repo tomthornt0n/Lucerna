@@ -116,7 +116,7 @@ struct Asset
 
 #define ASSET_HASH_TABLE_SIZE (512)
 internal Asset global_assets_dict[ASSET_HASH_TABLE_SIZE] = {0};
-#define asset_hash(string) hash_string((string), ASSET_HASH_TABLE_SIZE);
+#define asset_hash(string) hash_s8((string), ASSET_HASH_TABLE_SIZE);
 
 Asset *global_loaded_assets = NULL;
 
@@ -146,7 +146,7 @@ asset_from_path(S8 path)
   Asset *prev = NULL;
   for (; NULL != result; prev = result, result = result->next_hash)
   {
-   if (string_match(path, result->path))
+   if (s8_match(path, result->path))
    {
     return result;
    }
@@ -158,14 +158,14 @@ asset_from_path(S8 path)
                                    sizeof(*prev->next_hash));
   result = prev->next_hash;
   result->touched = true;
-  result->path = copy_string(&global_static_memory, path);
+  result->path = copy_s8(&global_static_memory, path);
   
   return result;
  }
  else
  {
   result->touched = true;
-  result->path = copy_string(&global_static_memory, path);
+  result->path = copy_s8(&global_static_memory, path);
   return result;
  }
 }
@@ -541,37 +541,32 @@ serialise_level_descriptor(Asset *asset)
 {
  fprintf(stderr, "Serialising level descriptor %.*s\n", (I32)asset->path.len, asset->path.buffer);
  
- U8 buffer[1024];
- U64 length = snprintf(buffer,
-                       1024,
-                       "player_spawn_x := %f;\n"
-                       "player_spawn_y := %f;\n"
-                       "bg := \"%.*s\";\n"
-                       "fg := \"%.*s\";\n"
-                       "music := \"%.*s\";\n"
-                       "entities := \"%.*s\";\n"
-                       "exposure := %f;\n"
-                       "kind := \"%s\";\n"
-                       "floor_gradient := %f;\n"
-                       "player_scale := %f;\n",
-                       asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,
-                       (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer,
-                       (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer,
-                       (I32)asset->level_descriptor.music_path.len, asset->level_descriptor.music_path.buffer,
-                       (I32)asset->level_descriptor.entities_path.len, asset->level_descriptor.entities_path.buffer,
-                       asset->level_descriptor.exposure,
-                       asset->level_descriptor.is_memory ? "memory" : "world",
-                       asset->level_descriptor.floor_gradient,
-                       asset->level_descriptor.player_scale);
- 
- if (length < 1024)
+ temporary_memory_begin(&global_static_memory);
  {
-  platform_write_entire_file(asset->path, buffer, length);
+  S8 file = s8_from_format_string(&global_static_memory,
+                                  "player_spawn_x := %f;\n"
+                                  "player_spawn_y := %f;\n"
+                                  "bg := \"%.*s\";\n"
+                                  "fg := \"%.*s\";\n"
+                                  "music := \"%.*s\";\n"
+                                  "entities := \"%.*s\";\n"
+                                  "exposure := %f;\n"
+                                  "kind := \"%s\";\n"
+                                  "floor_gradient := %f;\n"
+                                  "player_scale := %f;\n",
+                                  asset->level_descriptor.player_spawn_x, asset->level_descriptor.player_spawn_y,
+                                  (I32)asset->level_descriptor.bg_path.len, asset->level_descriptor.bg_path.buffer,
+                                  (I32)asset->level_descriptor.fg_path.len, asset->level_descriptor.fg_path.buffer,
+                                  (I32)asset->level_descriptor.music_path.len, asset->level_descriptor.music_path.buffer,
+                                  (I32)asset->level_descriptor.entities_path.len, asset->level_descriptor.entities_path.buffer,
+                                  asset->level_descriptor.exposure,
+                                  asset->level_descriptor.is_memory ? "memory" : "world",
+                                  asset->level_descriptor.floor_gradient,
+                                  asset->level_descriptor.player_scale);
+  
+  platform_write_entire_file(asset->path, file.buffer, file.len);
  }
- else
- {
-  fprintf(stderr, "Error serialising level descriptor - buffer too small");
- }
+ temporary_memory_end(&global_static_memory);
 }
 
 internal void

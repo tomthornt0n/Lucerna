@@ -991,7 +991,7 @@ draw_text(Font *font,
  message.rectangle.x = x;
  message.rectangle.y = y;
  message.rectangle.w = wrap_width;
- message.string = copy_string(&global_frame_memory, string);
+ message.string = copy_s8(&global_frame_memory, string);
  message.sort = sort;
  message.projection_matrix = projection_matrix;
  

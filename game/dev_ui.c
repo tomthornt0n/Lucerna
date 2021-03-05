@@ -158,7 +158,7 @@ struct UINode
 
 #define UI_HASH_TABLE_SIZE (1024)
 
-#define ui_hash(string) hash_string((string), UI_HASH_TABLE_SIZE);
+#define ui_hash(string) hash_s8((string), UI_HASH_TABLE_SIZE);
 
 internal UINode global_ui_state_dict[UI_HASH_TABLE_SIZE] = {{0}};
 
@@ -170,7 +170,7 @@ _ui_new_node_from_string(MemoryArena *memory,
  UINode *result = global_ui_state_dict + index;
  
  if (!result->exists ||
-     string_match(result->key, string))
+     s8_match(result->key, string))
  {
   memset(result, 0, sizeof(*result));
   goto new_node;
@@ -181,7 +181,7 @@ _ui_new_node_from_string(MemoryArena *memory,
   {
    result = result->next_hash;
    
-   if (string_match(result->key, string))
+   if (s8_match(result->key, string))
    {
     memset(result, 0, sizeof(*result));
     goto new_node;
@@ -195,7 +195,7 @@ _ui_new_node_from_string(MemoryArena *memory,
  
  new_node:
  result->exists = true;
- result->key = copy_string(&global_static_memory, string);
+ result->key = copy_s8(&global_static_memory, string);
  
  return result;
 }
@@ -209,7 +209,7 @@ _ui_node_from_string(S8 string)
  if (!result->exists) { return NULL; }
  
  while (result &&
-        !string_match(result->key, string))
+        !s8_match(result->key, string))
  {
   result = result->next_hash;
  }
@@ -303,7 +303,7 @@ _ui_begin_window(PlatformState *input,
   node->drag_y = initial_y;
  }
  
- node->label = copy_string(&global_frame_memory, title);
+ node->label = copy_s8(&global_frame_memory, title);
  
  _ui_insert_node(node);
  _ui_push_insertion_point(node);
@@ -382,7 +382,7 @@ ui_do_bit_toggle_button(PlatformState *input,
  {
   node = _ui_new_node_from_string(&global_static_memory, name);
  }
- node->label = copy_string(&global_frame_memory, label);
+ node->label = copy_s8(&global_frame_memory, label);
  
  _ui_insert_node(node);
  
@@ -444,7 +444,7 @@ ui_do_toggle_button(PlatformState *input,
  {
   node = _ui_new_node_from_string(&global_static_memory, name);
  }
- node->label = copy_string(&global_frame_memory, label);
+ node->label = copy_s8(&global_frame_memory, label);
  
  _ui_insert_node(node);
  
@@ -504,7 +504,7 @@ ui_do_button(PlatformState *input,
  {
   node = _ui_new_node_from_string(&global_static_memory, name);
  }
- node->label = copy_string(&global_frame_memory, label);
+ node->label = copy_s8(&global_frame_memory, label);
  
  _ui_insert_node(node);
  
@@ -563,7 +563,7 @@ _ui_begin_dropdown(PlatformState *input,
  
  node->kind = UI_NODE_KIND_button;
  node->wrap_width = width;
- node->label = copy_string(&global_frame_memory, label);
+ node->label = copy_s8(&global_frame_memory, label);
  
  if (!node->hidden)
  {
@@ -743,7 +743,7 @@ ui_do_label(S8 name,
   node = _ui_new_node_from_string(&global_static_memory, name);
  }
  
- node->label = copy_string(&global_frame_memory, label);
+ node->label = copy_s8(&global_frame_memory, label);
  
  _ui_insert_node(node);
  

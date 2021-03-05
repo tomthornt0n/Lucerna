@@ -23,7 +23,7 @@ _measure_and_draw_text(Font *font,
 
 #define _MAIN_MENU_BUTTON(_text, _y, _selected_with_keyboard)                                                                                \
 Rect _button_bounds = _ui_measure_text(global_normal_font, global_renderer_window_w / 2.0f, (_y), -1.0f, (_text)); \
-B32 _hovered = false;                                                                                              \
+static B32 _hovered = false;                                                                                              \
 static F32 _x_offset = 0.0f;                                                                                       \
 if (is_point_in_region(input->mouse_x,                                                                             \
 input->mouse_y,                                                                             \
@@ -33,11 +33,16 @@ _button_bounds.w + MAIN_MENU_BUTTON_REGION_TOLERANCE,                     \
 _button_bounds.h + MAIN_MENU_BUTTON_REGION_TOLERANCE)) ||                 \
 (_selected_with_keyboard))                                                                                     \
 {                                                                                                                  \
+if (!_hovered)\
+{\
 _hovered = true;                                                                                                  \
+play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));\
+}\
 _x_offset = min(_x_offset + frametime_in_s * MAIN_MENU_BUTTON_SHIFT_SPEED, MAIN_MENU_BUTTON_SHIFT_AMOUNT);        \
 }                                                                                                                  \
 else                                                                                                               \
 {                                                                                                                  \
+_hovered = false;\
 _x_offset = max(_x_offset - frametime_in_s * MAIN_MENU_BUTTON_SHIFT_SPEED, 0.0);                                  \
 }                                                                                                                  \
 ui_draw_text(global_normal_font,                                                                                   \
@@ -59,12 +64,13 @@ do_main_menu(OpenGLFunctions *gl,
   MAIN_MENU_BUTTON_NONE,
   
   MAIN_MENU_BUTTON_play,
-  MAIN_MENU_BUTTON_continue,
   MAIN_MENU_BUTTON_exit,
   
   MAIN_MENU_BUTTON_MAX,
  } MainMenuButton;
  static MainMenuButton keyboard_selection = MAIN_MENU_BUTTON_NONE;
+ 
+ play_audio_source(asset_from_path(s8_literal("../assets/audio/office_1.wav")));
  
  if (is_key_typed(input, 9))
  {
@@ -88,14 +94,7 @@ do_main_menu(OpenGLFunctions *gl,
  }
  
  {
-  _MAIN_MENU_BUTTON(s8_literal("Continue"), 450.0f, keyboard_selection == MAIN_MENU_BUTTON_continue)
-  {
-   global_game_state = GAME_STATE_playing;
-  }
- }
- 
- {
-  _MAIN_MENU_BUTTON(s8_literal("Exit"), 500.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
+  _MAIN_MENU_BUTTON(s8_literal("Exit"), 450.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
   {
    platform_quit();
   }

@@ -4,6 +4,13 @@ typedef struct
  U64 len;
 } S8;
 
+typedef struct S8List S8List;
+struct S8List
+{
+ S8List *next;
+ S8 string;
+};
+
 #define s8_literal(_cstr) ((S8){ _cstr, strlen(_cstr)})
 
 internal S8
@@ -19,7 +26,40 @@ s8_from_cstring(MemoryArena *memory,
  return result;
 }
 
-internal S8 copy_string(MemoryArena *arena, S8 string);
+internal S8
+s8_from_format_string_v(MemoryArena *memory,
+                        char *format,
+                        va_list args)
+{
+ S8 result;
+ 
+ va_list _args;
+ va_copy(_args, args);
+ result.len = vsnprintf(0, 0, format, args);
+ result.buffer = arena_allocate(memory, result.len);
+ vsnprintf(result.buffer, result.len, format, _args);
+ 
+ return result;
+}
+
+internal S8
+s8_from_format_string(MemoryArena *memory,
+                      char *format,
+                      ...)
+{
+ S8 result;
+ 
+ va_list args;
+ va_start(args, format);
+ result = s8_from_format_string_v(memory,
+                                  format,
+                                  args);
+ va_end(args);
+ 
+ return result;
+}
+
+internal S8 copy_s8(MemoryArena *arena, S8 string);
 
 internal S8
 s8_from_char_buffer(MemoryArena *memory,
@@ -31,7 +71,7 @@ s8_from_char_buffer(MemoryArena *memory,
  result.len = len;
  result.buffer = buffer;
  
- return copy_string(memory, result);
+ return copy_s8(memory, result);
 }
 
 internal I8 *
@@ -44,8 +84,8 @@ cstring_from_s8(MemoryArena *memory,
 }
 
 internal U64
-hash_string(S8 string,
-            U32 bounds)
+hash_s8(S8 string,
+        U32 bounds)
 {
  U64 hash = 5381;
  
@@ -60,8 +100,8 @@ hash_string(S8 string,
 }
 
 internal B32
-string_match(S8 a,
-             S8 b)
+s8_match(S8 a,
+         S8 b)
 {
  return 0 == strncmp(a.buffer,
                      b.buffer,
@@ -70,8 +110,8 @@ string_match(S8 a,
 }
 
 internal S8
-copy_string(MemoryArena *arena,
-            S8 string)
+copy_s8(MemoryArena *arena,
+        S8 string)
 {
  S8 result;
  
@@ -88,3 +128,56 @@ debug_print_s8(S8 string)
  fprintf(stderr, "%.*s\n", (I32)string.len, string.buffer);
 }
 
+internal S8List *
+append_s8_to_list(MemoryArena *memory,
+                  S8List *list,
+                  S8 string)
+{
+ S8List *result = NULL;
+ 
+ if (list)
+ {
+  result = arena_allocate(memory, sizeof(*result));
+  result->string = string;
+  
+  while (list->next)
+  {
+   list = list->next;
+  }
+  list->next = result;
+ }
+ 
+ return result;
+}
+
+internal S8List *
+push_s8_to_list(MemoryArena *memory,
+                S8List *list,
+                S8 string)
+{
+ S8List *result = arena_allocate(memory, sizeof(*result));
+ result->next = list;
+ result->string = string;
+ return result;
+}
+
+internal S8
+expand_s8_list(MemoryArena *memory,
+               S8List *list)
+{
+ S8 result = {0};
+ result.len = list->string.len;
+ result.buffer = arena_allocate(memory, result.len);
+ memcpy(result.buffer, list->string.buffer, result.len);
+ 
+ for (S8List *node = list->next;
+      NULL != node;
+      node = node->next)
+ {
+  arena_allocate_aligned(memory, node->string.len, 1);
+  memcpy(result.buffer + result.len, node->string.buffer, node->string.len);
+  result.len += node->string.len;
+ }
+ 
+ return result;
+}

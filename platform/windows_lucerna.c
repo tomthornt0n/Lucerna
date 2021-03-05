@@ -127,11 +127,11 @@ platform_write_entire_file(S8 path,
  
  temporary_memory_begin(&global_platform_layer_frame_memory);
  
- I8 *temp_path = arena_allocate(&global_platform_layer_frame_memory, path.len + 2);
+ U8 *temp_path = arena_allocate(&global_platform_layer_frame_memory, path.len + 2);
  memcpy(temp_path, path.buffer, path.len);
  strcat(temp_path, "~");
  
- I8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+ U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
  
  file = windows_create_file(&success, CREATE_ALWAYS, temp_path);
  
@@ -186,7 +186,7 @@ struct PlatformFile
 {
  HANDLE file;
 #ifdef LUCERNA_DEBUG
- I8 *name;
+ U8 *name;
 #endif
 };
 
@@ -198,7 +198,7 @@ platform_open_file(S8 path)
  
  temporary_memory_begin(&global_platform_layer_frame_memory);
  
- I8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+ U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
  
  DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
  DWORD share_mode = 0;
@@ -298,17 +298,17 @@ platform_set_vsync(B32 enabled)
 
 internal B32
 windows_is_opengl_extension_present(HDC device_context,
-                                    I8 *extension)
+                                    U8 *extension)
 {
- const I8 *start;
+ const U8 *start;
  start = wgl.GetExtensionsStringARB(device_context);
  
  assert(start);
  
  for (;;)
  {
-  I8 *at;
-  I8 *terminator;
+  U8 *at;
+  U8 *terminator;
   
   at = strstr(start, extension);
   if (!at)
@@ -333,7 +333,7 @@ windows_is_opengl_extension_present(HDC device_context,
 
 internal void *
 windows_load_opengl_function(HMODULE opengl32,
-                             I8 *func)
+                             U8 *func)
 {
  void *p;
  p = wglGetProcAddress(func);
@@ -488,102 +488,130 @@ platform_quit(void)
 
 
 LRESULT CALLBACK
-window_proc(HWND windowHandle,
+window_proc(HWND window_handle,
             UINT message,
-            WPARAM wParam,
-            LPARAM lParam)
+            WPARAM w_param,
+            LPARAM l_param)
 {
+ static B32 mouse_hover_active = false;
+ 
  switch(message)
  {
   case WM_CHAR:
   {
-   // NOTE(tbt): this is just a massive hack
-   // TODO(tbt): proper unicode input
-   KeyTyped *key_typed;
-   key_typed = arena_allocate(&global_platform_layer_frame_memory,
-                              sizeof(*key_typed));
-   key_typed->key = (U8)wParam;
-   key_typed->next = global_platform_state.keys_typed;
-   global_platform_state.keys_typed = key_typed;
-   
+   // NOTE(tbt): only care about ASCII, because that's all I can render anyway...
+   if (w_param < 128)
+   {
+    KeyTyped *key_typed;
+    key_typed = arena_allocate(&global_platform_layer_frame_memory,
+                               sizeof(*key_typed));
+    key_typed->key = (U8)w_param;
+    key_typed->next = global_platform_state.keys_typed;
+    global_platform_state.keys_typed = key_typed;
+   }
    break;
   }
   case WM_KEYDOWN:
   {
-   U32 key = key_lut[((lParam >> 16) & 0x7f) |
-                     ((lParam & (1 << 24))
+   U32 key = key_lut[((l_param >> 16) & 0x7f) |
+                     ((l_param & (1 << 24))
                       != 0 ?
                       0x80 : 0)];
-   
    global_platform_state.is_key_pressed[key] = true;
-   
    break;
   }
   case WM_KEYUP:
   {
-   U32 key = key_lut[((lParam >> 16) & 0x7f) |
-                     ((lParam & (1 << 24))
+   U32 key = key_lut[((l_param >> 16) & 0x7f) |
+                     ((l_param & (1 << 24))
                       != 0 ?
                       0x80 : 0)];
-   
    global_platform_state.is_key_pressed[key] = false;
-   
    break;
   }
   case WM_LBUTTONDOWN:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_left] = true;
-   
    break;
   }
   case WM_LBUTTONUP:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_left] = false;
-   
    break;
   }
   case WM_MBUTTONDOWN:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_middle] = true;
-   
    break;
   }
   case WM_MBUTTONUP:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_middle] = false;
-   
    break;
   }
   case WM_RBUTTONDOWN:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_right] = true;
-   
    break;
   }
   case WM_RBUTTONUP:
   {
    global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_right] = false;
-   
    break;
   }
   case WM_MOUSEWHEEL:
   {
-   global_platform_state.mouse_scroll = GET_WHEEL_DELTA_WPARAM(wParam) / 120;
-   
+   global_platform_state.mouse_scroll = GET_WHEEL_DELTA_WPARAM(w_param) / 120;
    break;
   }
   case WM_MOUSEMOVE:
   {
-   global_platform_state.mouse_x = GET_X_LPARAM(lParam);
-   global_platform_state.mouse_y = GET_Y_LPARAM(lParam);
+   POINT mouse;
+   GetCursorPos(&mouse);
+   ScreenToClient(window_handle, &mouse);
+   global_platform_state.mouse_x = (F32)(mouse.x);
+   global_platform_state.mouse_y = (F32)(mouse.y);
    
+   if (!mouse_hover_active)
+   {
+    mouse_hover_active = true;
+    
+    TRACKMOUSEEVENT track_mouse_event = {0};
+    track_mouse_event.cbSize = sizeof(track_mouse_event);
+    track_mouse_event.dwFlags = TME_LEAVE;
+    track_mouse_event.hwndTrack = window_handle;
+    track_mouse_event.dwHoverTime = HOVER_DEFAULT;
+    
+    TrackMouseEvent(&track_mouse_event);
+   }
+   break;
+  }
+  case WM_MOUSELEAVE:
+  {
+   mouse_hover_active = false;
+   break;
+  }
+  case WM_SETCURSOR:
+  {
+   // NOTE(tbt): fix resize cursor at window borders
+   if (global_platform_state.mouse_x > 1 &&
+       global_platform_state.mouse_y > 1 &&
+       global_platform_state.mouse_x < global_platform_state.window_w - 1 &&
+       global_platform_state.mouse_y < global_platform_state.window_h - 1 &&
+       mouse_hover_active)
+   {
+    SetCursor(LoadCursorA(0, IDC_ARROW));
+   }
+   else
+   {
+    return DefWindowProc(window_handle, message, l_param, w_param);
+   }
    break;
   }
   case WM_SIZE:
   {
-   
-   global_platform_state.window_w = LOWORD(lParam);
-   global_platform_state.window_h = HIWORD(lParam);
+   global_platform_state.window_w = LOWORD(l_param);
+   global_platform_state.window_h = HIWORD(l_param);
    break;
   }
   case WM_DESTROY:
@@ -606,7 +634,7 @@ window_proc(HWND windowHandle,
   }
   default:
   {
-   return DefWindowProc(windowHandle, message, wParam, lParam);
+   return DefWindowProc(window_handle, message, w_param, l_param);
   }
  }
  
