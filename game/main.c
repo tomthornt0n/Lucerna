@@ -11,8 +11,9 @@
 
 /*
 TODO list:
-- audio streaming? (if there is some long music and it becomes an issue)
+- audio streaming
 - multithreaded asset loading?
+- make the player walk less wierdly
 - gameplay!!!!!!!
 */
 
@@ -53,33 +54,17 @@ internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 #include "dev_ui.c"
 #include "types.gen.h"
 #include "funcs.gen.h"
+#include "dialogue.c"
 #include "entities.c"
 #include "editor.c"
 #include "main_menu.c"
-#include "dialogue.c"
 
 internal void
 game_playing_main(OpenGLFunctions *gl,
                   PlatformState *input,
                   F64 frametime_in_s)
 {
- static B32 played_intro_dialogue = false;
- static DialogueState dialogue_state = {0};
- 
- if (!played_intro_dialogue)
- {
-  S8List *dialogue = push_s8_to_list(&global_static_memory,
-                                     NULL,
-                                     s8_literal("this is a test!          "));
-  append_s8_to_list(&global_static_memory, dialogue, s8_literal("line two...          "));
-  append_s8_to_list(&global_static_memory, dialogue, s8_literal("line three!          "));
-  
-  played_intro_dialogue = true;
-  play_dialogue(&dialogue_state, dialogue);
- }
- 
  do_current_level(gl, input, frametime_in_s);
- do_dialogue(&dialogue_state);
 }
 
 void

@@ -133,21 +133,14 @@ append_s8_to_list(MemoryArena *memory,
                   S8List *list,
                   S8 string)
 {
- S8List *result = NULL;
+ S8List *new_node = arena_allocate(memory, sizeof(*new_node));
+ new_node->string = string;
  
- if (list)
- {
-  result = arena_allocate(memory, sizeof(*result));
-  result->string = string;
-  
-  while (list->next)
-  {
-   list = list->next;
-  }
-  list->next = result;
- }
+ S8List **indirect = &list;
+ while (NULL != *indirect) { indirect = &(*indirect)->next; }
+ *indirect = new_node;
  
- return result;
+ return list;
 }
 
 internal S8List *

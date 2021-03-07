@@ -1,17 +1,12 @@
-@c_enum
-EntityFlags : enum
+@c_enum EntityFlags
 {
 	ENTITY_FLAG_fade_out;
-
-	@no_ui
-	ENTITY_FLAG_marked_for_removal;
-
+	@no_ui ENTITY_FLAG_marked_for_removal;
 	ENTITY_FLAG_teleport;
-
+	ENTITY_FLAG_trigger_dialogue;
 };
 
-@c_enum
-FadeOutDir : enum
+@c_enum FadeOutDir
 {
 	FADE_OUT_DIR_n;
 	FADE_OUT_DIR_e;
@@ -19,30 +14,32 @@ FadeOutDir : enum
 	FADE_OUT_DIR_w;
 };
 
-@c_struct @gen_editor_ui @serialisable
-Entity : struct
+@c_enum EntityTriggers
 {
-	@no_ui
-	next : Entity*;
+	ENTITY_TRIGGER_player_entered;
+	ENTITY_TRIGGER_player_intersecting;
+	ENTITY_TRIGGER_player_left;
+};
 
-	@no_ui
-	next_free : Entity*;
+@c_struct @gen_editor_ui @serialisable
+Entity
+{
+	@no_ui next : Entity*;
+	@no_ui next_free : Entity*;
+	@no_ui bounds : Rect;
+	@no_ui triggers : U8;
 
-	@no_ui
-	bounds : Rect;
+	repeat_dialogue : B32;
+	@min=0 @max=1920 @snap=1 dialogue_x : F32;
+	@min=0 @max=1080 @snap=1 dialogue_y : F32;
+	dialogue_path : [64]U8;
 
-	@radio_dropdown_source="FadeOutDir"
-	fade_out_direction : I32;
+	@radio_dropdown_source="FadeOutDir" fade_out_direction : I32;
 
 	teleport_to_level : [64]U8;
-
 	teleport_to_default_spawn : B32;
-
-	@min=0 @max=1920 @snap=1
-	teleport_to_x : F32;
-
-	@min=0 @max=1080 @snap=1
-	teleport_to_y : F32;
+	@min=0 @max=1920 @snap=1 teleport_to_x : F32;
+	@min=0 @max=1080 @snap=1 teleport_to_y : F32;
 	
 	@flag_dropdown_source="EntityFlags"
 	flags : U64;

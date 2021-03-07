@@ -629,8 +629,16 @@ window_proc(HWND window_handle,
   }
   case WM_KILLFOCUS:
   {
+   U32 window_w = global_platform_state.window_w;
+   U32 window_h = global_platform_state.window_h;
+   
    ZeroMemory(&global_platform_state,
-              sizeof(global_platform_state) - 2 * sizeof(U32)); // NOTE(tbt): do not zero window width and height
+              sizeof(global_platform_state));
+   
+   global_platform_state.window_w = window_w;
+   global_platform_state.window_h = window_h;
+   
+   return DefWindowProc(window_handle, message, w_param, l_param);
   }
   default:
   {

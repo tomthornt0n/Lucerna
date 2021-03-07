@@ -342,58 +342,89 @@ set_current_level(OpenGLFunctions *gl,
 
 internal void
 do_entities(OpenGLFunctions *gl,
+            F64 frametime_in_s,
             Entity *entities,
             Player *player)
 {
+ static DialogueState dialogue_state = {0};
+ 
  for (Entity *e = entities;
       NULL != e;
       e = e->next)
  {
-  B32 colliding_with_player = are_rectangles_intersecting(e->bounds, player->collision_bounds);
+  //
+  // NOTE(tbt): process triggers
+  //~
   
-  if (e->flags & (1 << ENTITY_FLAG_fade_out))
+  if (are_rectangles_intersecting(e->bounds, player->collision_bounds))
   {
-   if (colliding_with_player)
+   if (e->triggers & (1 << ENTITY_TRIGGER_player_intersecting))
    {
-    F32 player_centre_x = player->collision_bounds.x + (player->collision_bounds.w / 2.0f);
-    F32 player_centre_y = player->collision_bounds.y + (player->collision_bounds.h / 2.0f);
-    
-    F32 fade;
-    
-    switch(e->fade_out_direction)
+    e->triggers &= ~(1 << ENTITY_TRIGGER_player_entered);
+   }
+   else
+   {
+    e->triggers |= (1 << ENTITY_TRIGGER_player_entered);
+    e->triggers |= (1 << ENTITY_TRIGGER_player_intersecting);
+   }
+  }
+  else
+  {
+   if (e->triggers & (1 << ENTITY_TRIGGER_player_intersecting))
+   {
+    e->triggers |= (1 << ENTITY_TRIGGER_player_left);
+    e->triggers &= ~(1 << ENTITY_TRIGGER_player_intersecting);
+   }
+   else
+   {
+    e->triggers &= ~(1 << ENTITY_TRIGGER_player_left);
+   }
+  }
+  
+  //
+  // NOTE(tbt): enable codepaths depending on flags
+  //~
+  
+  if (e->flags & (1 << ENTITY_FLAG_fade_out) &&
+      e->triggers & (1 << ENTITY_TRIGGER_player_intersecting))
+  {
+   F32 player_centre_x = player->collision_bounds.x + (player->collision_bounds.w / 2.0f);
+   F32 player_centre_y = player->collision_bounds.y + (player->collision_bounds.h / 2.0f);
+   
+   F32 fade;
+   
+   switch(e->fade_out_direction)
+   {
+    case FADE_OUT_DIR_n:
     {
-     case FADE_OUT_DIR_n:
-     {
-      fade = (player_centre_y - e->bounds.y) / e->bounds.h;
-      break;
-     }
-     case FADE_OUT_DIR_e:
-     {
-      fade = ((e->bounds.x + e->bounds.w) - player_centre_x) / e->bounds.w;
-      break;
-     }
-     case FADE_OUT_DIR_s:
-     {
-      fade = ((e->bounds.y + e->bounds.h) - player_centre_y) / e->bounds.h;
-      break;
-     }
-     case FADE_OUT_DIR_w:
-     {
-      fade = (player_centre_x - e->bounds.x) / e->bounds.w;
-      break;
-     }
+     fade = (player_centre_y - e->bounds.y) / e->bounds.h;
+     break;
     }
-    
-    fade = clamp_f(fade, 0.0f, 1.0f);
-    
-    global_exposure = fade * global_current_level.level_descriptor->level_descriptor.exposure;
-    set_audio_master_level(fade * DEFAULT_AUDIO_MASTER_LEVEL);
+    case FADE_OUT_DIR_e:
+    {
+     fade = ((e->bounds.x + e->bounds.w) - player_centre_x) / e->bounds.w;
+     break;
+    }
+    case FADE_OUT_DIR_s:
+    {
+     fade = ((e->bounds.y + e->bounds.h) - player_centre_y) / e->bounds.h;
+     break;
+    }
+    case FADE_OUT_DIR_w:
+    {
+     fade = (player_centre_x - e->bounds.x) / e->bounds.w;
+     break;
+    }
    }
    
+   fade = clamp_f(fade, 0.0f, 1.0f);
+   
+   global_exposure = fade * global_current_level.level_descriptor->level_descriptor.exposure;
+   set_audio_master_level(fade * DEFAULT_AUDIO_MASTER_LEVEL);
   }
   
   if (e->flags & (1 << ENTITY_FLAG_teleport) &&
-      colliding_with_player)
+      e->triggers & (1 << ENTITY_TRIGGER_player_entered))
   {
    Entity old_entity = *e;
    set_current_level(gl, asset_from_path(s8_literal(e->teleport_to_level)));
@@ -403,7 +434,22 @@ do_entities(OpenGLFunctions *gl,
     player->y = old_entity.teleport_to_y;
    }
   }
+  
+  if (e->flags & (1 << ENTITY_FLAG_trigger_dialogue) &&
+      e->triggers & (1 << ENTITY_TRIGGER_player_entered))
+  {
+   play_dialogue(&dialogue_state,
+                 asset_from_path(s8_literal(e->dialogue_path)),
+                 e->dialogue_x, e->dialogue_y,
+                 WHITE);
+   if (!e->repeat_dialogue)
+   {
+    e->flags &= ~(1 << ENTITY_FLAG_trigger_dialogue);
+   }
+  }
  }
+ 
+ do_dialogue(&dialogue_state, frametime_in_s);
 }
 
 internal void
@@ -426,7 +472,7 @@ do_current_level(OpenGLFunctions *gl,
  
  play_audio_source(global_current_level.music);
  
- do_entities(gl, global_current_level.entities, &global_current_level.player);
+ do_entities(gl, frametime_in_s, global_current_level.entities, &global_current_level.player);
  
  do_player(gl, input, frametime_in_s, &global_current_level.player);
  
@@ -441,5 +487,7 @@ do_current_level(OpenGLFunctions *gl,
                         global_current_level.fg,
                         ENTIRE_TEXTURE);
  
- do_post_processing(global_exposure, global_current_level.kind, UI_SORT_DEPTH - 1);
+ do_post_processing(global_exposure,
+                    global_current_level.kind,
+                    UI_SORT_DEPTH - 2);
 }
