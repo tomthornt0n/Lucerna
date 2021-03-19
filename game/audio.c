@@ -1,49 +1,69 @@
+
+// TODO(tbt): store the default volume in the level descriptor instead of as a `#define`
 #define DEFAULT_AUDIO_MASTER_LEVEL 1.0f
 internal F32 global_audio_master_level = DEFAULT_AUDIO_MASTER_LEVEL;
 
 internal void
-process_source(AudioSource *source,
-               I16 *buffer,
-               U32 buffer_size)
+_process_audio_source(AudioSource *source,
+                      I16 *buffer,
+                      U32 buffer_size)
 {
- I32 i;
  I32 mix;
- I16 *source_buffer = source->buffer + source->playhead;
  
- if (source->flags & SOURCE_FLAG_REWIND)
+ if (source->rewind)
  {
   source->playhead = 0;
-  source->flags &= ~SOURCE_FLAG_REWIND;
+  source->rewind = false;
  }
  
- for (i = 0;
-      i < (buffer_size >> 1) &&
-      source->playhead < source->buffer_size >> 1;
-      ++i)
+ if (NULL != source->buffer)
  {
-  // NOTE(tbt): mix left channel
-  mix = buffer[i];
-  mix += source_buffer[i] * source->l_gain * global_audio_master_level;
-  buffer[i] = (I16)clamp_f(mix, -32768, 32767);
-  ++source->playhead;
+  I32 samples_to_process = min_i(buffer_size >> 1,
+                                 (source->buffer_size >> 1) - source->playhead);
   
-  ++i;
-  
-  // NOTE(tbt): mix right channel
-  mix = (I32)buffer[i];
-  mix += source_buffer[i] * source->r_gain * global_audio_master_level;
-  buffer[i] = (I16)clamp_f(mix, -32768, 32767);
-  ++source->playhead;
- }
- 
- if (source->playhead >= source->buffer_size >> 1)
- {
-  source->playhead = 0;
-  
-  if (!(source->flags & SOURCE_FLAG_LOOPING))
+  for (I32 i = 0;
+       i < samples_to_process;
+       ++i)
   {
-   source->flags &= ~SOURCE_FLAG_ACTIVE;
+   // NOTE(tbt): mix left channel
+   mix = buffer[i];
+   mix += source->buffer[source->playhead + i] * source->l_gain * global_audio_master_level;
+   buffer[i] = (I16)clamp_f(mix, -32768, 32767);
+   
+   ++i;
+   
+   // NOTE(tbt): mix right channel
+   mix = (I32)buffer[i];
+   mix += source->buffer[source->playhead + i] * source->r_gain * global_audio_master_level;
+   buffer[i] = (I16)clamp_f(mix, -32768, 32767);
   }
+  
+  source->playhead += samples_to_process;
+  
+  if (source->playhead >= source->buffer_size >> 1)
+  {
+   source->playhead = 0;
+   
+   if (!source->is_looping)
+   {
+    source->is_active = false;
+   }
+  }
+ }
+ else
+ {
+  source->is_active = false;
+ }
+}
+
+internal void
+_recalculate_audio_source_gain(AudioSource *source)
+{
+ platform_audio_critical_section
+ {
+  F32 pan = (source->pan + 1.0f) * 0.5f;
+  source->l_gain = (1.0f - pan) * source->level;
+  source->r_gain = pan * source->level;
  }
 }
 
@@ -55,118 +75,107 @@ game_audio_callback(void *buffer,
  
  memset(buffer, 0, buffer_size);
  
- platform_get_audio_lock();
- 
- indirect = &global_playing_sources;
- while (*indirect)
+ platform_audio_critical_section
  {
-  process_source(*indirect, buffer, buffer_size);
-  
-  if (!(*indirect)->flags & SOURCE_FLAG_ACTIVE)
-   // NOTE(tbt): Remove source from list if it is not playing
+  indirect = &global_playing_audio_sources;
+  while (*indirect)
   {
-   *indirect = (*indirect)->next;
-  }
-  else
-  {
-   indirect = &((*indirect)->next);
+   if ((*indirect)->is_active)
+   {
+    _process_audio_source(*indirect, buffer, buffer_size);
+   }
+   
+   if (!(*indirect)->is_active)
+   {
+    *indirect = (*indirect)->next;
+   }
+   else
+   {
+    indirect = &((*indirect)->next);
+   }
   }
  }
- platform_release_audio_lock();
 }
 
+//~
+
 internal void
-play_audio_source(Asset *source)
+play_audio_source(AudioSource *source)
 {
  if (!source) { return; }
  
- load_audio(source);
- assert(source->loaded);
  
- platform_get_audio_lock();
- if (!(source->audio.flags & SOURCE_FLAG_ACTIVE))
+ platform_audio_critical_section
  {
-  source->audio.next = global_playing_sources;
-  global_playing_sources = &source->audio;
-  source->audio.flags |= SOURCE_FLAG_ACTIVE;
+  if (!source->is_active)
+  {
+   source->next = global_playing_audio_sources;
+   global_playing_audio_sources = source;
+   source->is_active = true;
+  }
  }
- platform_release_audio_lock();
 }
 
 internal void
-pause_audio_source(Asset *source)
+pause_audio_source(AudioSource *source)
 {
  if (!source) { return; }
  
- platform_get_audio_lock();
- source->audio.flags &= ~SOURCE_FLAG_ACTIVE;
- platform_release_audio_lock();
+ platform_audio_critical_section
+ {
+  source->is_active = false;
+ }
 }
 
 internal void
-stop_audio_source(Asset *source)
+stop_audio_source(AudioSource *source)
 {
  if (!source) { return; }
  
- platform_get_audio_lock();
- source->audio.flags |= SOURCE_FLAG_REWIND;
- source->audio.flags &= ~SOURCE_FLAG_ACTIVE;
- platform_release_audio_lock();
+ platform_audio_critical_section
+ {
+  source->rewind = true;
+  source->is_active = false;
+ }
 }
 
 internal void
-set_audio_source_looping(Asset *source,
+set_audio_source_looping(AudioSource *source,
                          B32 looping)
 {
  if (!source) { return; }
  
- platform_get_audio_lock();
- if (looping)
+ platform_audio_critical_section
  {
-  source->audio.flags |= SOURCE_FLAG_LOOPING;
+  source->is_looping = looping;
  }
- else
- {
-  source->audio.flags &= ~SOURCE_FLAG_LOOPING;
- }
- platform_release_audio_lock();
 }
 
 internal void
-recalculate_audio_source_gain(AudioSource *source)
-{
- platform_get_audio_lock();
- source->l_gain = (1.0f - source->pan) * source->level;
- source->r_gain = source->pan * source->level;
- platform_release_audio_lock();
-}
-
-internal void
-set_audio_source_level(Asset *source,
+set_audio_source_level(AudioSource *source,
                        F32 level)
 {
  if (!source) { return; }
  
- source->audio.level = level;
- recalculate_audio_source_gain(&source->audio);
+ source->level = level;
+ _recalculate_audio_source_gain(source);
 }
 
 internal void
-set_audio_source_pan(Asset *source,
+set_audio_source_pan(AudioSource *source,
                      F32 pan)
 {
  if (!source) { return; }
  
- // NOTE(tbt): clamp between far-left(0.0) and far-right(1.0) -
- //            0.5 is central
- source->audio.pan = clamp_f(pan, 0.0f, 1.0f);
- recalculate_audio_source_gain(&source->audio);
+ source->pan = clamp_f(pan, -1.0f, 1.0f);
+ _recalculate_audio_source_gain(source);
 }
 
 internal void
 set_audio_master_level(F32 level)
 {
- platform_get_audio_lock();
- global_audio_master_level = level;
- platform_release_audio_lock();
+ platform_audio_critical_section
+ {
+  global_audio_master_level = level;
+ }
 }

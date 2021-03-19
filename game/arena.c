@@ -96,12 +96,11 @@ _arena_allocate(MemoryArena *arena,
  else
  {
 #ifdef LUCERNA_DEBUG
-  fprintf(stderr,
-          "arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
-          "last allocation was at line %d of file %s\n",
-          arena->name,
-          line,
-          file);
+  debug_log("arena %s: \x1b[31mOUT OF MEMORY!\x1b[0m\n"
+            "last allocation was at line %d of file %s\n",
+            arena->name,
+            line,
+            file);
 #else
   fprintf(stderr, "\x1b[31mOUT OF MEMORY!\x1b[0m\n");
 #endif
@@ -116,14 +115,16 @@ arena_free_all(MemoryArena *arena)
  arena->saved_offset = 0;
 }
 
+#define arena_temporary_memory(_arena) for (I32 i = (_temporary_memory_begin(_arena), 0); !i; (_temporary_memory_end(_arena), ++i))
+
 internal void
-temporary_memory_begin(MemoryArena *arena)
+_temporary_memory_begin(MemoryArena *arena)
 {
  arena->saved_offset = arena->current_offset;
 }
 
 internal void
-temporary_memory_end(MemoryArena *arena)
+_temporary_memory_end(MemoryArena *arena)
 {
  arena->current_offset = arena->saved_offset;
 }

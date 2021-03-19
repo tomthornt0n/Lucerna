@@ -37,8 +37,8 @@ _ui_measure_text(Font *font,
       i < string.len;
       ++i)
  {
-  if (string.buffer[i] >=32 &&
-      string.buffer[i] < 128)
+  if (string.buffer[i] >= FONT_BAKE_BEGIN &&
+      string.buffer[i] < FONT_BAKE_END)
   {
    F32 char_width, char_height;
    
@@ -111,9 +111,15 @@ typedef enum
  UI_NODE_KIND_slider,
  UI_NODE_KIND_label,
  UI_NODE_KIND_line_break,
- UI_NODE_KIND_sprite_picker,
  UI_NODE_KIND_text_entry,
 } UINodeKind;
+
+typedef enum
+{
+ TEXT_ENTRY_STATE_none,
+ TEXT_ENTRY_STATE_clicked_out,
+ TEXT_ENTRY_STATE_enter,
+} TextEntryState;
 
 #define UI_NODE_TEMP_BUFFER_SIZE 8
 
@@ -149,10 +155,9 @@ struct UINode
  F64 slider_value;                         // NOTE(tbt): needs no explanation
  B32 hidden;                               // NOTE(tbt): true if the node exists in the UI tree but should be ignored
  F32 min, max;                             // NOTE(tbt): minimum and maximum value for sliders
- Asset *texture;                           // NOTE(tbt): texture drawn by the widget
  F32 animation_transition;                 // NOTE(tbt): between 0.0 and 1.0 - used to fade between active, hovered and default colours
  U8 temp_buffer[UI_NODE_TEMP_BUFFER_SIZE]; // NOTE(tbt): put random data that needs to be retained with the widget here, e.g. used as a character buffer for the text entries next to sliders
- B32 enter;                                // NOTE(tbt): true for the frame a text entry is clicked out of or return is typed
+ TextEntryState text_entry_state;          // NOTE(tbt): when a text box is clicked out of, or enter is typed
  B32 draw_horizontal_rule;                 // NOTE(tbt): whether a line break should draw a horizontal line
 };
 
@@ -325,7 +330,7 @@ _ui_begin_window(PlatformState *input,
  
  if (is_point_in_region(input->mouse_x,
                         input->mouse_y,
-                        node->bounds) &&
+                        node->interactable) &&
      !global_hot_widget)
  {
   node->next_under_mouse = global_widgets_under_mouse;
@@ -341,7 +346,7 @@ _ui_begin_window(PlatformState *input,
  }
  
  if (global_hot_widget == node &&
-     input->is_mouse_button_pressed[MOUSE_BUTTON_left] &&
+     input->is_mouse_button_down[MOUSE_BUTTON_left] &&
      !global_active_widget)
  {
   node->dragging = true;
@@ -361,7 +366,7 @@ _ui_begin_window(PlatformState *input,
    global_active_widget = node;
   }
   
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    node->dragging = false;
   }
@@ -393,11 +398,11 @@ ui_do_bit_toggle_button(PlatformState *input,
  
  if (!node->hidden)
  {
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left] &&
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left] &&
       global_active_widget == node)
   {
    node->toggled = !node->toggled;
-   play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+   play_audio_source(global_click_sound);
    if (mask != NULL)
    {
     if (node->toggled)
@@ -420,7 +425,7 @@ ui_do_bit_toggle_button(PlatformState *input,
    global_widgets_under_mouse = node;
   }
   if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    global_active_widget = node;
   }
@@ -455,11 +460,11 @@ ui_do_toggle_button(PlatformState *input,
  
  if (!node->hidden)
  {
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left] &&
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left] &&
       global_active_widget == node)
   {
    *toggle = !(*toggle);
-   play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+   play_audio_source(global_click_sound);
    clicked = true;
   }
   
@@ -472,7 +477,7 @@ ui_do_toggle_button(PlatformState *input,
    global_widgets_under_mouse = node;
   }
   if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    global_active_widget = node;
   }
@@ -513,11 +518,11 @@ ui_do_button(PlatformState *input,
  
  if (!node->hidden)
  {
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left] &&
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left] &&
       global_active_widget == node)
   {
    node->toggled = true;
-   play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+   play_audio_source(global_click_sound);
   }
   else
   {
@@ -534,7 +539,7 @@ ui_do_button(PlatformState *input,
   }
   
   if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    global_active_widget = node;
   }
@@ -543,7 +548,7 @@ ui_do_button(PlatformState *input,
  return node->toggled;
 }
 
-#define ui_do_dropdown(_input, _name, _label, _width) for (I32 i = (begin_dropdown((_input), (_name), (_label), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
+#define ui_do_dropdown(_input, _name, _label, _width) for (I32 i = (_ui_begin_dropdown((_input), (_name), (_label), (_width)), 0); !i; (++i, _ui_pop_insertion_point()))
 
 internal void
 _ui_begin_dropdown(PlatformState *input,
@@ -567,11 +572,11 @@ _ui_begin_dropdown(PlatformState *input,
  
  if (!node->hidden)
  {
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left] &&
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left] &&
       global_active_widget == node)
   {
    node->toggled = !node->toggled;
-   play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+   play_audio_source(global_click_sound);
   }
   
   if (is_point_in_region(input->mouse_x,
@@ -590,14 +595,127 @@ _ui_begin_dropdown(PlatformState *input,
    global_widgets_under_mouse = node;
   }
   if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    global_active_widget = node;
   }
  }
 }
 
-internal UINode *ui_do_text_entry(PlatformState *input, S8 name, U8 *buffer, U64 *len, U64 capacity);
+internal UINode *
+_ui_do_text_entry(PlatformState *input,
+                  S8 name,
+                  U8 *buffer,
+                  U64 *len,
+                  U64 capacity)
+{
+ UINode *node;
+ 
+ if (!(node = _ui_node_from_string(name)))
+ {
+  node = _ui_new_node_from_string(&global_static_memory, name);
+ }
+ 
+ _ui_insert_node(node);
+ 
+ node->kind = UI_NODE_KIND_text_entry;
+ node->wrap_width = capacity * global_ui_font->estimate_char_width + PADDING * 2;
+ 
+ node->text_entry_state = TEXT_ENTRY_STATE_none;
+ 
+ if (!node->hidden)
+ {
+  if (global_active_widget == node)
+  {
+   if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
+   {
+    node->toggled = !node->toggled;
+    if (!node->toggled)
+    {
+     node->text_entry_state = TEXT_ENTRY_STATE_clicked_out;
+    }
+    play_audio_source(global_click_sound);
+   }
+  }
+  else if (global_active_widget && node->toggled)
+  {
+   node->text_entry_state = TEXT_ENTRY_STATE_clicked_out;
+   node->toggled = false;
+  }
+  
+  if (is_point_in_region(input->mouse_x,
+                         input->mouse_y,
+                         node->interactable) &&
+      !global_active_widget)
+  {
+   node->next_under_mouse = global_widgets_under_mouse;
+   global_widgets_under_mouse = node;
+  }
+  
+  U64 index = strlen(buffer);
+  
+  if (node->toggled)
+  {
+   for (PlatformEvent *event = input->events;
+        NULL != event;
+        event = event->next)
+   {
+    if (event->kind == PLATFORM_EVENT_key_typed)
+    {
+     if (index < (capacity - 1))
+     {
+      buffer[index] = event->character;
+      index += 1;
+      buffer[index] = 0;
+     }
+    }
+    else if (event->kind == PLATFORM_EVENT_key_press &&
+             event->key == KEY_backspace &&
+             index > 0)
+    {
+     index -= 1;
+     buffer[index] = 0;
+    }
+    else if (event->key == KEY_enter)
+    {
+     node->text_entry_state = TEXT_ENTRY_STATE_enter;
+     node->toggled = false;
+    }
+   }
+  }
+  
+  node->label.buffer = buffer;
+  node->label.len = index;
+  
+  if (len)
+  {
+   *len = index;
+  }
+  
+  if (global_hot_widget == node &&
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
+  {
+   global_active_widget = node;
+  }
+ }
+ 
+ return node;
+}
+
+internal TextEntryState
+ui_do_text_entry(PlatformState *input,
+                 S8 name,
+                 U8 *buffer,
+                 U64 *len,
+                 U64 capacity)
+{
+ return _ui_do_text_entry(input,
+                          name,
+                          buffer,
+                          len,
+                          capacity)->text_entry_state;
+}
+
 
 internal void
 ui_do_slider_lf(PlatformState *input,
@@ -631,7 +749,7 @@ ui_do_slider_lf(PlatformState *input,
   text_name.len = name.len + 1;
   memcpy(text_name.buffer, name.buffer, name.len);
   text_name.buffer[name.len] = '~';
-  UINode *text = ui_do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
+  UINode *text = _ui_do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
   
   if (is_point_in_region(input->mouse_x,
                          input->mouse_y,
@@ -642,13 +760,13 @@ ui_do_slider_lf(PlatformState *input,
    global_widgets_under_mouse = node;
   }
   if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+      input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    global_active_widget = node;
    if (!node->dragging)
    {
     node->dragging = true;
-    play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+    play_audio_source(global_click_sound);
    }
   }
   
@@ -673,13 +791,13 @@ ui_do_slider_lf(PlatformState *input,
     global_active_widget = node;
    }
    
-   if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+   if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
    {
     node->dragging = false;
-    play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
+    play_audio_source(global_click_sound);
    }
   }
-  else if (text->enter)
+  else if (text->text_entry_state)
   {
    *value = atof(node->temp_buffer);
   }
@@ -778,201 +896,6 @@ ui_do_horizontal_rule(void)
 }
 
 internal void
-ui_do_sprite_picker(PlatformState *input,
-                    S8 name,
-                    Asset *texture,
-                    F32 width,
-                    F32 snap,
-                    SubTexture *sub_texture)
-{
- UINode *node;
- 
- if (!(node = _ui_node_from_string(name)))
- {
-  node = _ui_new_node_from_string(&global_static_memory, name);
- }
- 
- _ui_insert_node(node);
- 
- node->kind = UI_NODE_KIND_sprite_picker;
- node->texture = texture;
- node->texture_width = width;
- node->texture_height = width;
- if (texture &&
-     texture->loaded)
- {
-  node->texture_height = texture->texture.height * (width /
-                                                    texture->texture.width);
- }
- 
- if (!node->hidden)
- {
-  if (is_point_in_region(input->mouse_x,
-                         input->mouse_y,
-                         node->interactable) &&
-      !global_active_widget)
-  {
-   node->next_under_mouse = global_widgets_under_mouse;
-   global_widgets_under_mouse = node;
-  }
-  
-  if (texture)
-  {
-   if (global_hot_widget == node &&
-       input->is_mouse_button_pressed[MOUSE_BUTTON_left])
-   {
-    global_active_widget = node;
-    node->dragging = true;
-    
-    if (sub_texture)
-    {
-     sub_texture->min_x = floor((input->mouse_x - node->bounds.x) / snap) * snap;
-     sub_texture->min_x /= texture->texture.width;
-     
-     sub_texture->min_y = floor((input->mouse_y - node->bounds.y) / snap) * snap;
-     sub_texture->min_y /= texture->texture.height;
-    }
-   }
-   
-   if (node->dragging)
-   {
-    F32 drag_x = clamp_f(input->mouse_x - node->bounds.x, 0.0f, node->texture_width);
-    F32 drag_y = clamp_f(input->mouse_y - node->bounds.y, 0.0f, node->texture_height);
-    
-    if (sub_texture)
-    {
-     sub_texture->max_x = (ceil(drag_x / snap) * snap) / node->texture_width;
-     sub_texture->max_y = (ceil(drag_y / snap) * snap) / node->texture_height;
-    }
-    
-    if (!global_hot_widget)
-    {
-     global_active_widget = node;
-    }
-    
-    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
-    {
-     node->dragging = false;
-    }
-   }
-  }
-  
-  F32 selected_x, selected_y, selected_w, selected_h;
-  if (sub_texture)
-  {
-   selected_x = sub_texture->min_x * node->texture_width;
-   selected_y = sub_texture->min_y * node->texture_height;
-   selected_w = sub_texture->max_x * node->texture_width - selected_x;
-   selected_h = sub_texture->max_y * node->texture_height - selected_y;
-  }
-  
-  node->bg = rectangle_literal(node->bounds.x + selected_x,
-                               node->bounds.y + selected_y,
-                               selected_w, selected_h);
- }
-}
-
-internal UINode *
-ui_do_text_entry(PlatformState *input,
-                 S8 name,
-                 U8 *buffer,
-                 U64 *len,
-                 U64 capacity)
-{
- UINode *node;
- 
- if (!(node = _ui_node_from_string(name)))
- {
-  node = _ui_new_node_from_string(&global_static_memory, name);
- }
- 
- _ui_insert_node(node);
- 
- node->kind = UI_NODE_KIND_text_entry;
- node->wrap_width = capacity * global_ui_font->estimate_char_width + PADDING * 2;
- 
- node->enter = false;
- 
- if (!node->hidden)
- {
-  if (global_active_widget == node)
-  {
-   if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
-   {
-    node->toggled = !node->toggled;
-    if (!node->toggled)
-    {
-     node->enter = true;
-    }
-    play_audio_source(asset_from_path(s8_literal("../assets/audio/click.wav")));
-   }
-  }
-  else if (global_active_widget && node->toggled)
-  {
-   node->enter = true;
-   node->toggled = false;
-  }
-  
-  if (is_point_in_region(input->mouse_x,
-                         input->mouse_y,
-                         node->interactable) &&
-      !global_active_widget)
-  {
-   node->next_under_mouse = global_widgets_under_mouse;
-   global_widgets_under_mouse = node;
-  }
-  
-  U64 index = strlen(buffer);
-  
-  if (node->toggled)
-  {
-   for (KeyTyped *key = input->keys_typed;
-        NULL != key;
-        key = key->next)
-   {
-    if (isprint(key->key))
-    {
-     if (index < (capacity - 1))
-     {
-      buffer[index] = key->key;
-      index += 1;
-      buffer[index] = 0;
-     }
-    }
-    else if (key->key == 8 &&
-             index > 0)
-    {
-     index -= 1;
-     buffer[index] = 0;
-    }
-    else if (key->key == '\r')
-    {
-     node->enter = true;
-     node->toggled = false;
-    }
-   }
-  }
-  
-  node->label.buffer = buffer;
-  node->label.len = index;
-  
-  if (len)
-  {
-   *len = index;
-  }
-  
-  if (global_hot_widget == node &&
-      input->is_mouse_button_pressed[MOUSE_BUTTON_left])
-  {
-   global_active_widget = node;
-  }
- }
- 
- return node;
-}
-
-
-internal void
 _ui_layout_and_render_node(PlatformState *input,
                            UINode *node,
                            F32 x, F32 y)
@@ -999,64 +922,81 @@ _ui_layout_and_render_node(PlatformState *input,
    
    node->interactable = title_bounds;
    
-   UINode *child = node->first_child;
+   UINode *child;
    // NOTE(tbt): keep track of where to place the next child
    F32 current_x = node->bg.x + PADDING;
    F32 current_y = node->bg.y + PADDING;
    F32 tallest = 0.0f; // NOTE(tbt): the height of the tallest widget in the current row
    
-   while (child)
+   U32 horizontal_rule_count = 0;
+   F32 horizontal_rules[256];
+   
+   for (child = node->first_child;
+        NULL != child;
+        child = child->next_sibling)
    {
-    if (child->kind == UI_NODE_KIND_line_break ||
-        current_x + child->bounds.w + PADDING >
-        node->drag_x + node->wrap_width)
+    if (child->kind == UI_NODE_KIND_line_break)
     {
      current_x = node->bg.x + PADDING;
      current_y += tallest + PADDING;
      tallest = 0.0f;
-    }
-    
-    _ui_layout_and_render_node(input,
-                               child,
-                               current_x,
-                               current_y);
-    
-    if (child->kind != UI_NODE_KIND_window)
-    {
-     child->sort = node->sort + 1;
      
-     current_x += child->bounds.w + PADDING;
-     
-     if (child->bounds.y + child->bounds.h - current_y >
-         tallest)
+     if (child->draw_horizontal_rule)
      {
-      tallest = child->bounds.y +
-       child->bounds.h -
-       current_y;
+      horizontal_rules[horizontal_rule_count++] = current_y + PADDING;
+      current_y += 3 * PADDING;
      }
     }
-    
-    if (current_x - node->bounds.x > node->bounds.w)
+    else
     {
-     node->interactable.w = current_x - node->interactable.x;
+     if (current_x + child->bounds.w + PADDING >
+         node->drag_x + node->wrap_width)
+     {
+      current_x = node->bg.x + PADDING;
+      current_y += tallest + PADDING;
+      tallest = 0.0f;
+     }
      
-     node->bounds.w = current_x - node->bounds.x;
+     _ui_layout_and_render_node(input,
+                                child,
+                                current_x,
+                                current_y);
      
-     node->bg.w = current_x - node->bg.x;
+     if (child->kind != UI_NODE_KIND_window)
+     {
+      child->sort = node->sort + 1;
+      
+      current_x += child->bounds.w + PADDING;
+      
+      if (child->bounds.y + child->bounds.h - current_y >
+          tallest)
+      {
+       tallest = child->bounds.y +
+        child->bounds.h -
+        current_y;
+      }
+     }
+     
+     if (current_x - node->bounds.x > node->bounds.w)
+     {
+      node->interactable.w = current_x - node->interactable.x;
+      
+      node->bounds.w = current_x - node->bounds.x;
+      
+      node->bg.w = current_x - node->bg.x;
+     }
+     
+     if ((current_y + tallest) - node->bg.y > node->bg.h)
+     {
+      node->bounds.h = (current_y + tallest) -
+       node->bounds.y +
+       2 * PADDING;
+      
+      node->bg.h = (current_y + tallest) -
+       node->bg.y +
+       2 * PADDING;
+     }
     }
-    
-    if ((current_y + tallest) - node->bg.y > node->bg.h)
-    {
-     node->bounds.h = (current_y + tallest) -
-      node->bounds.y +
-      2 * PADDING;
-     
-     node->bg.h = (current_y + tallest) -
-      node->bg.y +
-      2 * PADDING;
-    }
-    
-    child = child->next_sibling;
    }
    
    blur_screen_region(node->bounds, BLUR_STRENGTH, node->sort);
@@ -1079,6 +1019,19 @@ _ui_layout_and_render_node(PlatformState *input,
              node->label,
              node->sort,
              global_ui_projection_matrix);
+   
+   
+   for (U32 i = 0;
+        i < horizontal_rule_count;
+        ++i)
+   {
+    fill_rectangle(rectangle_literal(node->bounds.x + PADDING, horizontal_rules[i],
+                                     node->bounds.w - PADDING * 2,
+                                     STROKE_WIDTH),
+                   FG_COL_1,
+                   node->sort,
+                   global_ui_projection_matrix);
+   }
    
    break;
   }
@@ -1136,7 +1089,9 @@ _ui_layout_and_render_node(PlatformState *input,
     draw_text(global_ui_font,
               x + PADDING, y + global_ui_font->size,
               node->wrap_width,
-              FG_COL_1,
+              colour_lerp(BG_COL_1,
+                          FG_COL_1,
+                          node->animation_transition),
               node->label,
               node->sort,
               global_ui_projection_matrix);
@@ -1198,11 +1153,8 @@ _ui_layout_and_render_node(PlatformState *input,
       node->toggled = false;
      }
      
-     Rect dropdown_bg = node->bg;
-     dropdown_bg.h *= node->animation_transition;
-     
-     blur_screen_region(dropdown_bg, BLUR_STRENGTH, node->sort + 1);
-     fill_rectangle(dropdown_bg, BG_COL_2, node->sort + 1, global_ui_projection_matrix);
+     blur_screen_region(node->bg, BLUR_STRENGTH, node->sort + 1);
+     fill_rectangle(node->bg, BG_COL_2, node->sort + 1, global_ui_projection_matrix);
     }
    }
    
@@ -1283,37 +1235,6 @@ _ui_layout_and_render_node(PlatformState *input,
              global_ui_projection_matrix);
    break;
   }
-  case UI_NODE_KIND_sprite_picker:
-  {
-   node->bounds = rectangle_literal(x, y, node->texture_width, node->texture_height);
-   node->interactable = node->bounds;
-   
-   stroke_rectangle(node->bounds,
-                    FG_COL_1,
-                    -STROKE_WIDTH,
-                    node->sort,
-                    global_ui_projection_matrix);
-   
-   fill_rectangle(node->bounds,
-                  BG_COL_1,
-                  node->sort,
-                  global_ui_projection_matrix);
-   
-   draw_sub_texture(node->bounds,
-                    colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
-                    node->texture,
-                    ENTIRE_TEXTURE,
-                    node->sort,
-                    global_ui_projection_matrix);
-   
-   stroke_rectangle(node->bg,
-                    FG_COL_1,
-                    STROKE_WIDTH,
-                    node->sort,
-                    global_ui_projection_matrix);
-   
-   break;
-  }
   case UI_NODE_KIND_text_entry:
   {
    node->bounds = rectangle_literal(x, y, node->wrap_width, global_ui_font->size);
@@ -1352,17 +1273,6 @@ _ui_layout_and_render_node(PlatformState *input,
              node->label,
              node->sort,
              global_ui_projection_matrix);
-  }
-  case UI_NODE_KIND_line_break:
-  {
-   if (node->draw_horizontal_rule)
-   {
-    fill_rectangle(rectangle_literal(x, y - (PADDING + STROKE_WIDTH) / 2, node->parent->bounds.w - PADDING * 2, STROKE_WIDTH),
-                   FG_COL_1,
-                   node->parent->sort + 1,
-                   global_ui_projection_matrix);
-   }
-   break;
   }
   default:
   {
@@ -1407,7 +1317,7 @@ ui_finish(PlatformState *input)
  
  memset(&global_ui_root, 0, sizeof(global_ui_root));
  
- if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+ if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
  {
   global_active_widget = NULL;
  }

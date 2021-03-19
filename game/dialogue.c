@@ -13,15 +13,13 @@ typedef struct
 
 internal void
 play_dialogue(DialogueState *dialogue_state,
-              Asset *asset,
+              S8List *dialogue,
               F32 x, F32 y,
               Colour colour)
 {
- load_dialogue(asset);
- 
  dialogue_state->playing = true;
  dialogue_state->start_time = global_time;
- dialogue_state->dialogue = asset->dialogue;
+ dialogue_state->dialogue = dialogue;
  dialogue_state->x = x;
  dialogue_state->y = y;
  dialogue_state->colour = colour;

@@ -1,10 +1,31 @@
+typedef struct LevelDescriptor LevelDescriptor;
+struct LevelDescriptor
+{
+	U8 music_path[64];
+	U8 fg_path[64];
+	U8 bg_path[64];
+	F32 player_scale;
+	F32 floor_gradient;
+	F32 exposure;
+	F32 player_spawn_x;
+	F32 player_spawn_y;
+	I32 kind;
+};
+
+typedef enum
+{
+	LEVEL_KIND_world,
+	LEVEL_KIND_memory,
+} LevelKind;
+
 typedef struct Entity Entity;
 struct Entity
 {
 	U64 flags;
-	F32 teleport_to_y;
 	F32 teleport_to_x;
-	B32 teleport_to_default_spawn;
+	F32 teleport_to_y;
+	B32 teleport_do_not_persist_exposure;
+	B32 teleport_to_non_default_spawn;
 	U8 teleport_to_level[64];
 	I32 fade_out_direction;
 	U8 dialogue_path[64];

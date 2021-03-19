@@ -13,174 +13,29 @@ internal MemoryArena global_platform_layer_frame_memory;
 internal void
 windows_print_error(U8 *function)
 {
+#ifdef LUCERNA_DEBUG
  void *message_buffer;
  DWORD error = GetLastError(); 
  
- FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-               FORMAT_MESSAGE_FROM_SYSTEM |
-               FORMAT_MESSAGE_IGNORE_INSERTS,
-               NULL,
-               error,
-               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-               (LPTSTR) &message_buffer,
-               0, 
-               NULL);
+ FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+                FORMAT_MESSAGE_FROM_SYSTEM |
+                FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL,
+                error,
+                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                (LPSTR) &message_buffer,
+                0, 
+                NULL);
  
- 
- fprintf(stderr, "%s : %s", function, (char *)message_buffer);
+ debug_log("%s : %s", function, (char *)message_buffer);
  
  LocalFree(message_buffer);
-}
-
-internal HANDLE
-windows_create_file(B32 *success,
-                    DWORD creation_disposition,
-                    U8 *path_cstr)
-{
- HANDLE file;
- 
- DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
- DWORD share_mode = 0;
- SECURITY_ATTRIBUTES security_attributes =
- {
-  (DWORD)sizeof(SECURITY_ATTRIBUTES),
-  0,
-  0,
- };
- DWORD flags_and_attributes = FILE_ATTRIBUTE_NORMAL;
- HANDLE template_file = 0;
- 
- file = CreateFile(path_cstr,
-                   desired_access,
-                   share_mode,
-                   &security_attributes,
-                   creation_disposition,
-                   flags_and_attributes,
-                   template_file);
- 
- *success = *success && (file != INVALID_HANDLE_VALUE);
- 
- return file;
-}
-
-S8
-platform_read_entire_file(MemoryArena *memory,
-                          S8 path)
-{
- S8 result = {0};
- B32 success = true;
- 
- temporary_memory_begin(&global_platform_layer_frame_memory);
- 
- char *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
- 
- HANDLE file = windows_create_file(&success, OPEN_EXISTING, path_cstr);
- 
- if (success)
- {
-  DWORD read_bytes = GetFileSize(file, 0);
-  if(read_bytes)
-  {
-   void *read_data = arena_allocate(memory, read_bytes);
-   DWORD bytes_read = 0;
-   OVERLAPPED overlapped = {0};
-   
-   ReadFile(file, read_data, read_bytes, &bytes_read, &overlapped);
-   
-   result.buffer = read_data;
-   result.len = (U64)bytes_read;
-   
-   if (read_bytes != bytes_read ||
-       !read_data ||
-       !bytes_read)
-   {
-    windows_print_error("ReadFile");
-   }
-  }
-  CloseHandle(file);
- }
- else
- {
-  fprintf(stderr, "failure reading entire file '%s' - ", path_cstr);
-  windows_print_error("CreateFile");
- }
- 
-#if LUCERNA_DEBUG
- if (success)
- {
-  fprintf(stderr, "successfully read entire file '%s'\n", path_cstr);
- }
 #endif
- 
- temporary_memory_end(&global_platform_layer_frame_memory);
- 
- return result;
 }
 
-B32
-platform_write_entire_file(S8 path,
-                           void *buffer,
-                           U64 size)
-{
- HANDLE file = {0};
- B32 success = true;
- 
- temporary_memory_begin(&global_platform_layer_frame_memory);
- 
- U8 *temp_path = arena_allocate(&global_platform_layer_frame_memory, path.len + 2);
- memcpy(temp_path, path.buffer, path.len);
- strcat(temp_path, "~");
- 
- U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
- 
- file = windows_create_file(&success, CREATE_ALWAYS, temp_path);
- 
- if(success)
- {
-  void *data_to_write = buffer;
-  DWORD data_to_write_size = (DWORD)size;
-  DWORD bytes_written = 0;
-  
-  success = success && WriteFile(file, data_to_write, data_to_write_size, &bytes_written, 0);
-  
-  if (!success)
-  {
-   fprintf(stderr, "failure writing entire file '%s' - ", temp_path);
-   windows_print_error("WriteFile");
-  }
-  
-  success = success && CloseHandle(file);
-  
-  if (success)
-  {
-   if (!MoveFileEx(temp_path, path_cstr, MOVEFILE_REPLACE_EXISTING))
-   {
-    fprintf(stderr, "failure renaming file '%s' over '%s' - ", temp_path, path_cstr);
-    windows_print_error("MoveFileEx");
-   }
-  }
-  else
-  {
-   fprintf(stderr, "failure writing entire file '%s'", temp_path);
-   windows_print_error("CloseHandle");
-  }
- }
- else
- {
-  fprintf(stderr, "failure writing entire file '%s' - ", temp_path);
-  windows_print_error("CreateFile");
- }
- 
-#if LUCERNA_DEBUG
- if (success)
- {
-  fprintf(stderr, "successfully wrote entire file '%s'\n", path_cstr);
- }
-#endif
- 
- temporary_memory_end(&global_platform_layer_frame_memory);
- return success;
-}
+//
+// NOTE(tbt): File IO
+//~
 
 struct PlatformFile
 {
@@ -191,93 +46,290 @@ struct PlatformFile
 };
 
 PlatformFile *
-platform_open_file(S8 path)
+platform_open_file_ex(S8 path,
+                      PlatformOpenFileFlags flags)
 {
- PlatformFile *result = NULL;
- HANDLE file = {0};
+ PlatformFile *result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PlatformFile));
  
- temporary_memory_begin(&global_platform_layer_frame_memory);
- 
- U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
- 
- DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
- DWORD share_mode = 0;
- SECURITY_ATTRIBUTES security_attributes =
+ arena_temporary_memory(&global_platform_layer_frame_memory)
  {
-  (DWORD)sizeof(SECURITY_ATTRIBUTES),
-  0,
-  0,
- };
- DWORD creation_disposition = OPEN_ALWAYS;
- DWORD flags_and_attributes = 0;
- HANDLE template_file = 0;
- 
- if ((file = CreateFile(path_cstr,
-                        desired_access,
-                        share_mode,
-                        &security_attributes,
-                        creation_disposition,
-                        flags_and_attributes,
-                        template_file)) != INVALID_HANDLE_VALUE)
- {
-  result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PlatformFile));
-  result->file = file;
+  U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+  
+  DWORD desired_access =
+   (GENERIC_READ * !!(flags & PLATFORM_OPEN_FILE_read)) |
+   (GENERIC_WRITE * !!(flags & PLATFORM_OPEN_FILE_write));
+  
+  DWORD share_mode = 0;
+  SECURITY_ATTRIBUTES security_attributes =
+  {
+   (DWORD)sizeof(SECURITY_ATTRIBUTES),
+   0,
+   0,
+  };
+  DWORD creation_disposition = 0;
+  if (flags & PLATFORM_OPEN_FILE_always_create)
+  {
+   creation_disposition |= CREATE_ALWAYS;
+  }
+  else
+  {
+   creation_disposition |= OPEN_ALWAYS;
+  }
+  
+  DWORD flags_and_attributes = 0;
+  HANDLE template_file = 0;
+  
+  result->file = CreateFileA(path_cstr,
+                             desired_access,
+                             share_mode,
+                             &security_attributes,
+                             creation_disposition,
+                             flags_and_attributes,
+                             template_file);
+  
+  if (result->file == INVALID_HANDLE_VALUE)
+  {
+   debug_log("failure opening file '%.*s' - ", (I32)path.len, path.buffer);
+   windows_print_error("CreateFileA");
+   platform_close_file(&result);
+  }
  }
- 
- 
- temporary_memory_end(&global_platform_layer_frame_memory);
  
 #ifdef LUCERNA_DEBUG
  if (result)
  {
   result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.len + 1);
   memcpy(result->name, path.buffer, path.len);
-  fprintf(stderr, "successfully opened file '%.*s'\n", (I32)path.len, path.buffer);
- }
- else
- {
-  fprintf(stderr, "failure opening file '%.*s'\n", (I32)path.len, path.buffer);
  }
 #endif
  
  return result;
 }
 
-B32 platform_append_to_file(PlatformFile *file,
-                            void *buffer,
-                            U64 size)
+PlatformFile *
+platform_open_file(S8 path)
 {
- DWORD bytes_written;
- B32 success = true;
- 
- if (file && size && buffer)
- {
-  success = WriteFile(file->file, buffer, size, &bytes_written, 0);
-  success = success && (bytes_written == size);
-  
-  if (!success)
-  {
-#ifdef LUCERNA_DEBUG
-   fprintf(stderr, "failure appending to file '%s' - ", file->name);
-#endif
-   windows_print_error("WriteFile");
-  }
- }
- 
- return success;
+ return platform_open_file_ex(path, PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_write);
 }
 
 void
 platform_close_file(PlatformFile **file)
 {
- CloseHandle((*file)->file);
+ if (file &&
+     *file)
+ {
+  CloseHandle((*file)->file);
 #ifdef LUCERNA_DEBUG
- fprintf(stderr, "Successfully closed file %s\n", (*file)->name);
- HeapFree(GetProcessHeap(), 0, (*file)->name);
+  HeapFree(GetProcessHeap(), 0, (*file)->name);
 #endif
- HeapFree(GetProcessHeap(), 0, *file);
- *file = NULL;
+  HeapFree(GetProcessHeap(), 0, *file);
+  *file = NULL;
+ }
 }
+
+U64
+platform_get_file_size_f(PlatformFile *file)
+{
+ U64 result = 0;
+ if (file)
+ {
+  result = GetFileSize(file->file, 0);
+ }
+ return result;
+}
+
+U64
+platform_get_file_modified_time_f(PlatformFile *file)
+{
+ U64 result = 0;
+ FILETIME file_modified_time;
+ 
+ if (file)
+ {
+  if (GetFileTime(file->file, NULL, NULL, &file_modified_time))
+  {
+   ULARGE_INTEGER u_large_integer = {0};
+   u_large_integer.LowPart = file_modified_time.dwLowDateTime;
+   u_large_integer.HighPart = file_modified_time.dwHighDateTime;
+   
+   result = u_large_integer.QuadPart;
+  }
+  else
+  {
+   debug_log("failure getting last modified time for file '%s' - ", file->name);
+   windows_print_error("GetFileTime");
+  }
+ }
+ 
+ return result;
+}
+
+S8
+platform_read_entire_file_f(MemoryArena *memory,
+                            PlatformFile *file)
+{
+ S8 result = {0};
+ 
+ if (file)
+ {
+  DWORD bytes_to_read = GetFileSize(file->file, 0);
+  if (bytes_to_read)
+  {
+   void *read_data = arena_allocate(memory, bytes_to_read);
+   DWORD bytes_read = 0;
+   OVERLAPPED overlapped = {0};
+   
+   ReadFile(file->file, read_data, bytes_to_read, &bytes_read, &overlapped);
+   
+   result.buffer = read_data;
+   result.len = (U64)bytes_read;
+   
+   if (bytes_to_read == bytes_read &&
+       read_data &&
+       bytes_read)
+   {
+    debug_log("successfully read entire file '%s'\n", file->name);
+   }
+   else
+   {
+    debug_log("failure reading entire file '%s' - ", file->name);
+    windows_print_error("ReadFile");
+   }
+  }
+  else
+  {
+   debug_log("failure reading entire file '%s' - file has no size\n", file->name);
+  }
+ }
+ 
+ return result;
+}
+
+U64
+platform_read_file_f(PlatformFile *file,
+                     U64 offset,
+                     U64 read_size,
+                     void *buffer)
+{
+ DWORD bytes_read = 0;
+ 
+ if (file &&
+     buffer &&
+     read_size)
+ {
+  OVERLAPPED overlapped = {0};
+  overlapped.Pointer = (PVOID)offset;
+  ReadFile(file->file, buffer, read_size, &bytes_read, &overlapped);
+  
+  if (!bytes_read)
+  {
+   debug_log("failure reading file '%s' - ", file->name);
+   windows_print_error("ReadFile");
+  }
+  else
+  {
+   debug_log("successfully read fom file '%s'\n", file->name);
+  }
+ }
+ return (U64)bytes_read;
+}
+
+U64
+platform_write_to_file_f(PlatformFile *file,
+                         void *buffer,
+                         U64 buffer_size)
+{
+ DWORD bytes_written = 0;
+ 
+ if (file &&
+     buffer &&
+     buffer_size)
+ {
+  void *data_to_write = buffer;
+  DWORD data_to_write_size = (DWORD)buffer_size;
+  
+  if (0 == WriteFile(file->file, data_to_write, data_to_write_size, &bytes_written, 0))
+  {
+   debug_log("failure writing file '%s' - ", file->name);
+   windows_print_error("WriteFile");
+  }
+  else
+  {
+   debug_log("successfully wrote to file '%s'\n", file->name);
+  }
+ }
+ 
+ return bytes_written;
+}
+
+U64
+platform_get_file_size_p(S8 path)
+{
+ PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ U64 result = platform_get_file_size_f(file);
+ platform_close_file(&file);
+ return result;
+}
+
+U64
+platform_get_file_modified_time_p(S8 path)
+{
+ PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ U64 result = platform_get_file_modified_time_f(file);
+ platform_close_file(&file);
+ return result;
+}
+
+S8
+platform_read_entire_file_p(MemoryArena *memory,
+                            S8 path)
+{
+ PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ S8 result = platform_read_entire_file_f(memory, file);
+ platform_close_file(&file);
+ return result;
+}
+
+U64
+platform_read_file_p(S8 path,
+                     U64 offset,
+                     U64 read_size,
+                     void *buffer)
+{
+ PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ U64 result = platform_read_file_f(file, offset, read_size, buffer);
+ platform_close_file(&file);
+ return result;
+}
+
+U64
+platform_write_entire_file_p(S8 path,
+                             void *buffer,
+                             U64 buffer_size)
+{
+ PlatformFile *file = platform_open_file_ex(path,
+                                            PLATFORM_OPEN_FILE_read |
+                                            PLATFORM_OPEN_FILE_write |
+                                            PLATFORM_OPEN_FILE_always_create);
+ U64 result = platform_write_to_file_f(file, buffer, buffer_size);
+ platform_close_file(&file);
+ return result;
+}
+
+U64
+platform_append_to_file_p(S8 path,
+                          void *buffer,
+                          U64 buffer_size)
+{
+ PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_write);
+ U64 result = platform_write_to_file_f(file, buffer, buffer_size);
+ platform_close_file(&file);
+ return result;
+}
+
+//
+// NOTE(tbt): OpenGL loading
+//~
 
 internal struct
 {
@@ -286,15 +338,6 @@ internal struct
  PFNWGLCREATECONTEXTATTRIBSARBPROC CreateContextAttribsARB;
  PFNWGLGETEXTENSIONSSTRINGARBPROC  GetExtensionsStringARB;
 } wgl;
-
-void
-platform_set_vsync(B32 enabled)
-{
- if (wgl.SwapIntervalEXT)
- {
-  wgl.SwapIntervalEXT(enabled);
- }
-}
 
 internal B32
 windows_is_opengl_extension_present(HDC device_context,
@@ -344,19 +387,21 @@ windows_load_opengl_function(HMODULE opengl32,
     p == (void*)0x3 ||
     p == (void*)-1 )
  {
-  fprintf(stderr,
-          "wglGetProcAddress returned NULL - "
-          "trying to load '%s' from opengl32.dll... ",
-          func);
+  debug_log("wglGetProcAddress returned NULL - "
+            "trying to load '%s' from opengl32.dll... ",
+            func);
   
   p = (void *)GetProcAddress(opengl32, func);
   if (p)
   {
-   fprintf(stderr, "Success!\n");
+   debug_log("Success!\n");
   }
   else
   {
-   fprintf(stderr, "Could not load OpenGL function: %s\n", func);
+   U8 message[512];
+   snprintf(message, sizeof(message), "could not load OpenGL function '%s'\n", func);
+   MessageBoxA(NULL, message, "Error", MB_OK | MB_ICONERROR);
+   debug_log(message);
   }
  }
  
@@ -367,100 +412,46 @@ internal void
 windows_load_all_opengl_functions(OpenGLFunctions *result)
 {
  HMODULE opengl32;
- opengl32 = LoadLibrary("opengl32.dll");
- 
- result->ActiveTexture           = (PFNGLACTIVETEXTUREPROC          )windows_load_opengl_function(opengl32, "glActiveTexture");
- result->AttachShader            = (PFNGLATTACHSHADERPROC           )windows_load_opengl_function(opengl32, "glAttachShader");
- result->BindBuffer              = (PFNGLBINDBUFFERPROC             )windows_load_opengl_function(opengl32, "glBindBuffer");
- result->BindFramebuffer         = (PFNGLBINDFRAMEBUFFERPROC        )windows_load_opengl_function(opengl32, "glBindFramebuffer");
- result->BindTexture             = (PFNGLBINDTEXTUREPROC            )windows_load_opengl_function(opengl32, "glBindTexture");
- result->BindVertexArray         = (PFNGLBINDVERTEXARRAYPROC        )windows_load_opengl_function(opengl32, "glBindVertexArray");
- result->BlendFunc               = (PFNGLBLENDFUNCPROC              )windows_load_opengl_function(opengl32, "glBlendFunc");
- result->BlitFramebuffer         = (PFNGLBLITFRAMEBUFFERPROC        )windows_load_opengl_function(opengl32, "glBlitFramebuffer");
- result->BufferData              = (PFNGLBUFFERDATAPROC             )windows_load_opengl_function(opengl32, "glBufferData");
- result->BufferSubData           = (PFNGLBUFFERSUBDATAPROC          )windows_load_opengl_function(opengl32, "glBufferSubData");
- result->Clear                   = (PFNGLCLEARPROC                  )windows_load_opengl_function(opengl32, "glClear");
- result->ClearColor              = (PFNGLCLEARCOLORPROC             )windows_load_opengl_function(opengl32, "glClearColor");
- result->CompileShader           = (PFNGLCOMPILESHADERPROC          )windows_load_opengl_function(opengl32, "glCompileShader");
- result->CreateProgram           = (PFNGLCREATEPROGRAMPROC          )windows_load_opengl_function(opengl32, "glCreateProgram");
- result->CreateShader            = (PFNGLCREATESHADERPROC           )windows_load_opengl_function(opengl32, "glCreateShader");
- result->DeleteBuffers           = (PFNGLDELETEBUFFERSPROC          )windows_load_opengl_function(opengl32, "glDeleteBuffers");
- result->DeleteProgram           = (PFNGLDELETEPROGRAMPROC          )windows_load_opengl_function(opengl32, "glDeleteProgram");
- result->DeleteShader            = (PFNGLDELETESHADERPROC           )windows_load_opengl_function(opengl32, "glDeleteShader");
- result->DeleteTextures          = (PFNGLDELETETEXTURESPROC         )windows_load_opengl_function(opengl32, "glDeleteTextures");
- result->DeleteVertexArrays      = (PFNGLDELETEVERTEXARRAYSPROC     )windows_load_opengl_function(opengl32, "glDeleteVertexArrays");
- result->DetachShader            = (PFNGLDETACHSHADERPROC           )windows_load_opengl_function(opengl32, "glDetachShader");
- result->Disable                 = (PFNGLDISABLEPROC                )windows_load_opengl_function(opengl32, "glDisable");
- result->DrawArrays              = (PFNGLDRAWARRAYSPROC             )windows_load_opengl_function(opengl32, "glDrawArrays");
- result->DrawElements            = (PFNGLDRAWELEMENTSPROC           )windows_load_opengl_function(opengl32, "glDrawElements");
- result->Enable                  = (PFNGLENABLEPROC                 )windows_load_opengl_function(opengl32, "glEnable");
- result->EnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)windows_load_opengl_function(opengl32, "glEnableVertexAttribArray");
- result->FramebufferTexture2D    = (PFNGLFRAMEBUFFERTEXTURE2DPROC   )windows_load_opengl_function(opengl32, "glFramebufferTexture2D");
- result->GenBuffers              = (PFNGLGENBUFFERSPROC             )windows_load_opengl_function(opengl32, "glGenBuffers");
- result->GenFramebuffers         = (PFNGLGENFRAMEBUFFERSPROC        )windows_load_opengl_function(opengl32, "glGenFramebuffers");
- result->GenTextures             = (PFNGLGENTEXTURESPROC            )windows_load_opengl_function(opengl32, "glGenTextures");
- result->GenVertexArrays         = (PFNGLGENVERTEXARRAYSPROC        )windows_load_opengl_function(opengl32, "glGenVertexArrays");
- result->GetError                = (PFNGLGETERRORPROC               )windows_load_opengl_function(opengl32, "glGetError");
- result->GetProgramiv            = (PFNGLGETPROGRAMIVPROC           )windows_load_opengl_function(opengl32, "glGetProgramiv");
- result->GetUniformLocation      = (PFNGLGETUNIFORMLOCATIONPROC     )windows_load_opengl_function(opengl32, "glGetUniformLocation");
- result->GetShaderInfoLog        = (PFNGLGETSHADERINFOLOGPROC       )windows_load_opengl_function(opengl32, "glGetShaderInfoLog");
- result->GetShaderiv             = (PFNGLGETSHADERIVPROC            )windows_load_opengl_function(opengl32, "glGetShaderiv");
- result->LinkProgram             = (PFNGLLINKPROGRAMPROC            )windows_load_opengl_function(opengl32, "glLinkProgram");
- result->Scissor                 = (PFNGLSCISSORPROC                )windows_load_opengl_function(opengl32, "glScissor");
- result->ShaderSource            = (PFNGLSHADERSOURCEPROC           )windows_load_opengl_function(opengl32, "glShaderSource");
- result->TexImage2D              = (PFNGLTEXIMAGE2DPROC             )windows_load_opengl_function(opengl32, "glTexImage2D");
- result->TexParameteri           = (PFNGLTEXPARAMETERIPROC          )windows_load_opengl_function(opengl32, "glTexParameteri");
- result->UniformMatrix4fv        = (PFNGLUNIFORMMATRIX4FVPROC       )windows_load_opengl_function(opengl32, "glUniformMatrix4fv");
- result->Uniform1i               = (PFNGLUNIFORM1IPROC              )windows_load_opengl_function(opengl32, "glUniform1i");
- result->Uniform1f               = (PFNGLUNIFORM1FPROC              )windows_load_opengl_function(opengl32, "glUniform1f");
- result->Uniform2f               = (PFNGLUNIFORM2FPROC              )windows_load_opengl_function(opengl32, "glUniform2f");
- result->UseProgram              = (PFNGLUSEPROGRAMPROC             )windows_load_opengl_function(opengl32, "glUseProgram");
- result->VertexAttribPointer     = (PFNGLVERTEXATTRIBPOINTERPROC    )windows_load_opengl_function(opengl32, "glVertexAttribPointer");
- result->Viewport                = (PFNGLVIEWPORTPROC               )windows_load_opengl_function(opengl32, "glViewport");
+ opengl32 = LoadLibraryA("opengl32.dll");
+#define gl_func(_type, _name) result-> ## _name = (PFNGL ## _type ## PROC)windows_load_opengl_function(opengl32, "gl" #_name)
+#include "gl_funcs.h"
  
  FreeModule(opengl32);
 }
 
-U8 key_lut[] =
-{
- 
- 0, 41, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 45, 46, 42, 43, 20, 26, 8,
- 21, 23, 28, 24, 12, 18, 19, 47, 48, 158, 224, 4, 22, 7, 9, 10, 11, 13, 14,
- 15, 51, 52, 53, 225, 49, 29, 27, 6, 25, 5, 17, 16, 54, 55, 56, 229, 0, 226,
- 0, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 72, 71, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 228, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 70, 230, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 74,
- 82, 75, 0, 80, 0, 79, 0, 77, 81, 78, 73, 76, 0, 0, 0, 0, 0, 0, 0, 227, 231,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
+PlatformState global_platform_state = {0};
 internal volatile B32 global_running = true;
 
-PlatformState global_platform_state = {0};
-
 internal B32 global_dummy_context = true;
-
 internal HWND global_window_handle;
 
-internal WINDOWPLACEMENT global_previous_window_placement = { sizeof(global_previous_window_placement) };
+//
+// NOTE(tbt): platform layer utilities
+//~
 
+void
+platform_set_vsync(B32 enabled)
+{
+ if (wgl.SwapIntervalEXT)
+ {
+  wgl.SwapIntervalEXT(enabled);
+ }
+}
+
+internal WINDOWPLACEMENT global_previous_window_placement = { sizeof(global_previous_window_placement) };
 void
 platform_toggle_fullscreen(void)
 {
- DWORD style = GetWindowLong(global_window_handle, GWL_STYLE);
+ DWORD style = GetWindowLongA(global_window_handle, GWL_STYLE);
  if (style & WS_OVERLAPPEDWINDOW)
  {
   MONITORINFO monitor_info = { sizeof(monitor_info) };
   if (GetWindowPlacement(global_window_handle, &global_previous_window_placement) &&
-      GetMonitorInfo(MonitorFromWindow(global_window_handle, MONITOR_DEFAULTTOPRIMARY), &monitor_info))
+      GetMonitorInfoA(MonitorFromWindow(global_window_handle, MONITOR_DEFAULTTOPRIMARY), &monitor_info))
   {
-   SetWindowLong(global_window_handle,
-                 GWL_STYLE,
-                 style & ~WS_OVERLAPPEDWINDOW);
+   SetWindowLongA(global_window_handle,
+                  GWL_STYLE,
+                  style & ~WS_OVERLAPPEDWINDOW);
    
    SetWindowPos(global_window_handle, HWND_TOP,
                 monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
@@ -471,9 +462,9 @@ platform_toggle_fullscreen(void)
  }
  else
  {
-  SetWindowLong(global_window_handle,
-                GWL_STYLE,
-                style | WS_OVERLAPPEDWINDOW);
+  SetWindowLongA(global_window_handle,
+                 GWL_STYLE,
+                 style | WS_OVERLAPPEDWINDOW);
   SetWindowPlacement(global_window_handle, &global_previous_window_placement);
   SetWindowPos(global_window_handle, NULL, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -483,9 +474,28 @@ platform_toggle_fullscreen(void)
 void
 platform_quit(void)
 {
- global_running = false;
+ platform_audio_critical_section
+ {
+  global_running = false;
+  PostQuitMessage(0);
+ }
 }
 
+//
+// NOTE(tbt): event processing loop
+//~
+
+internal void
+windows_push_platform_event(PlatformEvent event)
+{
+ PlatformEvent *_event = arena_allocate(&global_platform_layer_frame_memory, sizeof(*_event));
+ *_event = event;
+ 
+ _event->next = global_platform_state.events;
+ global_platform_state.events = _event;
+}
+
+#include "platform_events.h"
 
 LRESULT CALLBACK
 window_proc(HWND window_handle,
@@ -493,75 +503,246 @@ window_proc(HWND window_handle,
             WPARAM w_param,
             LPARAM l_param)
 {
+ LRESULT result = 0;
+ 
  static B32 mouse_hover_active = false;
+ 
+ InputModifiers modifiers = 0;
+ if(GetKeyState(VK_CONTROL) & 0x8000)
+ {
+  modifiers |= INPUT_MODIFIER_ctrl;
+ }
+ if(GetKeyState(VK_SHIFT) & 0x8000)
+ {
+  modifiers |= INPUT_MODIFIER_shift;
+ }
+ if(GetKeyState(VK_MENU) & 0x8000)
+ {
+  modifiers |= INPUT_MODIFIER_alt;
+ }
  
  switch(message)
  {
   case WM_CHAR:
   {
-   // NOTE(tbt): only care about ASCII, because that's all I can render anyway...
-   if (w_param < 128)
+   if (w_param >= 32 &&
+       w_param != VK_RETURN &&
+       w_param != VK_ESCAPE &&
+       w_param != 127)
    {
-    KeyTyped *key_typed;
-    key_typed = arena_allocate(&global_platform_layer_frame_memory,
-                               sizeof(*key_typed));
-    key_typed->key = (U8)w_param;
-    key_typed->next = global_platform_state.keys_typed;
-    global_platform_state.keys_typed = key_typed;
+    windows_push_platform_event(platform_key_typed_event(w_param));
    }
    break;
   }
   case WM_KEYDOWN:
-  {
-   U32 key = key_lut[((l_param >> 16) & 0x7f) |
-                     ((l_param & (1 << 24))
-                      != 0 ?
-                      0x80 : 0)];
-   global_platform_state.is_key_pressed[key] = true;
-   break;
-  }
   case WM_KEYUP:
+  case WM_SYSKEYDOWN:
+  case WM_SYSKEYUP:
   {
-   U32 key = key_lut[((l_param >> 16) & 0x7f) |
-                     ((l_param & (1 << 24))
-                      != 0 ?
-                      0x80 : 0)];
-   global_platform_state.is_key_pressed[key] = false;
+   Key key_input = 0;
+   B32 is_down = !(l_param & (1 << 31));;
+   
+   if(w_param >= 'A' && w_param <= 'Z')
+   {
+    key_input = KEY_a + (w_param - 'A');
+   }
+   else if (w_param >= '0' && w_param <= '9')
+   {
+    key_input = KEY_0 + (w_param - '0');
+   }
+   else
+   {
+    if(w_param == VK_ESCAPE)
+    {
+     key_input = KEY_esc;
+    }
+    else if(w_param >= VK_F1 && w_param <= VK_F12)
+    {
+     key_input = KEY_F1 + w_param - VK_F1;
+    }
+    else if(w_param == VK_OEM_3)
+    {
+     key_input = KEY_grave_accent;
+    }
+    else if(w_param == VK_OEM_MINUS)
+    {
+     key_input = KEY_minus;
+    }
+    else if(w_param == VK_OEM_PLUS)
+    {
+     key_input = KEY_equal;
+    }
+    else if(w_param == VK_BACK)
+    {
+     key_input = KEY_backspace;
+    }
+    else if(w_param == VK_TAB)
+    {
+     key_input = KEY_tab;
+    }
+    else if(w_param == VK_SPACE)
+    {
+     key_input = KEY_space;
+    }
+    else if(w_param == VK_RETURN)
+    {
+     key_input = KEY_enter;
+    }
+    else if(w_param == VK_CONTROL)
+    {
+     key_input = KEY_ctrl;
+     modifiers &= ~INPUT_MODIFIER_ctrl;
+    }
+    else if(w_param == VK_SHIFT)
+    {
+     key_input = KEY_shift;
+     modifiers &= ~INPUT_MODIFIER_shift;
+    }
+    else if(w_param == VK_MENU)
+    {
+     key_input = KEY_alt;
+     modifiers &= ~INPUT_MODIFIER_alt;
+    }
+    else if(w_param == VK_UP)
+    {
+     key_input = KEY_up;
+    }
+    else if(w_param == VK_LEFT)
+    {
+     key_input = KEY_left;
+    }
+    else if(w_param == VK_DOWN)
+    {
+     key_input = KEY_down;
+    }
+    else if(w_param == VK_RIGHT)
+    {
+     key_input = KEY_right;
+    }
+    else if(w_param == VK_DELETE)
+    {
+     key_input = KEY_delete;
+    }
+    else if(w_param == VK_PRIOR)
+    {
+     key_input = KEY_page_up;
+    }
+    else if(w_param == VK_NEXT)
+    {
+     key_input = KEY_page_down;
+    }
+    else if(w_param == VK_HOME)
+    {
+     key_input = KEY_home;
+    }
+    else if(w_param == VK_END)
+    {
+     key_input = KEY_end;
+    }
+    else if(w_param == VK_OEM_2)
+    {
+     key_input = KEY_forward_slash;
+    }
+    else if(w_param == VK_OEM_PERIOD)
+    {
+     key_input = KEY_period;
+    }
+    else if(w_param == VK_OEM_COMMA)
+    {
+     key_input = KEY_comma;
+    }
+    else if(w_param == VK_OEM_7)
+    {
+     key_input = KEY_quote;
+    }
+    else if(w_param == VK_OEM_4)
+    {
+     key_input = KEY_left_bracket;
+    }
+    else if(w_param == VK_OEM_6)
+    {
+     key_input = KEY_right_bracket;
+    }
+   }
+   
+   global_platform_state.is_key_down[key_input] = is_down;
+   
+   if(is_down)
+   {
+    windows_push_platform_event(platform_key_press_event(key_input, modifiers));
+   }
+   else
+   {
+    windows_push_platform_event(platform_key_release_event(key_input, modifiers));
+   }
+   
+   result = DefWindowProc(window_handle, message, w_param, l_param);
+   
    break;
   }
   case WM_LBUTTONDOWN:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_left] = true;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_left] = true;
+   windows_push_platform_event(platform_mouse_press_event(MOUSE_BUTTON_left,
+                                                          GET_X_LPARAM(l_param),
+                                                          GET_Y_LPARAM(l_param),
+                                                          modifiers));
    break;
   }
   case WM_LBUTTONUP:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_left] = false;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_left] = false;
+   windows_push_platform_event(platform_mouse_release_event(MOUSE_BUTTON_left,
+                                                            GET_X_LPARAM(l_param),
+                                                            GET_Y_LPARAM(l_param),
+                                                            modifiers));
    break;
   }
   case WM_MBUTTONDOWN:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_middle] = true;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_middle] = true;
+   windows_push_platform_event(platform_mouse_press_event(MOUSE_BUTTON_middle,
+                                                          GET_X_LPARAM(l_param),
+                                                          GET_Y_LPARAM(l_param),
+                                                          modifiers));
    break;
   }
   case WM_MBUTTONUP:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_middle] = false;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_middle] = false;
+   windows_push_platform_event(platform_mouse_release_event(MOUSE_BUTTON_middle,
+                                                            GET_X_LPARAM(l_param),
+                                                            GET_Y_LPARAM(l_param),
+                                                            modifiers));
    break;
   }
   case WM_RBUTTONDOWN:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_right] = true;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_right] = true;
+   windows_push_platform_event(platform_mouse_press_event(MOUSE_BUTTON_right,
+                                                          GET_X_LPARAM(l_param),
+                                                          GET_Y_LPARAM(l_param),
+                                                          modifiers));
    break;
   }
   case WM_RBUTTONUP:
   {
-   global_platform_state.is_mouse_button_pressed[MOUSE_BUTTON_right] = false;
+   global_platform_state.is_mouse_button_down[MOUSE_BUTTON_right] = false;
+   windows_push_platform_event(platform_mouse_release_event(MOUSE_BUTTON_right,
+                                                            GET_X_LPARAM(l_param),
+                                                            GET_Y_LPARAM(l_param),
+                                                            modifiers));
    break;
   }
   case WM_MOUSEWHEEL:
   {
-   global_platform_state.mouse_scroll = GET_WHEEL_DELTA_WPARAM(w_param) / 120;
+   global_platform_state.mouse_scroll_h = GET_X_LPARAM(l_param) / 120;
+   global_platform_state.mouse_scroll_v = GET_Y_LPARAM(l_param) / 120;
+   windows_push_platform_event(platform_mouse_scroll_event(global_platform_state.mouse_scroll_h,
+                                                           global_platform_state.mouse_scroll_v,
+                                                           global_platform_state.mouse_x,
+                                                           global_platform_state.mouse_y,
+                                                           modifiers));
    break;
   }
   case WM_MOUSEMOVE:
@@ -569,8 +750,11 @@ window_proc(HWND window_handle,
    POINT mouse;
    GetCursorPos(&mouse);
    ScreenToClient(window_handle, &mouse);
-   global_platform_state.mouse_x = (F32)(mouse.x);
-   global_platform_state.mouse_y = (F32)(mouse.y);
+   global_platform_state.mouse_x = mouse.x;
+   global_platform_state.mouse_y = mouse.y;
+   
+   windows_push_platform_event(platform_mouse_move_event(global_platform_state.mouse_x,
+                                                         global_platform_state.mouse_y));
    
    if (!mouse_hover_active)
    {
@@ -602,10 +786,7 @@ window_proc(HWND window_handle,
    {
     SetCursor(LoadCursorA(0, IDC_ARROW));
    }
-   else
-   {
-    return DefWindowProc(window_handle, message, l_param, w_param);
-   }
+   result = DefWindowProc(window_handle, message, l_param, w_param);
    break;
   }
   case WM_SIZE:
@@ -622,8 +803,11 @@ window_proc(HWND window_handle,
    }
    else
    {
-    global_running = false;
-    PostQuitMessage(0);
+    platform_audio_critical_section
+    {
+     global_running = false;
+     PostQuitMessage(0);
+    }
    }
    break;
   }
@@ -638,17 +822,21 @@ window_proc(HWND window_handle,
    global_platform_state.window_w = window_w;
    global_platform_state.window_h = window_h;
    
-   return DefWindowProc(window_handle, message, w_param, l_param);
+   result = DefWindowProc(window_handle, message, w_param, l_param);
+   break;
   }
   default:
   {
-   return DefWindowProc(window_handle, message, w_param, l_param);
+   result = DefWindowProc(window_handle, message, w_param, l_param);
   }
  }
  
- return 0;
+ return result;
 }
 
+//
+// NOTE(tbt): audio
+//~
 
 internal CRITICAL_SECTION global_audio_lock;
 
@@ -709,19 +897,19 @@ windows_audio_thread_main(LPVOID arg)
     if (!SUCCEEDED(primary_buffer->lpVtbl->SetFormat(primary_buffer,
                                                      &wave_format)))
     {
-     MessageBox(global_window_handle,
-                "Audio Error",
-                "could not set the primary buffer format",
-                MB_OK | MB_ICONWARNING);
+     MessageBoxA(global_window_handle,
+                 "Audio Error",
+                 "could not set the primary buffer format",
+                 MB_OK | MB_ICONWARNING);
      goto end;
     }
    }
    else
    {
-    MessageBox(global_window_handle,
-               "Audio Error",
-               "could not create the primary buffer",
-               MB_OK | MB_ICONWARNING);
+    MessageBoxA(global_window_handle,
+                "Audio Error",
+                "could not create the primary buffer",
+                MB_OK | MB_ICONWARNING);
     goto end;
    }
    
@@ -730,6 +918,7 @@ windows_audio_thread_main(LPVOID arg)
    ZeroMemory(&secondary_buffer_desc, sizeof(secondary_buffer_desc));
    secondary_buffer_desc.dwSize = sizeof(secondary_buffer_desc);
    secondary_buffer_desc.dwBufferBytes = secondary_buffer_size;
+   secondary_buffer_desc.dwFlags = DSBCAPS_GLOBALFOCUS;
    secondary_buffer_desc.lpwfxFormat = &wave_format;
    
    if (SUCCEEDED(direct_sound->lpVtbl->CreateSoundBuffer(direct_sound,
@@ -740,28 +929,28 @@ windows_audio_thread_main(LPVOID arg)
    }
    else
    {
-    MessageBox(global_window_handle,
-               "Audio Error",
-               "could not create the secondary buffer",
-               MB_OK | MB_ICONWARNING);
+    MessageBoxA(global_window_handle,
+                "Audio Error",
+                "could not create the secondary buffer",
+                MB_OK | MB_ICONWARNING);
     goto end;
    }
   }
   else
   {
-   MessageBox(global_window_handle,
-              "Audio Error",
-              "could not set the DirectSound cooperative level",
-              MB_OK | MB_ICONWARNING);
+   MessageBoxA(global_window_handle,
+               "Audio Error",
+               "could not set the DirectSound cooperative level",
+               MB_OK | MB_ICONWARNING);
    goto end;
   }
  }
  else
  {
-  MessageBox(global_window_handle,
-             "Audio Error",
-             "could not create a DirectSound object",
-             MB_OK | MB_ICONWARNING);
+  MessageBoxA(global_window_handle,
+              "Audio Error",
+              "could not create a DirectSound object",
+              MB_OK | MB_ICONWARNING);
   goto end;
  }
  
@@ -825,11 +1014,15 @@ windows_audio_thread_main(LPVOID arg)
  return 0;
 }
 
+//
+// NOTE(tbt): entry point
+//~
+
 I32 WINAPI
-wWinMain(HINSTANCE hInstance,
-         HINSTANCE hPrevInstance,
-         PWSTR pCmdLine,
-         I32 nCmdShow)
+WinMain(HINSTANCE hInstance,
+        HINSTANCE hPrevInstance,
+        LPSTR pCmdLine,
+        I32 nCmdShow)
 {
  OpenGLFunctions gl;
  
@@ -848,7 +1041,7 @@ wWinMain(HINSTANCE hInstance,
  // NOTE(tbt): load game dll
  //~
  
- HMODULE game = LoadLibrary("lucerna.dll");
+ HMODULE game = LoadLibraryA("lucerna.dll");
  
  GameInit _game_init = (GameInit)GetProcAddress(game, "game_init");
  GameUpdateAndRender _game_update_and_render = (GameUpdateAndRender)GetProcAddress(game, "game_update_and_render");
@@ -871,17 +1064,17 @@ wWinMain(HINSTANCE hInstance,
  window_class.hInstance = hInstance;
  window_class.lpszClassName = "LUCERNA";
  
- RegisterClass(&window_class);
+ RegisterClassA(&window_class);
  
- global_window_handle = CreateWindow("LUCERNA",
-                                     WINDOW_TITLE,
-                                     WS_OVERLAPPEDWINDOW,
-                                     CW_USEDEFAULT, CW_USEDEFAULT,
-                                     DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
-                                     NULL,
-                                     NULL,
-                                     hInstance,
-                                     NULL);
+ global_window_handle = CreateWindowA("LUCERNA",
+                                      WINDOW_TITLE,
+                                      WS_OVERLAPPEDWINDOW,
+                                      CW_USEDEFAULT, CW_USEDEFAULT,
+                                      DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
+                                      NULL,
+                                      NULL,
+                                      hInstance,
+                                      NULL);
  
  device_context = GetDC(global_window_handle);
  
@@ -963,15 +1156,15 @@ wWinMain(HINSTANCE hInstance,
   ReleaseDC(global_window_handle, device_context);
   DestroyWindow(global_window_handle);
   
-  global_window_handle = CreateWindow("LUCERNA",
-                                      WINDOW_TITLE,
-                                      WS_OVERLAPPEDWINDOW,
-                                      CW_USEDEFAULT, CW_USEDEFAULT,
-                                      DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
-                                      NULL,
-                                      NULL,
-                                      hInstance,
-                                      NULL);
+  global_window_handle = CreateWindowA("LUCERNA",
+                                       WINDOW_TITLE,
+                                       WS_OVERLAPPEDWINDOW,
+                                       CW_USEDEFAULT, CW_USEDEFAULT,
+                                       DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
+                                       NULL,
+                                       NULL,
+                                       hInstance,
+                                       NULL);
   
   device_context = GetDC(global_window_handle);
   
@@ -996,6 +1189,7 @@ wWinMain(HINSTANCE hInstance,
  }
  else
  {
+  MessageBoxA(NULL, "Could not recreate OpenGL contex. Some graphical error may occur.", "Warning", MB_OK | MB_ICONWARNING);
   global_dummy_context = false;
  }
  
@@ -1029,13 +1223,14 @@ wWinMain(HINSTANCE hInstance,
   
   QueryPerformanceCounter(&start_time);
   
-  global_platform_state.mouse_scroll = 0;
-  global_platform_state.keys_typed = NULL;
+  global_platform_state.mouse_scroll_h = 0;
+  global_platform_state.mouse_scroll_v = 0;
+  global_platform_state.events = NULL;
   
-  if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+  if (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
   {
    TranslateMessage(&msg);
-   DispatchMessage(&msg);
+   DispatchMessageA(&msg);
   }
   
   SwapBuffers(device_context);

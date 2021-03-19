@@ -142,7 +142,7 @@ internal void ( *linux_load_opengl_function(I8 *func))(void)
                see https://dri.freedesktop.org/wiki/glXGetProcAddressNeverReturnsNULL/
  */
  
- if (!result) fprintf(stderr, "Could not load OpenGL function '%s'.\n", func);
+ if (!result) debug_log("Could not load OpenGL function '%s'.\n", func);
  
  return result;
 }
@@ -235,7 +235,7 @@ linux_set_vsync(Display *display,
  }
  else
  {
-  fprintf(stderr, "could not set vsync\n");
+  debug_log("could not set vsync\n");
  }
 }
 
@@ -292,7 +292,7 @@ linux_audio_thread_main(void *arg)
   if (frames == -EPIPE)
   {
 #ifdef LUCERNA_DEBUG
-   fprintf(stderr, "Audio buffer underrun occured!\n");
+   debug_log("Audio buffer underrun occured!\n");
 #endif
    snd_pcm_prepare(handle);
   }
@@ -489,7 +489,7 @@ platform_read_entire_file(MemoryArena *memory,
     }
     else
     {
-     fprintf(stderr, "read %ld bytes: %s\n", bytes_read, strerror(errno));
+     debug_log("read %ld bytes: %s\n", bytes_read, strerror(errno));
     }
    }
   }
@@ -581,7 +581,7 @@ main(int argc,
  if (!global_connection)
  {
   XCloseDisplay(global_display);
-  fprintf(stderr, "Can't get XCB connection from display\n");
+  debug_log("Can't get XCB connection from display\n");
   exit(-1);
  }
  
@@ -684,7 +684,7 @@ main(int argc,
   xcb_destroy_window(global_connection, global_window);
   glX.DestroyContext(global_display, global_context);
   
-  fprintf(stderr, "Error creating OpenGL context.\n");
+  debug_log("Error creating OpenGL context.\n");
   exit(-1);
  }
  
@@ -696,7 +696,7 @@ main(int argc,
   xcb_destroy_window(global_connection, global_window);
   glX.DestroyContext(global_display, global_context);
   
-  fprintf(stderr, "Could not make context current.\n");
+  debug_log("Could not make context current.\n");
   exit(-1);
  }
  
@@ -759,7 +759,7 @@ main(int argc,
      // NOTE(tbt): assume evdev driver so subtract offset of 8
      key = global_key_lut[press->detail - 8];
      
-     input.is_key_pressed[key] = true;
+     input.is_key_down[key] = true;
      
      // NOTE(tbt): use XLookupString from xlib to get unicode character from key event
      */
@@ -827,7 +827,7 @@ main(int argc,
      /* HACK(tbt): assume evdev driver so subtract offset of 8 */
      key = global_key_lut[release->detail - 8];
      
-     input.is_key_pressed[key] = false;
+     input.is_key_down[key] = false;
      
      break;
     }
@@ -847,7 +847,7 @@ main(int argc,
      }
      else
      {
-      input.is_mouse_button_pressed[code] = true;
+      input.is_mouse_button_down[code] = true;
      }
      
      break;
@@ -857,7 +857,7 @@ main(int argc,
      U8 code;
      
      code = ((xcb_button_press_event_t *)event)->detail - 1;
-     input.is_mouse_button_pressed[code] = false;
+     input.is_mouse_button_down[code] = false;
      
      break;
     }

@@ -1,19 +1,3 @@
-#define LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE 64
-
-typedef struct
-{
- F32 spawn_x;
- F32 spawn_y;
- char bg_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
- char fg_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
- char music_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
- char entities_buffer[LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE];
- F32 exposure;
- B32 is_memory;
- F32 floor_gradient;
- F32 player_scale;
-} EditorLevelMetadata;;
-
 internal void
 do_level_editor(OpenGLFunctions *gl,
                 PlatformState *input,
@@ -28,186 +12,264 @@ do_level_editor(OpenGLFunctions *gl,
  
  static B32 editing_entities = false;
  static B32 editing_level_meta = false;
- static EditorLevelMetadata level_metadata = {0};
+ static B32 opening_level = false;
+ static B32 saving_level = false;
+ static B32 creating_level = false;
+ static U8 open_level_path_buffer[64] = {0};
+ static LevelDescriptor level_descriptor = {0};
  
  //
  // NOTE(tbt): draw background
  //~
  
  aspect =
-  (F32)global_current_level.bg->texture.height /
-  (F32)global_current_level.bg->texture.width;
+  (F32)global_current_level.bg.height /
+  (F32)global_current_level.bg.width;
  
  world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
                                           SCREEN_WIDTH_IN_WORLD_UNITS,
                                           SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
                         WHITE,
-                        global_current_level.bg,
+                        &global_current_level.bg,
                         ENTIRE_TEXTURE);
+ 
+ //
+ // NOTE(tbt): keyboard shortcuts
+ //~
+ 
+ if (is_key_pressed(input,
+                    KEY_s,
+                    INPUT_MODIFIER_ctrl))
+ {
+  saving_level = true;
+ }
+ 
+ if (is_key_pressed(input,
+                    KEY_o,
+                    INPUT_MODIFIER_ctrl))
+ {
+  opening_level = !opening_level;
+ }
+ 
+ if (is_key_pressed(input,
+                    KEY_e,
+                    INPUT_MODIFIER_ctrl |
+                    INPUT_MODIFIER_shift))
+ {
+  editing_entities = !editing_entities;
+ }
  
  //
  // NOTE(tbt): main editor window
  //~
  
- ui_do_window(input,
-              s8_literal("main editor window"),
-              s8_literal("editor"),
-              900.0f, 256.0f,
-              400.0f)
+ if (!saving_level &&
+     !opening_level &&
+     !creating_level)
  {
-  if (ui_do_toggle_button(input,
-                          s8_literal("toggle entity edit mode"),
-                          s8_literal("edit entities"),
-                          150.0f,
-                          &editing_entities))
+  ui_do_window(input,
+               s8_literal("main editor window"),
+               s8_literal("editor"),
+               900.0f, 256.0f,
+               400.0f)
   {
-   if (!editing_entities)
+   ui_do_dropdown(input,
+                  s8_literal("editor file menu"),
+                  s8_literal("file"),
+                  150.0f)
    {
-    ui_delete_node(s8_literal("gen Entity editor"));
-    global_editor_selected_entity = false;
-   }
-  }
-  
-  if (ui_do_button(input,
-                   s8_literal("edit level meta button"),
-                   s8_literal("edit level"),
-                   150.0f))
-  {
-   if (!editing_level_meta)
-   {
-    editing_level_meta = true;
+    if (ui_do_button(input,
+                     s8_literal("editor open level button"),
+                     s8_literal("open level"),
+                     150.0f))
+    {
+     opening_level = true;
+    }
     
-    LevelDescriptor *ld = &(global_current_level.level_descriptor->level_descriptor);
-    level_metadata.spawn_x = ld->player_spawn_x;
-    level_metadata.spawn_y = ld->player_spawn_y;
-    memcpy(level_metadata.bg_buffer, ld->bg_path.buffer, ld->bg_path.len);
-    memcpy(level_metadata.fg_buffer, ld->fg_path.buffer, ld->fg_path.len);
-    memcpy(level_metadata.music_buffer, ld->music_path.buffer, ld->music_path.len);
-    memcpy(level_metadata.entities_buffer, ld->entities_path.buffer, ld->entities_path.len);
-    level_metadata.exposure = ld->exposure;
-    level_metadata.is_memory = ld->is_memory;
-    level_metadata.floor_gradient = ld->floor_gradient;
-    level_metadata.player_scale = ld->player_scale;
+    if (ui_do_button(input,
+                     s8_literal("editor new level button"),
+                     s8_literal("new level"),
+                     150.0f))
+    {
+     creating_level = true;
+    }
+    
+    if (ui_do_button(input,
+                     s8_literal("editor save level button"),
+                     s8_literal("save level"),
+                     150.0f))
+    {
+     saving_level = true;
+    }
+   }
+   
+   ui_do_dropdown(input,
+                  s8_literal("editor edit menu"),
+                  s8_literal("edit"),
+                  150.0f)
+   {
+    if (ui_do_button(input,
+                     s8_literal("editor enter entity edit mode"),
+                     s8_literal("edit entities"),
+                     150.0f))
+    {
+     editing_entities = true;
+     global_editor_selected_entity = NULL;
+     ui_delete_node(s8_literal("gen Entity editor"));
+    }
+    
+    if (ui_do_button(input,
+                     s8_literal("edit level meta button"),
+                     s8_literal("edit level metadata"),
+                     150.0f))
+    {
+     if (!editing_level_meta)
+     {
+      memset(&level_descriptor, 0, sizeof(level_descriptor));
+      level_descriptor_from_level(&level_descriptor, &global_current_level);
+      editing_level_meta = true;
+     }
+    }
    }
   }
  }
  
  //
- // NOTE(tbt): edit level meta
+ // NOTE(tbt): save level
+ //~
+ 
+ if (saving_level)
+ {
+  serialise_level(&global_current_level);
+  set_current_level(gl, global_current_level.path, false);
+  saving_level = false;
+ }
+ 
+ //
+ // NOTE(tbt): open level ui
+ //~
+ 
+ if (opening_level || creating_level)
+ {
+  ui_do_window(input,
+               s8_literal("editor open level window"),
+               s8_literal("open level"),
+               960, 540, 500.0f)
+  {
+   B32 enter_typed = (TEXT_ENTRY_STATE_enter == ui_do_text_entry(input,
+                                                                 s8_literal("editor open level text entry"),
+                                                                 open_level_path_buffer,
+                                                                 NULL,
+                                                                 sizeof(open_level_path_buffer)));
+   
+   ui_do_line_break();
+   
+   B32 open_pressed = ui_do_button(input,
+                                   s8_literal("editor open level open button"),
+                                   s8_literal("open"),
+                                   150.0f);
+   
+   B32 cancel_pressed = ui_do_button(input,
+                                     s8_literal("editor open level cancel button"),
+                                     s8_literal("cancel"),
+                                     150.0f);
+   
+   if (open_pressed || enter_typed)
+   {
+    S8List *path_list = NULL;
+    path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal(".level"));
+    path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal(open_level_path_buffer));
+    path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal("../assets/levels/"));
+    
+    S8 path = expand_s8_list(&global_frame_memory, path_list);
+    
+    if (creating_level)
+    {
+     set_current_level_as_new_level(gl, path);
+     editing_level_meta = true;
+    }
+    else
+    {
+     set_current_level(gl, path, false);
+    }
+   }
+   
+   if (open_pressed || cancel_pressed || enter_typed)
+   {
+    ui_delete_node(s8_literal("editor open level window"));
+    opening_level = false;
+    creating_level = false;
+    memset(open_level_path_buffer, 0, sizeof(open_level_path_buffer));
+   }
+  }
+ }
+ 
+ //
+ // NOTE(tbt): edit level metadata
  //~
  
  if (editing_level_meta)
  {
   // NOTE(tbt): preview player spawn location and scale
-  world_fill_rectangle(rectangle_literal(level_metadata.spawn_x - 1.0f,
+  world_fill_rectangle(rectangle_literal(level_descriptor.player_spawn_x - 1.0f,
                                          0.0f,
                                          2.0f,
                                          global_renderer_window_h),
                        colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
   
   F32 y_offset = 0.0f;
-  if (level_metadata.floor_gradient < -0.001 ||
-      level_metadata.floor_gradient > 0.001)
+  if (level_descriptor.floor_gradient < -0.001 ||
+      level_descriptor.floor_gradient > 0.001)
   {
-   y_offset = level_metadata.spawn_x * tan(-level_metadata.floor_gradient);
+   y_offset = level_descriptor.player_spawn_x * tan(-level_descriptor.floor_gradient);
   }
   
   world_fill_rotated_rectangle(rectangle_literal(0.0f,
-                                                 level_metadata.spawn_y + y_offset - 1.0f,
-                                                 global_renderer_window_w * 2.0,
+                                                 level_descriptor.player_spawn_y + y_offset - 1.0f,
+                                                 global_renderer_window_w / cos(level_descriptor.floor_gradient),
                                                  2.0f),
-                               level_metadata.floor_gradient,
+                               level_descriptor.floor_gradient,
                                colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
   
-  F32 _player_scale = level_metadata.player_scale * (1.0f / (global_renderer_window_h - level_metadata.spawn_y));
-  world_stroke_rectangle(rectangle_literal(level_metadata.spawn_x + PLAYER_COLLISION_X * _player_scale,
-                                           level_metadata.spawn_y + PLAYER_COLLISION_Y * _player_scale,
+  F32 _player_scale = level_descriptor.player_scale / (global_renderer_window_h - level_descriptor.player_spawn_y);
+  world_stroke_rectangle(rectangle_literal(level_descriptor.player_spawn_x + PLAYER_COLLISION_X * _player_scale,
+                                           level_descriptor.player_spawn_y + PLAYER_COLLISION_Y * _player_scale,
                                            PLAYER_COLLISION_W * _player_scale,
                                            PLAYER_COLLISION_H * _player_scale),
                          colour_literal(1.0f, 0.0f, 0.0f, 0.4f),
                          2.0f);
   
+  S8List *metadata_editor_window_title_list = NULL;
+  metadata_editor_window_title_list = push_s8_to_list(&global_frame_memory, metadata_editor_window_title_list, global_current_level.path);
+  metadata_editor_window_title_list = push_s8_to_list(&global_frame_memory, metadata_editor_window_title_list, s8_literal("edit level metadata - "));
+  
   ui_do_window(input,
-               s8_literal("level meta editor window"),
                s8_literal("level metadata editor"),
-               64.0f, 64.0f,
-               1000.0f)
+               expand_s8_list(&global_frame_memory, metadata_editor_window_title_list),
+               32.0f, 32.0f, 1200.0f)
   {
-   ui_do_line_break();
-   ui_do_slider_f(input, s8_literal("level meta editor spawn x slider"), 0.0f, 1920.0f, 1.0f, 523.0f, &level_metadata.spawn_x);
-   ui_do_label(s8_literal("level meta editor spawn x slider label"), s8_literal("player spawn x"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_slider_f(input, s8_literal("level meta editor spawn y slider"), 0.0f, 1080.0f, 1.0f, 523.0f, &level_metadata.spawn_y);
-   ui_do_label(s8_literal("level meta editor spawn y slider label"), s8_literal("player spawn y"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_text_entry(input, s8_literal("level meta editor bg entry"), level_metadata.bg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   ui_do_label(s8_literal("level meta editor bg entry label"), s8_literal("background path"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_text_entry(input, s8_literal("level meta editor fg entry"), level_metadata.fg_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   ui_do_label(s8_literal("level meta editor fg entry label"), s8_literal("foreground path"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_text_entry(input, s8_literal("level meta editor music entry"), level_metadata.music_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   ui_do_label(s8_literal("level meta editor music entry label"), s8_literal("music path"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_text_entry(input, s8_literal("level meta editor entities entry"), level_metadata.entities_buffer, NULL, LEVEL_META_EDITOR_TEXT_ENTRY_BUFFER_SIZE);
-   ui_do_label(s8_literal("level meta editor entities entry label"), s8_literal("entities path"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_slider_f(input, s8_literal("level meta editor exposure slider"), 0.0f, 3.0f, 0.05f, 150.0f, &level_metadata.exposure);
-   ui_do_label(s8_literal("level meta editor exposure label"), s8_literal("exposure"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_toggle_button(input, s8_literal("level meta editor is memory toggle"), s8_literal("is memory?"), 150.0f, &level_metadata.is_memory);
-   
-   ui_do_line_break();
-   ui_do_slider_f(input, s8_literal("level meta editor floor gradient slider"), -1.0f, 1.0f, -1.0f, 523.0f, &level_metadata.floor_gradient);
-   ui_do_label(s8_literal("level meta editor floor gradient slider label"), s8_literal("floor gradient"), -1.0f);
-   
-   ui_do_line_break();
-   ui_do_slider_f(input, s8_literal("level meta editor player scale slider"), 250.0f, 600.0f, 1.0f, 523.0f, &level_metadata.player_scale);
-   ui_do_label(s8_literal("level meta editor player scale slider label"), s8_literal("player scale"), -1.0f);
-   
+   do_level_descriptor_editor_ui(input, &level_descriptor);
    ui_do_horizontal_rule();
    
    if (ui_do_button(input,
-                    s8_literal("save level meta button"),
+                    s8_literal("level metadata editor save button"),
                     s8_literal("save"),
-                    150.0f))
+                    15.0f))
    {
-    LevelDescriptor *ld = &(global_current_level.level_descriptor->level_descriptor);
-    ld->player_spawn_x = level_metadata.spawn_x;
-    ld->player_spawn_y = level_metadata.spawn_y;
-    ld->bg_path = s8_from_cstring(&global_level_memory, level_metadata.bg_buffer);
-    ld->fg_path = s8_from_cstring(&global_level_memory, level_metadata.fg_buffer);
-    ld->music_path = s8_from_cstring(&global_level_memory, level_metadata.music_buffer);
-    ld->entities_path = s8_from_cstring(&global_level_memory, level_metadata.entities_buffer);
-    ld->exposure = level_metadata.exposure;
-    ld->is_memory = level_metadata.is_memory;
-    ld->floor_gradient = level_metadata.floor_gradient;
-    ld->player_scale = level_metadata.player_scale;
-    serialise_level_descriptor(global_current_level.level_descriptor);
-    
+    ui_delete_node(s8_literal("level metadata editor"));
+    _current_level_from_level_descriptor(gl, &level_descriptor);
+    saving_level = true;
     editing_level_meta = false;
-    ui_delete_node(s8_literal("level meta editor window"));
-    memset(&level_metadata, 0, sizeof(level_metadata));
-    
-    unload_level_descriptor(global_current_level.level_descriptor);
-    set_current_level(gl, global_current_level.level_descriptor);
    }
    
    if (ui_do_button(input,
-                    s8_literal("cancel level meta edit button"),
+                    s8_literal("level metadata editor cancel button"),
                     s8_literal("cancel"),
                     15.0f))
    {
+    ui_delete_node(s8_literal("level metadata editor"));
+    memset(&level_descriptor, 0, sizeof(level_descriptor));
     editing_level_meta = false;
-    ui_delete_node(s8_literal("level meta editor window"));
-    memset(&level_metadata, 0, sizeof(level_metadata));
    }
   }
  }
@@ -216,12 +278,12 @@ do_level_editor(OpenGLFunctions *gl,
  // NOTE(tbt): edit entities
  //~
  
- if (editing_entities)
+ if (editing_entities &&
+     !editing_level_meta)
  {
   static Entity *active = NULL;
   static Entity *dragging = NULL;
   static Entity *resizing = NULL;
-  Entity *selected = global_editor_selected_entity;
   
   ui_do_window(input,
                s8_literal("entity editor window"),
@@ -229,7 +291,10 @@ do_level_editor(OpenGLFunctions *gl,
                64.0f, 64.0f,
                400.0f)
   {
-   if (ui_do_button(input, s8_literal("create entity button"), s8_literal("create entity"), 150.0f))
+   if (ui_do_button(input,
+                    s8_literal("create entity button"),
+                    s8_literal("create entity"),
+                    150.0f))
    {
     Entity *e = allocate_and_push_entity(&global_current_level.entities);
     
@@ -238,7 +303,15 @@ do_level_editor(OpenGLFunctions *gl,
     e->bounds.w = 16.0f;
     e->bounds.h = 16.0f;
     
-    selected = e;
+    global_editor_selected_entity = e;
+   }
+   
+   if (ui_do_button(input,
+                    s8_literal("editor exit entity edit mode"),
+                    s8_literal("exit"),
+                    150.0f))
+   {
+    editing_entities = false;
    }
   }
   
@@ -264,19 +337,19 @@ do_level_editor(OpenGLFunctions *gl,
    }
    
    if (active == e &&
-       !input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+       !input->is_mouse_button_down[MOUSE_BUTTON_left])
    {
-    selected = e;
-    ui_delete_node(s8_literal("gen Entity editor"));
+    global_editor_selected_entity = e;
    }
    
-   if (selected == e)
+   if (e == global_editor_selected_entity)
    {
     fill_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.8f), UI_SORT_DEPTH, global_projection_matrix);
-    if (input->is_key_pressed[KEY_del])
+    
+    if (input->is_key_down[KEY_delete])
     {
      e->flags |= 1 << ENTITY_FLAG_marked_for_removal;
-     fprintf(stderr, "del");
+     global_editor_selected_entity = NULL;
     }
    }
    stroke_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.8f), 2.0f, UI_SORT_DEPTH, global_projection_matrix);
@@ -287,9 +360,9 @@ do_level_editor(OpenGLFunctions *gl,
        !global_is_mouse_over_ui)
    {
     fill_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.15f), UI_SORT_DEPTH, global_projection_matrix);
-    if (input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+    if (input->is_mouse_button_down[MOUSE_BUTTON_left])
     {
-     if (selected == e)
+     if (global_editor_selected_entity == e)
      {
       dragging = e;
      }
@@ -298,15 +371,15 @@ do_level_editor(OpenGLFunctions *gl,
       active = e;
      }
     }
-    else if (input->is_mouse_button_pressed[MOUSE_BUTTON_right] &&
-             e == selected)
+    else if (input->is_mouse_button_down[MOUSE_BUTTON_right] &&
+             e == global_editor_selected_entity)
     {
      resizing = e;
     }
    }
   }
   
-  if (!input->is_mouse_button_pressed[MOUSE_BUTTON_left])
+  if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
    active = NULL;
    dragging = NULL;
@@ -325,31 +398,35 @@ do_level_editor(OpenGLFunctions *gl,
     resizing->bounds.w = MOUSE_WORLD_X - resizing->bounds.x;
     resizing->bounds.h = MOUSE_WORLD_Y - resizing->bounds.y;
     
-    if (!input->is_mouse_button_pressed[MOUSE_BUTTON_right])
+    if (!input->is_mouse_button_down[MOUSE_BUTTON_right])
     {
      resizing = NULL;
     }
    }
   }
   
-  if (selected)
+  if (global_editor_selected_entity)
   {
-   do_entity_editor_ui(input, selected);
+   ui_do_window(input,
+                s8_literal("entity editor"),
+                s8_literal("entity editor"),
+                32.0f, 32.0f, 800.0f)
+   {
+    do_entity_editor_ui(input, global_editor_selected_entity);
+   }
   }
-  
-  global_editor_selected_entity = selected;
  }
  
  //~NOTE(tbt): draw foreground
  aspect =
-  (F32)global_current_level.fg->texture.height /
-  (F32)global_current_level.fg->texture.width;
+  (F32)global_current_level.fg.height /
+  (F32)global_current_level.fg.width;
  
  world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
                                           SCREEN_WIDTH_IN_WORLD_UNITS,
                                           SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
                         WHITE,
-                        global_current_level.fg,
+                        &global_current_level.fg,
                         ENTIRE_TEXTURE);
  
  //~NOTE(tbt): camera movement
@@ -357,11 +434,11 @@ do_level_editor(OpenGLFunctions *gl,
   F32 speed = 256.0f * frametime_in_s;
   
   set_camera_position(global_camera_x +
-                      input->is_key_pressed[KEY_right] * speed +
-                      input->is_key_pressed[KEY_left] * -speed,
+                      input->is_key_down[KEY_right] * speed +
+                      input->is_key_down[KEY_left] * -speed,
                       global_camera_y +
-                      input->is_key_pressed[KEY_down] * speed +
-                      input->is_key_pressed[KEY_up] * -speed);
+                      input->is_key_down[KEY_down] * speed +
+                      input->is_key_down[KEY_up] * -speed);
  }
  
 }

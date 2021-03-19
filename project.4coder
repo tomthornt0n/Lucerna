@@ -35,10 +35,21 @@ command_list = {
 		.save_dirty_files = true,
 		.cursor_at_end = false,
 		.cmd = {
-			{".\windows_build.bat", .os = "win" },
+			{ ".\windows_build.bat debug", .os = "win" },
 		},
 	},
 	
+{
+		.name = "release_build",
+		.out = "*compilation*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cursor_at_end = false,
+		.cmd = {
+			{ ".\windows_build.bat", .os = "win" },
+		},
+	},
+
 	{
 		.name = "run",
 		.out = "*compilation*",
@@ -57,11 +68,12 @@ command_list = {
 		.save_dirty_files = true,
 		.cursor_at_end = false,
 		.cmd = {
-			{ ".\windows_build.bat && .\run.bat", .os = "win" },
+			{ ".\windows_build.bat debug && .\run.bat", .os = "win" },
 		},
 	},
 };
 
 fkey_command[1] = "build";
 fkey_command[2] = "run";
+fkey_command[3] = "release_build";
 fkey_command[5] = "build_and_run";

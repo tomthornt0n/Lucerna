@@ -40,8 +40,8 @@ typedef enum
 
 typedef enum
 {
- POST_PROCESSING_KIND_world,
- POST_PROCESSING_KIND_memory,
+ POST_PROCESSING_KIND_world = LEVEL_KIND_world,
+ POST_PROCESSING_KIND_memory = LEVEL_KIND_memory,
 } PostProcessingKind;
 
 typedef struct RenderMessage RenderMessage;
@@ -52,44 +52,18 @@ struct RenderMessage
  U8 sort;
  Rect rectangle;
  
- union
- {
-  struct
-  {
-   F32 *projection_matrix;
-   union
-   {
-    struct
-    {
-     Font *font;
-     S8 string;
-    };
-    
-    struct
-    {
-     Asset *texture;
-     SubTexture sub_texture;
-     F32 angle;
-     F32 stroke_width;
-    };
-    
-   };
-   
-   union
-   {
-    Colour colour;
-    Gradient gradient;
-   };
-  };
-  
-  U32 strength;
-  
-  struct
-  {
-   F32 exposure;
-   PostProcessingKind post_processing_kind;
-  };
- };
+ F32 *projection_matrix;
+ Font *font;
+ S8 string;
+ TextureID texture;
+ SubTexture sub_texture;
+ F32 angle;
+ F32 stroke_width;
+ Colour colour;
+ Gradient gradient;
+ U32 strength;
+ F32 exposure;
+ PostProcessingKind post_processing_kind;
 };
 
 typedef struct
@@ -104,12 +78,11 @@ internal U32 global_vao_id;
 internal U32 global_index_buffer_id;
 internal U32 global_vertex_buffer_id;
 
-internal ShaderID global_default_shader;
-internal ShaderID global_text_shader;
-internal ShaderID global_blur_shader;
-internal ShaderID global_bloom_filter_shader;
-internal ShaderID global_post_processing_shader;
-internal ShaderID global_memory_post_processing_shader;
+#define shader(_name, _vertex_shader) internal ShaderID global_ ## _name ## _shader;
+#include "shader_list.h"
+
+#define shader(_name, _vertex_shader) internal U64 global_ ## _name ## _shader_last_modified = 0;
+#include "shader_list.h"
 
 internal ShaderID global_currently_bound_shader = 0;
 
@@ -126,7 +99,7 @@ internal I32 global_memory_post_processing_shader_exposure_location;
 internal I32 global_memory_post_processing_shader_screen_texture_location;
 internal I32 global_memory_post_processing_shader_blur_texture_location;
 
-internal Texture global_flat_colour_texture;
+internal TextureID global_flat_colour_texture;
 
 internal U32 global_renderer_window_w = 0;
 internal U32 global_renderer_window_h = 0;
@@ -167,6 +140,118 @@ generate_orthographic_projection_matrix(F32 *matrix,
  matrix[15] = 1.0f;
 }
 
+void
+gl_debug_message_callback(GLenum source​,
+                          GLenum type​,
+                          GLuint id​,
+                          GLenum severity​,
+                          GLsizei length​,
+                          const GLchar *message,
+                          const void *userParam​)
+{
+ debug_log("\n*** %s ***\n", message);
+#ifdef _WIN32
+ __debugbreak();
+#endif
+}
+
+#define compile_and_link_fragment_shader(_name, _vertex_shader)                                              \
+shader_src = cstring_from_s8(&global_static_memory,                                                         \
+platform_read_entire_file_p(&global_static_memory,                             \
+s8_literal("../assets/shaders/" #_name ".frag"))); \
+fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);                                                     \
+gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);                                                    \
+gl->CompileShader(fragment_shader);                                                                         \
+gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);                                               \
+if (status == GL_FALSE)                                                                                     \
+{                                                                                                           \
+I8 msg[SHADER_INFO_LOG_MAX_LEN];                                                                           \
+gl->GetShaderInfoLog(fragment_shader,                                                                      \
+SHADER_INFO_LOG_MAX_LEN,                                                              \
+NULL,                                                                                 \
+msg);                                                                                 \
+gl->DeleteShader(fragment_shader);                                                                         \
+debug_log(#_name " fragment shader compilation failure. '%s'\n", msg);                                     \
+exit(-1);                                                                                                  \
+}                                                                                                           \
+gl->AttachShader(global_ ## _name ## _shader, fragment_shader);                                             \
+gl->LinkProgram(global_ ## _name ## _shader);                                                               \
+gl->GetProgramiv(global_ ## _name ## _shader, GL_LINK_STATUS, &status);                                     \
+if (status == GL_FALSE)                                                                                     \
+{                                                                                                           \
+I8 msg[SHADER_INFO_LOG_MAX_LEN];                                                                           \
+gl->GetShaderInfoLog(global_ ## _name ## _shader,                                                          \
+SHADER_INFO_LOG_MAX_LEN,                                                              \
+NULL,                                                                                 \
+msg);                                                                                 \
+gl->DeleteProgram(global_ ## _name ## _shader);                                                            \
+gl->DeleteShader(_vertex_shader);                                                                          \
+gl->DeleteShader(fragment_shader);                                                                         \
+debug_log(#_name " shader link failure. '%s'\n", msg);                                                     \
+exit(-1);                                                                                                  \
+}                                                                                                           \
+gl->DetachShader(global_ ## _name ##_shader, _vertex_shader);                                               \
+gl->DetachShader(global_ ## _name ## _shader, fragment_shader);                                             \
+gl->DeleteShader(fragment_shader)
+
+#define cache_uniform_locations() \
+global_default_shader_proj_matrix_location = gl->GetUniformLocation(global_default_shader, "u_projection_matrix");\
+global_text_shader_proj_matrix_location = gl->GetUniformLocation(global_text_shader, "u_projection_matrix");\
+global_blur_shader_direction_location = gl->GetUniformLocation(global_blur_shader, "u_direction");\
+global_post_processing_shader_time_location = gl->GetUniformLocation(global_post_processing_shader, "u_time");\
+global_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_screen_texture");\
+global_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_blur_texture");\
+global_memory_post_processing_shader_time_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_time");\
+global_post_processing_shader_exposure_location = gl->GetUniformLocation(global_post_processing_shader, "u_exposure");\
+global_memory_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_screen_texture");\
+global_memory_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_blur_texture");\
+global_memory_post_processing_shader_exposure_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_exposure")
+
+internal void
+hot_reload_shaders(OpenGLFunctions *gl,
+                   F64 frametime_in_s)
+{
+ static F64 time = 0.0;
+ time += frametime_in_s;
+ 
+ I32 status;
+ U32 fragment_shader;
+ const GLchar *shader_src;
+ 
+ F64 refresh_time = 2.0;
+ if (time > refresh_time)
+ {
+#define shader(_name, _vertex_shader_name) \
+{\
+U64 last_modified = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"));\
+if (last_modified > global_ ## _name ## _shader_last_modified) \
+{\
+global_ ## _name ## _shader_last_modified = last_modified;\
+debug_log("hot reloading " #_name " shader\n");\
+shader_src = cstring_from_s8(&global_static_memory, platform_read_entire_file_p(&global_static_memory, s8_literal("../assets/shaders/" #_vertex_shader_name ".vert")));\
+U32 _vertex_shader_name ## _vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);\
+gl->ShaderSource(_vertex_shader_name ## _vertex_shader, 1, &shader_src, NULL);\
+gl->CompileShader(_vertex_shader_name ## _vertex_shader);\
+gl->GetShaderiv(_vertex_shader_name ## _vertex_shader, GL_COMPILE_STATUS, &status);\
+if (status == GL_FALSE)\
+{\
+I8 msg[SHADER_INFO_LOG_MAX_LEN];\
+gl->GetShaderInfoLog(_vertex_shader_name ## _vertex_shader, SHADER_INFO_LOG_MAX_LEN, NULL, msg);\
+gl->DeleteShader(_vertex_shader_name ## _vertex_shader);\
+debug_log("vertex shader compilation failure. '%s'\n", msg);\
+exit(-1);\
+}\
+gl->AttachShader(global_ ## _name ## _shader, _vertex_shader_name ## _vertex_shader);\
+compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);\
+gl->DeleteShader(_vertex_shader_name ## _vertex_shader);\
+cache_uniform_locations();\
+}\
+}
+#include "shader_list.h"
+  
+ }
+}
+
 internal void
 initialise_renderer(OpenGLFunctions *gl)
 {
@@ -178,6 +263,10 @@ initialise_renderer(OpenGLFunctions *gl)
  //
  // NOTE(tbt): general OpenGL setup
  //
+ 
+#ifdef LUCERNA_DEBUG
+ gl->DebugMessageCallback(gl_debug_message_callback, NULL);
+#endif
  
  gl->GenVertexArrays(1, &global_vao_id);
  gl->BindVertexArray(global_vao_id);
@@ -246,11 +335,8 @@ initialise_renderer(OpenGLFunctions *gl)
  
  U32 flat_colour_texture_data = 0xffffffff;
  
- global_flat_colour_texture.width = 1;
- global_flat_colour_texture.height = 1;
- 
- gl->GenTextures(1, &global_flat_colour_texture.id);
- gl->BindTexture(GL_TEXTURE_2D, global_flat_colour_texture.id);
+ gl->GenTextures(1, &global_flat_colour_texture);
+ gl->BindTexture(GL_TEXTURE_2D, global_flat_colour_texture);
  
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -279,416 +365,83 @@ initialise_renderer(OpenGLFunctions *gl)
  global_bloom_filter_shader = gl->CreateProgram();
  global_memory_post_processing_shader = gl->CreateProgram();
  const GLchar *shader_src;
- ShaderID vertex_shader, fullscreen_vertex_shader;
+ ShaderID default_vertex_shader, fullscreen_vertex_shader;
  ShaderID fragment_shader;
  
- temporary_memory_begin(&global_static_memory);
- 
- // NOTE(tbt): compile the default vertex shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/default.vert")));
- 
- vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
- gl->ShaderSource(vertex_shader, 1, &shader_src, NULL);
- gl->CompileShader(vertex_shader);
- 
- // NOTE(tbt): check for default vertex shader compilation errors
- gl->GetShaderiv(vertex_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
+ arena_temporary_memory(&global_static_memory)
  {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
+  // NOTE(tbt): compile the default vertex shader
+  shader_src = cstring_from_s8(&global_static_memory,
+                               platform_read_entire_file_p(&global_static_memory,
+                                                           s8_literal("../assets/shaders/default.vert")));
   
-  gl->GetShaderInfoLog(vertex_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(vertex_shader);
+  default_vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
+  gl->ShaderSource(default_vertex_shader, 1, &shader_src, NULL);
+  gl->CompileShader(default_vertex_shader);
   
-  fprintf(stderr, "default vertex shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- fprintf(stderr, "sucessfully compiled default vertex shader\n");
- 
- // NOTE(tbt): compile the fullscreen vertex shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/fullscreen.vert")));
- 
- fullscreen_vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
- gl->ShaderSource(fullscreen_vertex_shader, 1, &shader_src, NULL);
- gl->CompileShader(fullscreen_vertex_shader);
- 
- // NOTE(tbt): check for fullscreen vertex shader compilation errors
- gl->GetShaderiv(fullscreen_vertex_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
+  // NOTE(tbt): check for default vertex shader compilation errors
+  gl->GetShaderiv(default_vertex_shader, GL_COMPILE_STATUS, &status);
+  if (status == GL_FALSE)
+  {
+   I8 msg[SHADER_INFO_LOG_MAX_LEN];
+   
+   gl->GetShaderInfoLog(default_vertex_shader,
+                        SHADER_INFO_LOG_MAX_LEN,
+                        NULL,
+                        msg);
+   gl->DeleteShader(default_vertex_shader);
+   
+   debug_log("default vertex shader compilation failure. '%s'\n", msg);
+   exit(-1);
+  }
   
-  gl->GetShaderInfoLog(fullscreen_vertex_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
+  debug_log("successfully compiled default vertex shader\n");
+  
+  // NOTE(tbt): compile the fullscreen vertex shader
+  shader_src = cstring_from_s8(&global_static_memory,
+                               platform_read_entire_file_p(&global_static_memory,
+                                                           s8_literal("../assets/shaders/fullscreen.vert")));
+  
+  fullscreen_vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
+  gl->ShaderSource(fullscreen_vertex_shader, 1, &shader_src, NULL);
+  gl->CompileShader(fullscreen_vertex_shader);
+  
+  // NOTE(tbt): check for fullscreen vertex shader compilation errors
+  gl->GetShaderiv(fullscreen_vertex_shader, GL_COMPILE_STATUS, &status);
+  if (status == GL_FALSE)
+  {
+   I8 msg[SHADER_INFO_LOG_MAX_LEN];
+   
+   gl->GetShaderInfoLog(fullscreen_vertex_shader,
+                        SHADER_INFO_LOG_MAX_LEN,
+                        NULL,
+                        msg);
+   gl->DeleteShader(fullscreen_vertex_shader);
+   
+   debug_log("fullscreen vertex shader compilation failure. '%s'\n", msg);
+   exit(-1);
+  }
+  
+  debug_log("successfully compiled fullscreen vertex shader\n");
+  
+  // NOTE(tbt): attach vertex shaders to shader programs
+  gl->AttachShader(global_default_shader, default_vertex_shader);
+  gl->AttachShader(global_blur_shader, fullscreen_vertex_shader);
+  gl->AttachShader(global_text_shader, default_vertex_shader);
+  gl->AttachShader(global_post_processing_shader, fullscreen_vertex_shader);
+  gl->AttachShader(global_bloom_filter_shader, fullscreen_vertex_shader);
+  gl->AttachShader(global_memory_post_processing_shader, fullscreen_vertex_shader);
+  
+#define shader(_name, _vertex_shader_name) compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);
+#include "shader_list.h"
+  
+  // NOTE(tbt): cleanup shader stuff
+  gl->DeleteShader(default_vertex_shader);
   gl->DeleteShader(fullscreen_vertex_shader);
-  
-  fprintf(stderr, "fullscreen vertex shader compilation failure. '%s'\n", msg);
-  exit(-1);
  }
- 
- fprintf(stderr, "sucessfully compiled fullscreen vertex shader\n");
- 
- // NOTE(tbt): attach vertex shaders to shader programs
- gl->AttachShader(global_default_shader, vertex_shader);
- gl->AttachShader(global_blur_shader, fullscreen_vertex_shader);
- gl->AttachShader(global_text_shader, vertex_shader);
- gl->AttachShader(global_post_processing_shader, fullscreen_vertex_shader);
- gl->AttachShader(global_bloom_filter_shader, fullscreen_vertex_shader);
- gl->AttachShader(global_memory_post_processing_shader, fullscreen_vertex_shader);
- 
- // NOTE(tbt): compile default fragment shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/default.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "default fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_default_shader, fragment_shader);
- 
- // NOTE(tbt): link default shader
- gl->LinkProgram(global_default_shader);
- 
- gl->GetProgramiv(global_default_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_default_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_default_shader);
-  gl->DeleteShader(vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_default_shader, vertex_shader);
- gl->DetachShader(global_default_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): compile blur fragment shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/blur.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "blur fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_blur_shader, fragment_shader);
- 
- // NOTE(tbt): link blur shader
- gl->LinkProgram(global_blur_shader);
- 
- gl->GetProgramiv(global_blur_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_blur_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_blur_shader);
-  gl->DeleteShader(fullscreen_vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_blur_shader, fullscreen_vertex_shader);
- gl->DetachShader(global_blur_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): compile text fragment shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/text.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "text fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_text_shader, fragment_shader);
- 
- // NOTE(tbt): link text shader
- gl->LinkProgram(global_text_shader);
- 
- gl->GetProgramiv(global_text_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_text_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_text_shader);
-  gl->DeleteShader(vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_text_shader, vertex_shader);
- gl->DetachShader(global_text_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): compile post processing fragment shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/post_processing.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "post processing fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_post_processing_shader, fragment_shader);
- 
- // NOTE(tbt): link post processing shader
- gl->LinkProgram(global_post_processing_shader);
- 
- gl->GetProgramiv(global_post_processing_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_post_processing_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_post_processing_shader);
-  gl->DeleteShader(fullscreen_vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_post_processing_shader, fullscreen_vertex_shader);
- gl->DetachShader(global_post_processing_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): compile the bloom filter shader
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/bloom_filter.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "bloom filter fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_bloom_filter_shader, fragment_shader);
- 
- // NOTE(tbt): link the bloom filter shader
- gl->LinkProgram(global_bloom_filter_shader);
- 
- gl->GetProgramiv(global_bloom_filter_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_bloom_filter_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_bloom_filter_shader);
-  gl->DeleteShader(fullscreen_vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_bloom_filter_shader, fullscreen_vertex_shader);
- gl->DetachShader(global_bloom_filter_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): compile the post processing shader for memories
- shader_src = cstring_from_s8(&global_static_memory,
-                              platform_read_entire_file(&global_static_memory,
-                                                        s8_literal("../assets/shaders/memory.frag")));
- 
- fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);
- gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);
- gl->CompileShader(fragment_shader);
- 
- gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(fragment_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "memory post processing fragment shader compilation failure. '%s'\n", msg);
-  exit(-1);
- }
- gl->AttachShader(global_memory_post_processing_shader, fragment_shader);
- 
- // NOTE(tbt): link the post processing shader for memories
- gl->LinkProgram(global_memory_post_processing_shader);
- 
- gl->GetProgramiv(global_memory_post_processing_shader, GL_LINK_STATUS, &status);
- if (status == GL_FALSE)
- {
-  I8 msg[SHADER_INFO_LOG_MAX_LEN];
-  
-  gl->GetShaderInfoLog(global_memory_post_processing_shader,
-                       SHADER_INFO_LOG_MAX_LEN,
-                       NULL,
-                       msg);
-  gl->DeleteProgram(global_memory_post_processing_shader);
-  gl->DeleteShader(fullscreen_vertex_shader);
-  gl->DeleteShader(fragment_shader);
-  
-  fprintf(stderr, "shader link failure. '%s'\n", msg);
-  exit(-1);
- }
- 
- gl->DetachShader(global_memory_post_processing_shader, fullscreen_vertex_shader);
- gl->DetachShader(global_memory_post_processing_shader, fragment_shader);
- gl->DeleteShader(fragment_shader);
- 
- // NOTE(tbt): cleanup shader stuff
- gl->DeleteShader(vertex_shader);
- gl->DeleteShader(fullscreen_vertex_shader);
- temporary_memory_end(&global_static_memory);
  
  // NOTE(tbt): cache some uniform locations
- global_default_shader_proj_matrix_location =
-  gl->GetUniformLocation(global_default_shader,
-                         "u_projection_matrix");
- 
- global_text_shader_proj_matrix_location =
-  gl->GetUniformLocation(global_text_shader,
-                         "u_projection_matrix");
- 
- global_blur_shader_direction_location = 
-  gl->GetUniformLocation(global_blur_shader,
-                         "u_direction");
- 
- global_post_processing_shader_time_location =
-  gl->GetUniformLocation(global_post_processing_shader,
-                         "u_time");
- 
- global_post_processing_shader_screen_texture_location =
-  gl->GetUniformLocation(global_post_processing_shader,
-                         "u_screen_texture");
- 
- global_post_processing_shader_blur_texture_location =
-  gl->GetUniformLocation(global_post_processing_shader,
-                         "u_blur_texture");
- 
- global_memory_post_processing_shader_time_location =
-  gl->GetUniformLocation(global_memory_post_processing_shader,
-                         "u_time");
- 
- global_post_processing_shader_exposure_location =
-  gl->GetUniformLocation(global_post_processing_shader,
-                         "u_exposure");
- 
- global_memory_post_processing_shader_screen_texture_location =
-  gl->GetUniformLocation(global_memory_post_processing_shader,
-                         "u_screen_texture");
- 
- global_memory_post_processing_shader_blur_texture_location =
-  gl->GetUniformLocation(global_memory_post_processing_shader,
-                         "u_blur_texture");
- 
- global_memory_post_processing_shader_exposure_location =
-  gl->GetUniformLocation(global_memory_post_processing_shader,
-                         "u_exposure");
+ cache_uniform_locations();
  
  // NOTE(tbt): reset currently bound shader
  gl->UseProgram(global_currently_bound_shader);
@@ -885,7 +638,7 @@ internal void
 draw_rotated_sub_texture(Rect rectangle,
                          F32 angle,
                          Colour colour,
-                         Asset *texture,
+                         Texture *texture,
                          SubTexture sub_texture,
                          U8 sort,
                          F32 *projection_matrix)
@@ -896,7 +649,7 @@ draw_rotated_sub_texture(Rect rectangle,
  message.rectangle = rectangle;
  message.angle = angle;
  message.colour = colour;
- message.texture = texture;
+ message.texture = texture->id;
  message.sub_texture = sub_texture;
  message.projection_matrix = projection_matrix;
  message.sort = sort;
@@ -909,7 +662,7 @@ draw_rotated_sub_texture(Rect rectangle,
 internal void
 draw_sub_texture(Rect rectangle,
                  Colour colour,
-                 Asset *texture,
+                 Texture *texture,
                  SubTexture sub_texture,
                  U8 sort,
                  F32 *projection_matrix)
@@ -932,7 +685,7 @@ fill_rotated_rectangle(Rect rectangle,
  message.rectangle = rectangle;
  message.angle = angle;
  message.colour = colour;
- message.texture = NULL;
+ message.texture = global_flat_colour_texture;
  message.sub_texture = ENTIRE_TEXTURE;
  message.projection_matrix = projection_matrix;
  message.sort = sort;
@@ -1229,8 +982,6 @@ flush_batch(OpenGLFunctions *gl,
  batch->shader = 0;
  batch->projection_matrix = NULL;
  batch->in_use = false;
- 
- print_opengl_errors(gl);
 }
 
 Quad
@@ -1385,29 +1136,16 @@ process_render_queue(OpenGLFunctions *gl)
   {
    case RENDER_MESSAGE_draw_rectangle:
    {
-    TextureID texture_id = 0;
-    
-    texture_id = global_flat_colour_texture.id;
-    if (message.texture)
-    {
-     load_texture(gl, message.texture);
-     
-     if (message.texture->loaded)
-     {
-      texture_id = message.texture->texture.id;
-     }
-    }
-    
-    if (batch.texture != texture_id                          ||
-        batch.shader != global_default_shader                ||
-        batch.quad_count >= BATCH_SIZE                       ||
+    if (batch.texture != message.texture ||
+        batch.shader != global_default_shader ||
+        batch.quad_count >= BATCH_SIZE ||
         batch.projection_matrix != message.projection_matrix ||
         !(batch.in_use))
     {
      flush_batch(gl, &batch);
      
      batch.shader = global_default_shader;
-     batch.texture = texture_id;
+     batch.texture = message.texture;
      batch.projection_matrix = message.projection_matrix;
     }
     
@@ -1438,8 +1176,8 @@ process_render_queue(OpenGLFunctions *gl)
     Rect top, bottom, left, right;
     F32 stroke_width;
     
-    if (batch.texture != global_flat_colour_texture.id       ||
-        batch.shader != global_default_shader                ||
+    if (batch.texture != global_flat_colour_texture ||
+        batch.shader != global_default_shader ||
         batch.projection_matrix != message.projection_matrix ||
         batch.quad_count >= BATCH_SIZE                       ||
         !(batch.in_use))
@@ -1447,7 +1185,7 @@ process_render_queue(OpenGLFunctions *gl)
      flush_batch(gl, &batch);
      
      batch.shader = global_default_shader;
-     batch.texture = global_flat_colour_texture.id;
+     batch.texture = global_flat_colour_texture;
      batch.projection_matrix = message.projection_matrix;
     }
     
@@ -1529,8 +1267,8 @@ process_render_queue(OpenGLFunctions *gl)
          i < message.string.len;
          ++i)
     {
-     if (message.string.buffer[i] >=32 &&
-         message.string.buffer[i] < 128)
+     if (message.string.buffer[i] >= FONT_BAKE_BEGIN &&
+         message.string.buffer[i] < FONT_BAKE_END)
      {
       stbtt_aligned_quad q;
       Rect rectangle;
@@ -1539,7 +1277,7 @@ process_render_queue(OpenGLFunctions *gl)
       stbtt_GetBakedQuad(message.font->char_data,
                          message.font->texture.width,
                          message.font->texture.height,
-                         message.string.buffer[i] - 32,
+                         message.string.buffer[i] - FONT_BAKE_BEGIN,
                          &x,
                          &y,
                          &q);
@@ -1699,16 +1437,16 @@ process_render_queue(OpenGLFunctions *gl)
     quad.tl.u = 0.0f;
     quad.tl.v = 0.0f;
     
-    if (batch.texture != global_flat_colour_texture.id       ||
-        batch.shader != global_default_shader                ||
-        batch.quad_count >= BATCH_SIZE                       ||
+    if (batch.texture != global_flat_colour_texture ||
+        batch.shader != global_default_shader ||
+        batch.quad_count >= BATCH_SIZE ||
         batch.projection_matrix != message.projection_matrix ||
         !(batch.in_use))
     {
      flush_batch(gl, &batch);
      
      batch.shader = global_default_shader;
-     batch.texture = global_flat_colour_texture.id;
+     batch.texture = global_flat_colour_texture;
      batch.projection_matrix = message.projection_matrix;
     }
     

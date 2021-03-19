@@ -142,7 +142,7 @@ typedef enum
  TOKEN_KIND_eof,                      // EOF
 } _LcddlTokenKind;
 
-#define token_kind_to_string(_token_kind)                                      \
+#define token_kind_to_string(_token_kind)                                   \
 ((_token_kind) == TOKEN_KIND_none                     ? "none" :           \
 (_token_kind) == TOKEN_KIND_identifier               ? "identifier" :     \
 (_token_kind) == TOKEN_KIND_integer_literal          ? "integer literal" :\
@@ -1465,7 +1465,6 @@ lcddl_write_node_to_file_as_c_enum(LcddlNode *node,
 LcddlSearchResult *
 lcddl_find_top_level_declaration(char *name)
 {
- fprintf(stderr, "looking for top level decl '%s'\n", name);
  LcddlSearchResult *result = NULL;
  
  for (LcddlNode *file = _lcddl_global_root->first_child;
@@ -1531,16 +1530,29 @@ lcddl_is_declaration_type(LcddlNode *declaration,
 double
 lcddl_evaluate_expression(LcddlNode *expression)
 {
+ if (!expression) { return 0.0; }
+ 
  switch (expression->kind)
  {
   case LCDDL_NODE_KIND_float_literal:
   {
-   return strtod(expression->literal.value, NULL);
+   return atof(expression->literal.value);
   }
   
   case LCDDL_NODE_KIND_integer_literal:
   {
    return (double)strtol(expression->literal.value, NULL, 10);
+  }
+  
+  case LCDDL_NODE_KIND_variable_reference:
+  {
+   LcddlSearchResult *search_result = lcddl_find_top_level_declaration(expression->var_reference.name);
+   if (search_result)
+   {
+    return lcddl_evaluate_expression(search_result->node->declaration.value);
+   }
+   
+   return 0.0;
   }
   
   case LCDDL_NODE_KIND_unary_operator:
@@ -1659,13 +1671,9 @@ lcddl_evaluate_expression(LcddlNode *expression)
     }
    }
   }
-  
-  default:
-  {
-   fprintf(stderr, "Error evaluating expression.\n");
-   return 0.0;
-  }
  }
+ 
+ return 0.0;
 }
 
 #undef LOG_ERROR_BEGIN

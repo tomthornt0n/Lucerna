@@ -1,6 +1,10 @@
 typedef struct
 {
- U8 *buffer;
+ union
+ {
+  U8 *buffer;
+  void * data;
+ };
  U64 len;
 } S8;
 
@@ -110,13 +114,13 @@ s8_match(S8 a,
 }
 
 internal S8
-copy_s8(MemoryArena *arena,
+copy_s8(MemoryArena *memory,
         S8 string)
 {
  S8 result;
  
  result.len = string.len;
- result.buffer = arena_allocate(arena, string.len);
+ result.buffer = arena_allocate(memory, string.len);
  memcpy(result.buffer, string.buffer, string.len);
  
  return result;

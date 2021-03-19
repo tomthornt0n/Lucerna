@@ -35,8 +35,13 @@ float vignette(vec2 uv, float radius, float smoothness)
 
 void main()
 {
+ vec2 screen_size = textureSize(u_screen_texture, 0);
+ float correct_height = (screen_size.x * desired_aspect) / screen_size.y;
+ float min_y = (1.0 - correct_height) / 2;
+ float max_y = min_y + correct_height;
+ 
+	vec3 screen_col = texture(u_screen_texture, v_texture_coordinates).rgb  * vec3(v_texture_coordinates.y > min_y && v_texture_coordinates.y < max_y);
 	vec3 blur_col = texture(u_blur_texture, v_texture_coordinates).rgb;
-	vec3 screen_col = texture(u_screen_texture, v_texture_coordinates).rgb;
  
 	float blur_luminance_squared = dot(blur_col, vec3(0.2125, 0.7154, 0.0721));
 	blur_luminance_squared = blur_luminance_squared * blur_luminance_squared;

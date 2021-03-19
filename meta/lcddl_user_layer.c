@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdbool.h>
-#include "lcddl.h"
+
+#define LCDDL_AS_LIBRARY
+#include "lcddl.c"
+
+
+//
+// NOTE(tbt): utilities
+//~
 
 static void
 _write_string_as_word_delimited_f(FILE *file,
@@ -53,7 +60,8 @@ float_from_annotation(LcddlNode *node,
  LcddlNode *expr;
  if (NULL != (expr = lcddl_get_annotation_value(node, tag)))
  {
-  *result = (float)lcddl_evaluate_expression(expr);
+  double value = lcddl_evaluate_expression(expr);
+  *result = (float)value;
  }
 }
 
@@ -72,6 +80,10 @@ find_first_top_level_declaration(char *name)
  }
 }
 
+//
+// NOTE(tbt): editor UI generation
+//~
+
 static void
 gen_editor_ui(LcddlNode *node,
               FILE *file)
@@ -80,16 +92,21 @@ gen_editor_ui(LcddlNode *node,
  write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
  fprintf(file, "_editor_ui(PlatformState *input,\n%s *x)\n{\n", node->declaration.name);
  
- fprintf(file, "_ui_begin_window(input, s8_literal(\"gen %s editor\"), s8_literal(\"", node->declaration.name, rand());
- write_string_as_lowercase_with_spaces_f(file, node->declaration.name);
- fprintf(file, " editor\"), 32.0f, 32.0f, 800.0f);\nui_do_line_break();\n");
- 
  for (LcddlNode *child = node->first_child;
       NULL != child;
       child = child->next_sibling)
  {
   if (!lcddl_does_node_have_tag(child, "no_ui"))
   {
+   char *line_break;
+   if (lcddl_does_node_have_tag(child, "ui_horizontal_rule"))
+   {
+    line_break = "_ui_do_line_break(true)";
+   }
+   else
+   {
+    line_break = "_ui_do_line_break(false)";
+   }
    LcddlNode *dropdown_source_name;
    if (NULL != (dropdown_source_name = lcddl_get_annotation_value(child, "radio_dropdown_source")))
    {
@@ -98,7 +115,7 @@ gen_editor_ui(LcddlNode *node,
     {
      fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-     fprintf(file, "\"), 150.0f);\n");
+     fprintf(file, "\"), -1.0f);\n");
      
      for (LcddlNode *menu_item = dropdown_source->first_child;
           NULL != menu_item;
@@ -107,7 +124,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "if (ui_do_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), 150.0f)) { x->%s = %s; }\n",
+               "if (ui_do_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), -1.0f)) { x->%s = %s; }\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -117,7 +134,7 @@ gen_editor_ui(LcddlNode *node,
      }
      
      fprintf(file, "_ui_pop_insertion_point();\n");
-     fprintf(file, "ui_do_line_break();\n");
+     fprintf(file, "%s;\n", line_break);
     }
    }
    else if (NULL != (dropdown_source_name = lcddl_get_annotation_value(child, "flag_dropdown_source")))
@@ -127,7 +144,7 @@ gen_editor_ui(LcddlNode *node,
     {
      fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-     fprintf(file, "\"), 150.0f);\n");
+     fprintf(file, "\"), -1.0f);\n");
      
      for (LcddlNode *menu_item = dropdown_source->first_child;
           NULL != menu_item;
@@ -136,7 +153,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "ui_do_bit_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), &x->%s, %s, 150.0f);\n",
+               "ui_do_bit_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), &x->%s, %s, -1.0f);\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -146,26 +163,26 @@ gen_editor_ui(LcddlNode *node,
      }
      
      fprintf(file, "_ui_pop_insertion_point();\n");
-     fprintf(file, "ui_do_line_break();\n");
+     fprintf(file, "%s;\n", line_break);
     }
    }
    else if (0 == strcmp(child->declaration.type->type.type_name, "U8") &&
             0 != child->declaration.type->type.array_count)
    {
+    fprintf(file, "");
+    fprintf(file,
+            "ui_do_text_entry(input, s8_literal(\"gen %s entry %d\"), x->%s, NULL, %u);\n",
+            child->declaration.name,
+            rand(),
+            child->declaration.name,
+            child->declaration.type->type.array_count);
+    
     fprintf(file,
             "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
             child->declaration.name,
             rand());
     write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-    fprintf(file, ":\"), 100.0f);\n", child->declaration.name);
-    
-    fprintf(file, "");
-    fprintf(file,
-            "ui_do_text_entry(input, s8_literal(\"gen %s entry %d\"), x->%s, NULL, %u);\nui_do_line_break();\n",
-            child->declaration.name,
-            rand(),
-            child->declaration.name,
-            child->declaration.type->type.array_count);
+    fprintf(file, ":\"), 100.0f);\n%s;\n", line_break);
    }
    else if (0 == child->declaration.type->type.array_count &&
             0 == child->declaration.type->type.indirection_level)
@@ -177,7 +194,7 @@ gen_editor_ui(LcddlNode *node,
              child->declaration.name,
              rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-     fprintf(file, "\"), 150.0f, &x->%s);\nui_do_line_break();\n", child->declaration.name);
+     fprintf(file, "\"), -1.0f, &x->%s);\n%s;\n", child->declaration.name, line_break);
     }
     else
     {
@@ -214,20 +231,15 @@ gen_editor_ui(LcddlNode *node,
       float min = 0.0f;
       float max = 100.0f;
       float snap = -1.0f;
+      float width = 300.0f;
       
       float_from_annotation(child, "min", &min);
       float_from_annotation(child, "max", &max);
       float_from_annotation(child, "snap", &snap);
+      float_from_annotation(child, "width", &width);
       
       fprintf(file,
-              "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
-              child->declaration.name,
-              rand());
-      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
-      fprintf(file, ":\"), 100.0f);\n", child->declaration.name);
-      fprintf(file,
-              "ui_do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, 200.0f, &x->%s);\n"
-              "ui_do_line_break();\n",
+              "ui_do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, %ff, &x->%s);\n",
               slider_kind == SLIDER_KIND_int    ? "i"  :
               slider_kind == SLIDER_KIND_long   ? "l"  :
               slider_kind == SLIDER_KIND_float  ? "f"  :
@@ -237,13 +249,20 @@ gen_editor_ui(LcddlNode *node,
               min,
               max,
               snap,
+              width,
               child->declaration.name);
+      
+      fprintf(file,
+              "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
+              child->declaration.name,
+              rand());
+      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
+      fprintf(file, ":\"), 100.0f);\n%s;\n", line_break);
      }
     }
    }
   }
  }
- fprintf(file, "_ui_pop_insertion_point();\n");
  fprintf(file, "}\n\n");
 }
 
@@ -254,7 +273,7 @@ gen_serialisation_funcs(LcddlNode *node,
 {
  //
  // NOTE(tbt): serialisation
- //
+ //~
  
  {
   fprintf(file, "internal void\nserialise_");
@@ -275,8 +294,8 @@ gen_serialisation_funcs(LcddlNode *node,
      // NOTE(tbt): strings
     {
      fprintf(file,
-             "platform_append_to_file(file, &(x->%s.len), sizeof(U64));\n"
-             "platform_append_to_file(file, x->%s.buffer, x->%s.len);\n",
+             "platform_write_to_file_f(file, &(x->%s.len), sizeof(U64));\n"
+             "platform_write_to_file_f(file, x->%s.buffer, x->%s.len);\n",
              child->declaration.name,
              child->declaration.name,
              child->declaration.name);
@@ -285,10 +304,10 @@ gen_serialisation_funcs(LcddlNode *node,
      // NOTE(tbt): rectangles
     {
      fprintf(file,
-             "platform_append_to_file(file, &(x->%s.x), sizeof(x->%s.x));\n"
-             "platform_append_to_file(file, &(x->%s.y), sizeof(x->%s.y));\n"
-             "platform_append_to_file(file, &(x->%s.w), sizeof(x->%s.w));\n"
-             "platform_append_to_file(file, &(x->%s.h), sizeof(x->%s.h));\n",
+             "platform_write_to_file_f(file, &(x->%s.x), sizeof(x->%s.x));\n"
+             "platform_write_to_file_f(file, &(x->%s.y), sizeof(x->%s.y));\n"
+             "platform_write_to_file_f(file, &(x->%s.w), sizeof(x->%s.w));\n"
+             "platform_write_to_file_f(file, &(x->%s.h), sizeof(x->%s.h));\n",
              child->declaration.name,
              child->declaration.name,
              child->declaration.name,
@@ -302,10 +321,10 @@ gen_serialisation_funcs(LcddlNode *node,
      // NOTE(tbt): colours
     {
      fprintf(file,
-             "platform_append_to_file(file, &(x->%s.r), sizeof(x->%s.r));\n"
-             "platform_append_to_file(file, &(x->%s.g), sizeof(x->%s.g));\n"
-             "platform_append_to_file(file, &(x->%s.b), sizeof(x->%s.b));\n"
-             "platform_append_to_file(file, &(x->%s.a), sizeof(x->%s.a));\n",
+             "platform_write_to_file_f(file, &(x->%s.r), sizeof(x->%s.r));\n"
+             "platform_write_to_file_f(file, &(x->%s.g), sizeof(x->%s.g));\n"
+             "platform_write_to_file_f(file, &(x->%s.b), sizeof(x->%s.b));\n"
+             "platform_write_to_file_f(file, &(x->%s.a), sizeof(x->%s.a));\n",
              child->declaration.name,
              child->declaration.name,
              child->declaration.name,
@@ -331,14 +350,14 @@ gen_serialisation_funcs(LcddlNode *node,
      if (!child->declaration.type->type.array_count)
      {
       fprintf(file,
-              "platform_append_to_file(file, &(x->%s), sizeof(x->%s));\n",
+              "platform_write_to_file_f(file, &(x->%s), sizeof(x->%s));\n",
               child->declaration.name,
               child->declaration.name);
      }
      else
      {
       fprintf(file,
-              "platform_append_to_file(file, x->%s, %u * sizeof(x->%s[0]));\n",
+              "platform_write_to_file_f(file, x->%s, %u * sizeof(x->%s[0]));\n",
               child->declaration.name,
               child->declaration.type->type.array_count,
               child->declaration.name);
@@ -351,7 +370,7 @@ gen_serialisation_funcs(LcddlNode *node,
  
  //
  // NOTE(tbt): deserialisation
- //
+ //~
  
  {
   fprintf(file, "internal void\ndeserialise_");
@@ -444,7 +463,7 @@ gen_serialisation_funcs(LcddlNode *node,
      {
       fprintf(file,
               "memcpy(x->%s, *read_pointer, %u * sizeof(x->%s[0]));\n"
-              "*read_pointer += %u * sizeof(x->%s[0]);",
+              "*read_pointer += %u * sizeof(x->%s[0]);\n",
               child->declaration.name,
               child->declaration.type->type.array_count,
               child->declaration.name,
@@ -458,38 +477,42 @@ gen_serialisation_funcs(LcddlNode *node,
  }
 }
 
-LCDDL_CALLBACK void
-lcddl_user_callback(LcddlNode *root)
+//
+// NOTE(tbt): main
+//~
+
+int
+main(int argc,
+     char **argv)
 {
  FILE *f = fopen("../include/types.gen.h", "wb");
  FILE *functions_file = fopen("../include/funcs.gen.h", "wb");
  
- for (LcddlNode *file = root->first_child;
-      NULL != file;
-      file = file->next_sibling)
+ lcddl_initialise();
+ 
+ LcddlNode *file = lcddl_parse_file("../game/lucerna.lcd");
+ 
+ for (LcddlNode *decl = file->first_child;
+      NULL != decl;
+      decl = decl->next_sibling)
  {
-  for (LcddlNode *decl = file->first_child;
-       NULL != decl;
-       decl = decl->next_sibling)
+  if (lcddl_does_node_have_tag(decl, "c_struct"))
   {
-   if (lcddl_does_node_have_tag(decl, "c_struct"))
+   lcddl_write_node_to_file_as_c_struct(decl, f);
+   
+   if (lcddl_does_node_have_tag(decl, "gen_editor_ui"))
    {
-    lcddl_write_node_to_file_as_c_struct(decl, f);
-    
-    if (lcddl_does_node_have_tag(decl, "gen_editor_ui"))
-    {
-     gen_editor_ui(decl, functions_file);
-    }
-    
-    if (lcddl_does_node_have_tag(decl, "serialisable"))
-    {
-     gen_serialisation_funcs(decl, functions_file);
-    }
+    gen_editor_ui(decl, functions_file);
    }
-   else if (lcddl_does_node_have_tag(decl, "c_enum"))
+   
+   if (lcddl_does_node_have_tag(decl, "serialisable"))
    {
-    lcddl_write_node_to_file_as_c_enum(decl, f);
+    gen_serialisation_funcs(decl, functions_file);
    }
+  }
+  else if (lcddl_does_node_have_tag(decl, "c_enum"))
+  {
+   lcddl_write_node_to_file_as_c_enum(decl, f);
   }
  }
  

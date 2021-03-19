@@ -1,46 +1,91 @@
-@c_enum EntityFlags
+@c_enum
+EntityFlags
 {
-	ENTITY_FLAG_fade_out;
-	@no_ui ENTITY_FLAG_marked_for_removal;
-	ENTITY_FLAG_teleport;
-	ENTITY_FLAG_trigger_dialogue;
+ ENTITY_FLAG_fade_out;
+ @no_ui
+  ENTITY_FLAG_marked_for_removal;
+ ENTITY_FLAG_teleport;
+ ENTITY_FLAG_trigger_dialogue;
 };
 
-@c_enum FadeOutDir
+@c_enum
+FadeOutDir
 {
-	FADE_OUT_DIR_n;
-	FADE_OUT_DIR_e;
-	FADE_OUT_DIR_s;
-	FADE_OUT_DIR_w;
+ FADE_OUT_DIR_n;
+ FADE_OUT_DIR_e;
+ FADE_OUT_DIR_s;
+ FADE_OUT_DIR_w;
 };
 
-@c_enum EntityTriggers
+@c_enum
+EntityTriggers
 {
-	ENTITY_TRIGGER_player_entered;
-	ENTITY_TRIGGER_player_intersecting;
-	ENTITY_TRIGGER_player_left;
+ ENTITY_TRIGGER_player_entered;
+ ENTITY_TRIGGER_player_intersecting;
+ ENTITY_TRIGGER_player_left;
 };
 
 @c_struct @gen_editor_ui @serialisable
 Entity
 {
-	@no_ui next : Entity*;
-	@no_ui next_free : Entity*;
-	@no_ui bounds : Rect;
-	@no_ui triggers : U8;
+ @no_ui next : Entity*;
+ @no_ui next_free : Entity*;
+ @no_ui bounds : Rect;
+ @no_ui triggers : U8;
+ 
+ repeat_dialogue : B32;
+ @width=slider_width @min=0 @max=1920 @snap=1
+  dialogue_x : F32;
+ @width=slider_width @min=0 @max=1080 @snap=1
+  dialogue_y : F32;
+ dialogue_path : [64]U8;
+ 
+ @ui_horizontal_rule @radio_dropdown_source="FadeOutDir"
+  fade_out_direction : I32;
+ 
+ @ui_horizontal_rule
+  teleport_to_level : [64]U8;
+ 
+ teleport_to_non_default_spawn : B32;
+ teleport_do_not_persist_exposure : B32;
+ @width=slider_width @min=0 @max=1080 @snap=1 teleport_to_y : F32;
+ @width=slider_width @min=0 @max=1920 @snap=1 teleport_to_x : F32;
+ 
+ @ui_horizontal_rule @flag_dropdown_source="EntityFlags" flags : U64;
+};
 
-	repeat_dialogue : B32;
-	@min=0 @max=1920 @snap=1 dialogue_x : F32;
-	@min=0 @max=1080 @snap=1 dialogue_y : F32;
-	dialogue_path : [64]U8;
+@c_enum
+LevelKind
+{
+ LEVEL_KIND_memory;
+ LEVEL_KIND_world;
+};
 
-	@radio_dropdown_source="FadeOutDir" fade_out_direction : I32;
+floor_gradient_range := 1.5;
+slider_width := 524;
 
-	teleport_to_level : [64]U8;
-	teleport_to_default_spawn : B32;
-	@min=0 @max=1920 @snap=1 teleport_to_x : F32;
-	@min=0 @max=1080 @snap=1 teleport_to_y : F32;
-	
-	@flag_dropdown_source="EntityFlags"
-	flags : U64;
+@c_struct @gen_editor_ui @serialisable
+LevelDescriptor
+{
+ @radio_dropdown_source="LevelKind"
+  kind : I32;
+ 
+ @width=slider_width @min=0 @max=1080 @snap=1
+  player_spawn_y : F32;
+ 
+ @width=slider_width @min=0 @max=1920 @snap=1
+  player_spawn_x : F32;
+ 
+ @width=slider_width @min=0.1 @max=3 @snap=0.02
+  exposure : F32;
+ 
+ @width=slider_width @min=-floor_gradient_range @max=floor_gradient_range @snap=0.01
+  floor_gradient : F32;
+ 
+ @width=slider_width @min=350 @max=750 @snap=1
+  player_scale : F32;
+ 
+ bg_path : [64]U8;
+ fg_path : [64]U8;
+ music_path : [64]U8;
 };
