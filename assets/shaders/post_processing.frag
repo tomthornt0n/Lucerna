@@ -10,7 +10,7 @@ uniform float u_time;
 uniform float u_exposure;
 
 const vec3 bloom_tint = vec3(0.75);
-const float noise_intensity = 0.03;
+const float noise_intensity = 0.02;
 const float vignette_radius = 0.5;
 const float gamma = 2.2;
 const float overall_strength = 0.95;

@@ -170,7 +170,6 @@ gl->GetShaderInfoLog(fragment_shader,                                           
 SHADER_INFO_LOG_MAX_LEN,                                                              \
 NULL,                                                                                 \
 msg);                                                                                 \
-gl->DeleteShader(fragment_shader);                                                                         \
 debug_log(#_name " fragment shader compilation failure. '%s'\n", msg);                                     \
 exit(-1);                                                                                                  \
 }                                                                                                           \
@@ -192,21 +191,29 @@ exit(-1);                                                                       
 }                                                                                                           \
 gl->DetachShader(global_ ## _name ##_shader, _vertex_shader);                                               \
 gl->DetachShader(global_ ## _name ## _shader, fragment_shader);                                             \
-gl->DeleteShader(fragment_shader)
+gl->DeleteShader(fragment_shader);                                                                          \
+global_ ## _name ## _shader_last_modified = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"))
 
-#define cache_uniform_locations() \
-global_default_shader_proj_matrix_location = gl->GetUniformLocation(global_default_shader, "u_projection_matrix");\
-global_text_shader_proj_matrix_location = gl->GetUniformLocation(global_text_shader, "u_projection_matrix");\
-global_blur_shader_direction_location = gl->GetUniformLocation(global_blur_shader, "u_direction");\
-global_post_processing_shader_time_location = gl->GetUniformLocation(global_post_processing_shader, "u_time");\
-global_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_screen_texture");\
-global_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_blur_texture");\
-global_memory_post_processing_shader_time_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_time");\
-global_post_processing_shader_exposure_location = gl->GetUniformLocation(global_post_processing_shader, "u_exposure");\
-global_memory_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_screen_texture");\
-global_memory_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_blur_texture");\
-global_memory_post_processing_shader_exposure_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_exposure")
+internal void
+cache_uniform_locations(OpenGLFunctions *gl)
+{
+ global_default_shader_proj_matrix_location = gl->GetUniformLocation(global_default_shader, "u_projection_matrix");
+ global_text_shader_proj_matrix_location = gl->GetUniformLocation(global_text_shader, "u_projection_matrix");
+ global_blur_shader_direction_location = gl->GetUniformLocation(global_blur_shader, "u_direction");
+ global_post_processing_shader_time_location = gl->GetUniformLocation(global_post_processing_shader, "u_time");
+ global_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_screen_texture");
+ global_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_post_processing_shader, "u_blur_texture");
+ global_memory_post_processing_shader_time_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_time");
+ global_post_processing_shader_exposure_location = gl->GetUniformLocation(global_post_processing_shader, "u_exposure");
+ global_memory_post_processing_shader_screen_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_screen_texture");
+ global_memory_post_processing_shader_blur_texture_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_blur_texture");
+ global_memory_post_processing_shader_exposure_location = gl->GetUniformLocation(global_memory_post_processing_shader, "u_exposure");
+}
 
+internal void process_render_queue(OpenGLFunctions *gl);
+
+
+// NOTE(tbt): I have no idea why I chose this preprocessor monstrosity over a simple LCDDL metaprogram, but it works
 internal void
 hot_reload_shaders(OpenGLFunctions *gl,
                    F64 frametime_in_s)
@@ -226,6 +233,7 @@ hot_reload_shaders(OpenGLFunctions *gl,
 U64 last_modified = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"));\
 if (last_modified > global_ ## _name ## _shader_last_modified) \
 {\
+process_render_queue(gl);\
 global_ ## _name ## _shader_last_modified = last_modified;\
 debug_log("hot reloading " #_name " shader\n");\
 shader_src = cstring_from_s8(&global_static_memory, platform_read_entire_file_p(&global_static_memory, s8_literal("../assets/shaders/" #_vertex_shader_name ".vert")));\
@@ -244,7 +252,7 @@ exit(-1);\
 gl->AttachShader(global_ ## _name ## _shader, _vertex_shader_name ## _vertex_shader);\
 compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);\
 gl->DeleteShader(_vertex_shader_name ## _vertex_shader);\
-cache_uniform_locations();\
+cache_uniform_locations(gl);\
 }\
 }
 #include "shader_list.h"
@@ -440,8 +448,7 @@ initialise_renderer(OpenGLFunctions *gl)
   gl->DeleteShader(fullscreen_vertex_shader);
  }
  
- // NOTE(tbt): cache some uniform locations
- cache_uniform_locations();
+ cache_uniform_locations(gl);
  
  // NOTE(tbt): reset currently bound shader
  gl->UseProgram(global_currently_bound_shader);

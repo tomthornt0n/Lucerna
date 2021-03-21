@@ -55,6 +55,7 @@ load_player_art(OpenGLFunctions *gl)
   global_player_art.right_arm = sub_texture_from_texture(&texture, 512.0f, 352.0f, 42.0f, 213.0f);
   
   global_player_art.texture = texture;
+  global_player_art.last_modified = platform_get_file_modified_time_p(global_player_art.texture_path);
  }
  else
  {
@@ -136,7 +137,7 @@ do_player(OpenGLFunctions *gl,
           F64 frametime_in_s,
           Player *player)
 {
- // TODO(tbt): better rotation function for legs
+ // TODO(tbt): better walk animation
  
  F32 player_speed = (128.0f + sin(global_time * 0.2) * 5.0f) * frametime_in_s;
  
@@ -152,6 +153,10 @@ do_player(OpenGLFunctions *gl,
  player->y += player->y_velocity;
  
  F32 scale = global_current_level.player_scale / (global_renderer_window_h - player->y);
+ 
+ //
+ // NOTE(tbt): walk right animation
+ //~
  
  if (player->x_velocity >  0.01f)
  {
@@ -193,6 +198,11 @@ do_player(OpenGLFunctions *gl,
                                  &global_player_art.texture,
                                  global_player_art.right_arm);
  }
+ 
+ //
+ // NOTE(tbt): walk left animation
+ //~
+ 
  else if (player->x_velocity < -0.01f)
  {
   world_draw_sub_texture(rectangle_literal(player->x + 32 * scale,
@@ -233,6 +243,11 @@ do_player(OpenGLFunctions *gl,
                                  &global_player_art.texture,
                                  global_player_art.left_arm);
  }
+ 
+ //
+ // NOTE(tbt): idle animation
+ //~
+ 
  else
  {
   world_draw_sub_texture(rectangle_literal(player->x + 22.0f * scale,
@@ -282,14 +297,6 @@ internal Entity _global_dummy_entity = {0};
 internal Entity _global_entity_pool[MAX_ENTITIES] = {{0}};
 internal Entity *_global_entity_free_list = NULL;
 
-internal void
-push_entity(Entity *entity,
-            Entity **entities)
-{
- entity->next = *entities;
- *entities = entity;
-}
-
 internal Entity *
 allocate_and_push_entity(Entity **entities)
 {
@@ -311,7 +318,8 @@ allocate_and_push_entity(Entity **entities)
  
  memset(result, 0, sizeof(*result));
  
- push_entity(result, entities);
+ result->next = *entities;
+ *entities = result;
  
  return result;
 }
@@ -326,8 +334,8 @@ level_descriptor_from_level(LevelDescriptor *level_descriptor,
  level_descriptor->exposure = level->exposure;
  level_descriptor->floor_gradient = atan(level->y_offset_per_x);
  level_descriptor->player_scale = level->player_scale;
- memcpy(level_descriptor->bg_path, level->bg_path.buffer, min_u(level->bg_path.len, sizeof(level_descriptor->bg_path)));
- memcpy(level_descriptor->fg_path, level->fg_path.buffer, min_u(level->fg_path.len, sizeof(level_descriptor->fg_path)));
+ memcpy(level_descriptor->bg_path, level->bg_path.buffer, level->bg_path.len);
+ memcpy(level_descriptor->fg_path, level->fg_path.buffer, level->fg_path.len);
  if (level->music)
  {
   memcpy(level_descriptor->music_path, level->music_path.buffer, level->music_path.len);
@@ -358,74 +366,86 @@ serialise_level(Level *level)
  }
 }
 
-internal void
+internal B32
+level_from_level_descriptor(OpenGLFunctions *gl,
+                            MemoryArena *memory,
+                            Level *level,
+                            LevelDescriptor *level_descriptor)
+{
+ B32 success = true;
+ 
+ level->kind = level_descriptor->kind;
+ level->player_spawn_x = level_descriptor->player_spawn_x;
+ level->player_spawn_y = level_descriptor->player_spawn_y;
+ level->exposure = level_descriptor->exposure;
+ level->y_offset_per_x = tan(level_descriptor->floor_gradient);
+ level->player_scale = level_descriptor->player_scale;
+ 
+ if (load_texture(gl, s8_literal(level_descriptor->bg_path), &level->bg))
+ {
+  level->bg_path = copy_s8(memory, s8_literal(level_descriptor->bg_path));
+  level->bg_last_modified = platform_get_file_modified_time_p(level->bg_path);
+ }
+ else
+ {
+  level->bg_path.len = 0;
+  level->bg_path.buffer = NULL;
+  level->bg_last_modified = 0;
+  level->bg = DUMMY_TEXTURE;
+  success = false;
+  debug_log("could not load background - using dummy background texture\n");
+ }
+ 
+ if (load_texture(gl, s8_literal(level_descriptor->fg_path), &level->fg))
+ {
+  level->fg_path = copy_s8(memory, s8_literal(level_descriptor->fg_path));
+  level->fg_last_modified = platform_get_file_modified_time_p(level->fg_path);
+ }
+ else
+ {
+  level->fg_path.len = 0;
+  level->fg_path.buffer = NULL;
+  level->fg_last_modified = 0;
+  level->fg = DUMMY_TEXTURE;
+  success = false;
+  debug_log("could not load foreground - using dummy foreground texture\n");
+ }
+ 
+ if (level->music = load_audio(s8_literal(level_descriptor->music_path)))
+ {
+  level->music_path = copy_s8(memory, s8_literal(level_descriptor->music_path));
+ }
+ else
+ {
+  success = false;
+  debug_log("could not load music\n");
+ }
+ 
+ return success;
+}
+
+#if 0
+internal B32
 _current_level_from_level_descriptor(OpenGLFunctions *gl,
                                      LevelDescriptor *level_descriptor)
 {
- global_current_level.kind = level_descriptor->kind;
- global_current_level.player_spawn_x = level_descriptor->player_spawn_x;
- global_current_level.player_spawn_y = level_descriptor->player_spawn_y;
- global_current_level.exposure = level_descriptor->exposure;
- global_current_level.y_offset_per_x = tan(level_descriptor->floor_gradient);
- global_current_level.player_scale = level_descriptor->player_scale;
- 
- if (load_texture(gl, s8_literal(level_descriptor->bg_path), &global_current_level.bg))
- {
-  global_current_level.bg_path = copy_s8(&global_level_memory, s8_literal(level_descriptor->bg_path));
-  global_current_level.bg_last_modified = platform_get_file_modified_time_p(global_current_level.bg_path);
- }
- else
- {
-  global_current_level.bg_path.len = 0;
-  global_current_level.bg_path.buffer = NULL;
-  global_current_level.bg_last_modified = 0;
-  global_current_level.bg = DUMMY_TEXTURE;
-  debug_log("using dummy background texture\n");
- }
- 
- if (load_texture(gl, s8_literal(level_descriptor->fg_path), &global_current_level.fg))
- {
-  global_current_level.fg_path = copy_s8(&global_level_memory, s8_literal(level_descriptor->fg_path));
-  global_current_level.fg_last_modified = platform_get_file_modified_time_p(global_current_level.fg_path);
- }
- else
- {
-  global_current_level.fg_path.len = 0;
-  global_current_level.fg_path.buffer = NULL;
-  global_current_level.fg_last_modified = 0;
-  global_current_level.fg = DUMMY_TEXTURE;
-  debug_log("using dummy foreground texture\n");
- }
- 
- if (global_current_level.music = load_audio(s8_literal(level_descriptor->music_path)))
- {
-  global_current_level.music_path = copy_s8(&global_level_memory, s8_literal(level_descriptor->music_path));
- }
+ return level_from_level_descriptor(gl, &global_level_memory, &global_current_level, level_descriptor);
 }
+#endif
 
-internal void
+internal B32
 set_current_level(OpenGLFunctions *gl,
                   S8 path,
                   B32 persist_exposure)
 {
+ B32 success = true;
+ 
+ Level temp_level = {0};
  LevelDescriptor level_descriptor = {0};
  
  debug_log("loading level %.*s\n", (I32)path.len, path.buffer);
  
- // NOTE(tbt): save path temporarily
- S8 temp_path = copy_s8(&global_frame_memory, path);
- 
- // NOTE(tbt): unload existing level
- unload_texture(gl, &global_current_level.fg);
- unload_texture(gl, &global_current_level.bg);
- unload_audio(global_current_level.music);
- global_current_level.entities = NULL;
- _global_entity_next_index = 0;
- _global_entity_free_list = NULL;
- arena_free_all(&global_level_memory);
- 
- // NOTE(tbt): load new level
- global_current_level.path = copy_s8(&global_level_memory, temp_path);
+ // NOTE(tbt): read level file
  arena_temporary_memory(&global_static_memory)
  {
   S8 file = platform_read_entire_file_p(&global_static_memory, path);
@@ -434,27 +454,61 @@ set_current_level(OpenGLFunctions *gl,
   {
    U8 *read = file.buffer;
    
+   // NOTE(tbt): load level descriptor
    deserialise_level_descriptor(&level_descriptor, &read);
-   _current_level_from_level_descriptor(gl, &level_descriptor);
-   global_current_level.player.x = global_current_level.player_spawn_x;
-   global_current_level.player.y = global_current_level.player_spawn_y;
-   if (!persist_exposure)
+   if (level_from_level_descriptor(gl, &global_frame_memory, &temp_level, &level_descriptor))
    {
-    global_exposure = global_current_level.exposure;
+    // NOTE(tbt): save path temporarily
+    S8 temp_path = copy_s8(&global_frame_memory, path);
+    
+    // NOTE(tbt): unload existing level
+    unload_texture(gl, &global_current_level.fg);
+    unload_texture(gl, &global_current_level.bg);
+    unload_audio(global_current_level.music);
+    global_current_level.entities = NULL;
+    _global_entity_next_index = 0;
+    _global_entity_free_list = NULL;
+    arena_free_all(&global_level_memory);
+    
+    temp_level.path = copy_s8(&global_level_memory, temp_path);
+    
+    // NOTE(tbt): load entities
+    while (read - file.buffer < file.len)
+    {
+     Entity *e = allocate_and_push_entity(&temp_level.entities);
+     deserialise_entity(e, &read);
+    }
+    
+    // NOTE(tbt): save newly loaded level globally
+    memcpy(&global_current_level, &temp_level, sizeof(global_current_level));
+    global_current_level.player.x = global_current_level.player_spawn_x;
+    global_current_level.player.y = global_current_level.player_spawn_y;
+    if (!persist_exposure)
+    {
+     global_exposure = global_current_level.exposure;
+    }
+    
+    // NOTE(tbt): copy saved paths from frame to level memory
+    global_current_level.fg_path = copy_s8(&global_level_memory, global_current_level.fg_path);
+    global_current_level.bg_path = copy_s8(&global_level_memory, global_current_level.bg_path);
+    global_current_level.music_path = copy_s8(&global_level_memory, global_current_level.music_path);
    }
-   
-   while (read - file.buffer < file.len)
+   else
    {
-    Entity *e = allocate_and_push_entity(&global_current_level.entities);
-    deserialise_entity(e, &read);
+    debug_log("failure loading level '%.*s' - error while initialising level from level descriptor\n",
+              (I32)path.len, path.buffer);
+    success = false;
    }
   }
   else
   {
-   debug_log("could not load level '%.*s'\n", (I32)path.len, path.buffer);
-   exit(-1);
+   debug_log("failure loading level '%.*s' - could not read level file\n",
+             (I32)path.len, path.buffer);
+   success = false;
   }
  }
+ 
+ return success;
 }
 
 internal void
@@ -480,7 +534,7 @@ set_current_level_as_new_level(OpenGLFunctions *gl,
  // NOTE(tbt): setup new level
  global_current_level.path = copy_s8(&global_level_memory, temp_path);
  platform_write_entire_file_p(path, &level_descriptor, sizeof(level_descriptor));
- _current_level_from_level_descriptor(gl, &level_descriptor);
+ level_from_level_descriptor(gl, &global_level_memory, &global_current_level, &level_descriptor);
 }
 
 internal void
@@ -564,7 +618,7 @@ do_entities(OpenGLFunctions *gl,
    fade = clamp_f(fade, 0.0f, 1.0f);
    
    global_exposure = fade * global_current_level.exposure;
-   set_audio_master_level(fade * DEFAULT_AUDIO_MASTER_LEVEL);
+   set_audio_master_level(fade);
   }
   
   // NOTE(tbt): teleports
@@ -582,7 +636,12 @@ do_entities(OpenGLFunctions *gl,
                                 level_path,
                                 s8_literal("../assets/levels/"));
    
-   set_current_level(gl, expand_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure);
+   B32 success = set_current_level(gl, expand_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure);
+   
+   if (!success)
+   {
+    platform_quit();
+   }
    
    if (_e.teleport_to_non_default_spawn)
    {

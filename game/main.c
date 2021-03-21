@@ -13,8 +13,9 @@
 /*
 TODO list:
 - unicode support
-- multithreaded asset loading? (maybe)
-- make the player walk less wierdly
+- make the player walk less weirdly
+- finish in-game menus
+- fix crashes (I beleive they are just `__debugbreak()`s when using an invalid texture)
 - gameplay!!!!!!!
 */
 
@@ -27,7 +28,6 @@ internal MemoryArena global_level_memory;
 
 #include "util.c"
 #include "asset_manager.c"
-#include "audio.c"
 
 internal Font *global_ui_font;
 internal Font *global_title_font;
@@ -49,6 +49,8 @@ internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 
 AudioSource *global_click_sound = NULL;
 
+// #include "audio.c"
+#include "cmixer.c"
 #include "types.gen.h"
 #include "renderer.c"
 #include "dev_ui.c"
@@ -153,6 +155,10 @@ game_update_and_render(OpenGLFunctions *gl,
    global_editor_selected_entity = NULL;
    
    serialise_level(&global_current_level);
+   if (!set_current_level(gl, global_current_level.path, false))
+   {
+    platform_quit();
+   }
    
    // NOTE(tbt): reset camera position
    set_camera_position(global_current_level.bg.width >> 1,

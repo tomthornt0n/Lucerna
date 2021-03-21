@@ -87,8 +87,14 @@ do_main_menu(OpenGLFunctions *gl,
  {
   _MAIN_MENU_BUTTON(s8_literal("Play"), 400.0f, keyboard_selection == MAIN_MENU_BUTTON_play)
   {
-   set_current_level(gl, s8_literal("../assets/levels/office_1.level"), false);
-   global_game_state = GAME_STATE_playing;
+   if (set_current_level(gl, s8_literal("../assets/levels/office_1.level"), false))
+   {
+    global_game_state = GAME_STATE_playing;
+   }
+   else
+   {
+    platform_quit();
+   }
   }
  }
  
