@@ -402,7 +402,7 @@ ui_do_bit_toggle_button(PlatformState *input,
       global_active_widget == node)
   {
    node->toggled = !node->toggled;
-   play_audio_source(global_click_sound);
+   cm_play(global_click_sound);
    if (mask != NULL)
    {
     if (node->toggled)
@@ -464,7 +464,7 @@ ui_do_toggle_button(PlatformState *input,
       global_active_widget == node)
   {
    *toggle = !(*toggle);
-   play_audio_source(global_click_sound);
+   cm_play(global_click_sound);
    clicked = true;
   }
   
@@ -522,7 +522,7 @@ ui_do_button(PlatformState *input,
       global_active_widget == node)
   {
    node->toggled = true;
-   play_audio_source(global_click_sound);
+   cm_play(global_click_sound);
   }
   else
   {
@@ -576,7 +576,7 @@ _ui_begin_dropdown(PlatformState *input,
       global_active_widget == node)
   {
    node->toggled = !node->toggled;
-   play_audio_source(global_click_sound);
+   cm_play(global_click_sound);
   }
   
   if (is_point_in_region(input->mouse_x,
@@ -634,7 +634,7 @@ _ui_do_text_entry(PlatformState *input,
     {
      node->text_entry_state = TEXT_ENTRY_STATE_clicked_out;
     }
-    play_audio_source(global_click_sound);
+    cm_play(global_click_sound);
    }
   }
   else if (global_active_widget && node->toggled)
@@ -766,7 +766,7 @@ ui_do_slider_lf(PlatformState *input,
    if (!node->dragging)
    {
     node->dragging = true;
-    play_audio_source(global_click_sound);
+    cm_play(global_click_sound);
    }
   }
   
@@ -794,7 +794,7 @@ ui_do_slider_lf(PlatformState *input,
    if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
    {
     node->dragging = false;
-    play_audio_source(global_click_sound);
+    cm_play(global_click_sound);
    }
   }
   else if (text->text_entry_state)

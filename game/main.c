@@ -22,12 +22,15 @@ TODO list:
 internal F64 global_time = 0.0;
 internal F32 global_exposure = 1.0;
 
+internal F64 global_audio_master_level = 0.8;
+
 internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 
 #include "util.c"
 #include "asset_manager.c"
+#include "cmixer.c"
 
 internal Font *global_ui_font;
 internal Font *global_title_font;
@@ -47,10 +50,8 @@ internal GameState global_game_state = GAME_STATE_main_menu;
 typedef void ( *PerGameStateMainFunction)(OpenGLFunctions *, PlatformState *, F64);
 internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 
-AudioSource *global_click_sound = NULL;
+cm_Source *global_click_sound = NULL;
 
-// #include "audio.c"
-#include "cmixer.c"
 #include "types.gen.h"
 #include "renderer.c"
 #include "dev_ui.c"
@@ -59,6 +60,7 @@ AudioSource *global_click_sound = NULL;
 #include "entities.c"
 #include "editor.c"
 #include "main_menu.c"
+
 
 //
 // NOTE(tbt): main loop for game_playing state
@@ -78,6 +80,30 @@ game_playing_main(OpenGLFunctions *gl,
 }
 
 //
+// NOTE(tbt): audio
+//~
+
+internal void
+cmixer_lock_handler(cm_Event *e)
+{
+ if (e->type == CM_EVENT_LOCK)
+ {
+  platform_get_audio_lock();
+ }
+ else if (e->type == CM_EVENT_UNLOCK)
+ {
+  platform_release_audio_lock();
+ }
+}
+
+void
+game_audio_callback(void *buffer,
+                    U32 buffer_size)
+{
+ cm_process(buffer, buffer_size / 2);
+}
+
+//
 // NOTE(tbt): initialisation
 //~
 
@@ -88,10 +114,14 @@ game_init(OpenGLFunctions *gl)
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
  initialise_arena_with_new_memory(&global_level_memory, 27 * ONE_MB);
  
+ cm_init(44100);
+ cm_set_lock(cmixer_lock_handler);
+ cm_set_master_gain(global_audio_master_level);
+ 
  global_ui_font = load_font(gl, s8_literal("../assets/fonts/mononoki.ttf"), 19);
  global_title_font = load_font(gl, s8_literal("../assets/fonts/ShipporiMincho-Regular.ttf"), 72);
  global_normal_font = load_font(gl, s8_literal("../assets/fonts/ShipporiMincho-Regular.ttf"), 28);
- global_click_sound = load_audio(s8_literal("../assets/audio/click.wav"));
+ global_click_sound = cm_new_source_from_file("../assets/audio/click.wav");
  load_player_art(gl);
  
  initialise_renderer(gl);
@@ -168,6 +198,7 @@ game_update_and_render(OpenGLFunctions *gl,
   }
   else if (global_game_state == GAME_STATE_playing)
   {
+   cm_stop(global_current_level.music);
    global_game_state = GAME_STATE_editor;
   }
  }

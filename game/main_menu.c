@@ -36,7 +36,7 @@ _button_bounds.h + MAIN_MENU_BUTTON_REGION_TOLERANCE)) ||                 \
 if (!_hovered)                                                                                                    \
 {                                                                                                                 \
 _hovered = true;                                                                                                 \
-play_audio_source(global_click_sound);                                                                           \
+cm_play(global_click_sound);                                                                           \
 }                                                                                                                 \
 _x_offset = min(_x_offset + frametime_in_s * MAIN_MENU_BUTTON_SHIFT_SPEED, MAIN_MENU_BUTTON_SHIFT_AMOUNT);        \
 }                                                                                                                  \

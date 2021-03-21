@@ -4,7 +4,6 @@ do_level_editor(OpenGLFunctions *gl,
                 F64 frametime_in_s)
 {
  F32 aspect;
- stop_audio_source(global_current_level.music);
  
  //
  // NOTE(tbt): editor state
@@ -166,8 +165,9 @@ do_level_editor(OpenGLFunctions *gl,
   if (saving_level)
   {
    serialise_level(&global_current_level);
-   set_current_level(gl, global_current_level.path, false);
+   error_opening_level = !set_current_level(gl, global_current_level.path, false);
    saving_level = false;
+   cm_stop(global_current_level.music);
   }
   
   //

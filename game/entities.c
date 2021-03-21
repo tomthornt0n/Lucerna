@@ -113,7 +113,7 @@ typedef struct
  
  Texture fg;
  Texture bg;
- AudioSource *music;
+ cm_Source *music;
  
  F32 y_offset_per_x;
  F32 exposure;
@@ -411,7 +411,7 @@ level_from_level_descriptor(OpenGLFunctions *gl,
   debug_log("could not load foreground - using dummy foreground texture\n");
  }
  
- if (level->music = load_audio(s8_literal(level_descriptor->music_path)))
+ if (level->music = cm_new_source_from_file(level_descriptor->music_path))
  {
   level->music_path = copy_s8(memory, s8_literal(level_descriptor->music_path));
  }
@@ -464,7 +464,7 @@ set_current_level(OpenGLFunctions *gl,
     // NOTE(tbt): unload existing level
     unload_texture(gl, &global_current_level.fg);
     unload_texture(gl, &global_current_level.bg);
-    unload_audio(global_current_level.music);
+    cm_destroy_source(global_current_level.music);
     global_current_level.entities = NULL;
     _global_entity_next_index = 0;
     _global_entity_free_list = NULL;
@@ -492,6 +492,10 @@ set_current_level(OpenGLFunctions *gl,
     global_current_level.fg_path = copy_s8(&global_level_memory, global_current_level.fg_path);
     global_current_level.bg_path = copy_s8(&global_level_memory, global_current_level.bg_path);
     global_current_level.music_path = copy_s8(&global_level_memory, global_current_level.music_path);
+    
+    // NOTE(tbt): play music
+    cm_set_loop(global_current_level.music, true);
+    cm_play(global_current_level.music);
    }
    else
    {
@@ -525,7 +529,7 @@ set_current_level_as_new_level(OpenGLFunctions *gl,
  // NOTE(tbt): unload existing level
  unload_texture(gl, &global_current_level.fg);
  unload_texture(gl, &global_current_level.bg);
- unload_audio(global_current_level.music);
+ cm_destroy_source(global_current_level.music);
  global_current_level.entities = NULL;
  _global_entity_next_index = 0;
  _global_entity_free_list = NULL;
@@ -618,7 +622,7 @@ do_entities(OpenGLFunctions *gl,
    fade = clamp_f(fade, 0.0f, 1.0f);
    
    global_exposure = fade * global_current_level.exposure;
-   set_audio_master_level(fade);
+   cm_set_master_gain(fade * global_audio_master_level);
   }
   
   // NOTE(tbt): teleports
@@ -759,8 +763,6 @@ do_current_level(OpenGLFunctions *gl,
                         WHITE,
                         &global_current_level.bg,
                         ENTIRE_TEXTURE);
- 
- play_audio_source(global_current_level.music);
  
  do_entities(gl, frametime_in_s, global_current_level.entities, &global_current_level.player);
  
