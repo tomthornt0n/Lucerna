@@ -1,5 +1,6 @@
 //
 // NOTE(tbt): terrible, but only for dev tools so just about acceptable
+// NOTE(tbt): should probably just use RXI's microui
 //
 
 #define PADDING 8.0f
@@ -20,12 +21,12 @@
 
 #define ANIMATION_SPEED 0.05f
 
-
+// NOTE(tbt): everything about this file is terrible but function is perhaps the worst offender
 internal Rect
 _ui_measure_text(Font *font,
                  F32 x, F32 y,
                  U32 wrap_width,
-                 S8 string)
+                 S32 string)
 {
  Rect result;
  stbtt_aligned_quad q;
@@ -33,22 +34,26 @@ _ui_measure_text(Font *font,
  
  F32 min_x = x, min_y = y, max_x = 0.0f, max_y = 0.0f;
  
+ 
+ U32 font_bake_begin = font->bake_begin;
+ U32 font_bake_end = font->bake_end;
+ 
  for (I32 i = 0;
       i < string.len;
       ++i)
  {
-  if (string.buffer[i] >= FONT_BAKE_BEGIN &&
-      string.buffer[i] < FONT_BAKE_END)
+  if (string.buffer[i] >= font_bake_begin &&
+      string.buffer[i] < font_bake_end)
   {
    F32 char_width, char_height;
    
-   stbtt_GetBakedQuad(font->char_data,
-                      font->texture.width,
-                      font->texture.height,
-                      string.buffer[i] - 32,
-                      &x,
-                      &y,
-                      &q);
+   stbtt_GetPackedQuad(font->char_data,
+                       font->texture.width,
+                       font->texture.height,
+                       string.buffer[i] - font_bake_begin,
+                       &x, &y,
+                       &q,
+                       false);
    
    if (q.x0 < min_x)
    {
@@ -92,7 +97,7 @@ _ui_measure_text(Font *font,
   }
   else if (string.buffer[i] == '\n')
   {
-   y += font->size;
+   y += font->vertical_advance;
    x = line_start;
   }
  }
@@ -100,7 +105,6 @@ _ui_measure_text(Font *font,
  result = rectangle_literal(min_x - PADDING, min_y - PADDING, max_x - min_x + PADDING * 2, max_y - min_y + PADDING * 2);
  return result;
 }
-
 
 typedef enum
 {
@@ -222,7 +226,8 @@ _ui_node_from_string(S8 string)
  return result;
 }
 
-internal UINode *global_hot_widget, *global_active_widget;
+internal UINode *global_hot_widget;
+internal UINode *global_active_widget;
 internal UINode *global_widgets_under_mouse;
 internal B32 global_is_mouse_over_ui;
 
@@ -606,7 +611,7 @@ internal UINode *
 _ui_do_text_entry(PlatformState *input,
                   S8 name,
                   U8 *buffer,
-                  U64 *len,
+                  U64 *size,
                   U64 capacity)
 {
  UINode *node;
@@ -652,7 +657,7 @@ _ui_do_text_entry(PlatformState *input,
    global_widgets_under_mouse = node;
   }
   
-  U64 index = strlen(buffer);
+  U64 index = calculate_utf8_cstring_size(buffer);
   
   if (node->toggled)
   {
@@ -685,11 +690,11 @@ _ui_do_text_entry(PlatformState *input,
   }
   
   node->label.buffer = buffer;
-  node->label.len = index;
+  node->label.size = index;
   
-  if (len)
+  if (size)
   {
-   *len = index;
+   *size = index;
   }
   
   if (global_hot_widget == node &&
@@ -745,10 +750,10 @@ ui_do_slider_lf(PlatformState *input,
  if (!node->hidden)
  {
   S8 text_name;
-  text_name.buffer = arena_allocate(&global_frame_memory, name.len + 1);
-  text_name.len = name.len + 1;
-  memcpy(text_name.buffer, name.buffer, name.len);
-  text_name.buffer[name.len] = '~';
+  text_name.buffer = arena_allocate(&global_frame_memory, name.size + 1);
+  text_name.size = name.size + 1;
+  memcpy(text_name.buffer, name.buffer, name.size);
+  text_name.buffer[name.size] = '~';
   UINode *text = _ui_do_text_entry(input, text_name, node->temp_buffer, NULL, 8);
   
   if (is_point_in_region(input->mouse_x,
@@ -908,7 +913,7 @@ _ui_layout_and_render_node(PlatformState *input,
                                         node->drag_x,
                                         node->drag_y,
                                         node->wrap_width,
-                                        node->label);
+                                        s32_from_s8(&global_frame_memory, node->label));
    
    node->bounds = rectangle_literal(title_bounds.x,
                                     title_bounds.y,
@@ -1011,14 +1016,14 @@ _ui_layout_and_render_node(PlatformState *input,
                   node->sort,
                   global_ui_projection_matrix);
    
-   draw_text(global_ui_font,
-             node->drag_x,
-             node->drag_y,
-             node->wrap_width,
-             FG_COL_1,
-             node->label,
-             node->sort,
-             global_ui_projection_matrix);
+   draw_s8(global_ui_font,
+           node->drag_x,
+           node->drag_y,
+           node->wrap_width,
+           FG_COL_1,
+           node->label,
+           node->sort,
+           global_ui_projection_matrix);
    
    
    for (U32 i = 0;
@@ -1040,7 +1045,7 @@ _ui_layout_and_render_node(PlatformState *input,
    node->bounds = node->bg = node->interactable = _ui_measure_text(global_ui_font,
                                                                    x + PADDING, y + global_ui_font->size,
                                                                    node->wrap_width,
-                                                                   node->label);
+                                                                   s32_from_s8(&global_frame_memory, node->label));
    
    if (node->toggled)
    {
@@ -1053,13 +1058,13 @@ _ui_layout_and_render_node(PlatformState *input,
                    node->sort,
                    global_ui_projection_matrix);
     
-    draw_text(global_ui_font,
-              x + PADDING, y + global_ui_font->size,
-              node->wrap_width,
-              BG_COL_1,
-              node->label,
-              node->sort,
-              global_ui_projection_matrix);
+    draw_s8(global_ui_font,
+            x + PADDING, y + global_ui_font->size,
+            node->wrap_width,
+            BG_COL_1,
+            node->label,
+            node->sort,
+            global_ui_projection_matrix);
     
    }
    else
@@ -1086,15 +1091,15 @@ _ui_layout_and_render_node(PlatformState *input,
                    node->sort,
                    global_ui_projection_matrix);
     
-    draw_text(global_ui_font,
-              x + PADDING, y + global_ui_font->size,
-              node->wrap_width,
-              colour_lerp(BG_COL_1,
-                          FG_COL_1,
-                          node->animation_transition),
-              node->label,
-              node->sort,
-              global_ui_projection_matrix);
+    draw_s8(global_ui_font,
+            x + PADDING, y + global_ui_font->size,
+            node->wrap_width,
+            colour_lerp(BG_COL_1,
+                        FG_COL_1,
+                        node->animation_transition),
+            node->label,
+            node->sort,
+            global_ui_projection_matrix);
    }
    
    if (node->first_child)
@@ -1215,7 +1220,7 @@ _ui_layout_and_render_node(PlatformState *input,
    Rect label_bounds = _ui_measure_text(global_ui_font,
                                         x, y,
                                         node->wrap_width,
-                                        node->label);
+                                        s32_from_s8(&global_frame_memory, node->label));
    
    
    node->bounds = rectangle_literal(label_bounds.x,
@@ -1226,13 +1231,13 @@ _ui_layout_and_render_node(PlatformState *input,
    node->bg = node->bounds;
    node->interactable = node->bounds;
    
-   draw_text(global_ui_font,
-             x, y + global_ui_font->size,
-             node->wrap_width,
-             FG_COL_1,
-             node->label,
-             node->sort,
-             global_ui_projection_matrix);
+   draw_s8(global_ui_font,
+           x, y + global_ui_font->size,
+           node->wrap_width,
+           FG_COL_1,
+           node->label,
+           node->sort,
+           global_ui_projection_matrix);
    break;
   }
   case UI_NODE_KIND_text_entry:
@@ -1264,15 +1269,15 @@ _ui_layout_and_render_node(PlatformState *input,
                     node->sort,
                     global_ui_projection_matrix);
    
-   draw_text(global_ui_font,
-             x + PADDING, y + global_ui_font->size,
-             node->wrap_width,
-             colour_lerp(BG_COL_2,
-                         FG_COL_1,
-                         node->animation_transition),
-             node->label,
-             node->sort,
-             global_ui_projection_matrix);
+   draw_s8(global_ui_font,
+           x + PADDING, y + global_ui_font->size,
+           node->wrap_width,
+           colour_lerp(BG_COL_2,
+                       FG_COL_1,
+                       node->animation_transition),
+           node->label,
+           node->sort,
+           global_ui_projection_matrix);
   }
   default:
   {

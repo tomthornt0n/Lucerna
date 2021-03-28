@@ -137,6 +137,8 @@ typedef enum
 #define WINDOW_TITLE "Lucerna"
 #define DEFAULT_WINDOW_WIDTH 1920
 #define DEFAULT_WINDOW_HEIGHT 1040
+#define AUDIO_SAMPLERATE 48000
+#define ICON_PATH "../icon.png"
 
 typedef enum
 {
@@ -222,6 +224,7 @@ typedef struct
 #include "gl_funcs.h"
 } OpenGLFunctions;
 
+internal U32 calculate_utf8_cstring_size(U8 *cstring);
 #include "../game/arena.c"
 #include "../game/strings.c"
 

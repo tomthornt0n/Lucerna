@@ -271,6 +271,14 @@ static void
 gen_serialisation_funcs(LcddlNode *node,
                         FILE *file)
 {
+ unsigned int version = 0;
+ 
+ LcddlNode *annotation_value = lcddl_get_annotation_value(node, "version");
+ if (annotation_value)
+ {
+  version = lcddl_evaluate_expression(annotation_value);
+ }
+ 
  //
  // NOTE(tbt): serialisation
  //~
@@ -279,14 +287,24 @@ gen_serialisation_funcs(LcddlNode *node,
   fprintf(file, "internal void\nserialise_");
   write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
   fprintf(file,
-          "(%s *x,\nPlatformFile *file)\n{\n",
+          "(%s *x,\nPlatformFile *file)\n"
+          "{\n",
           node->declaration.name);
+  
+  if (version)
+  {
+   fprintf(file,
+           "U32 version = %u;\n"
+           "platform_write_to_file_f(file, &version, sizeof(version));",
+           version);
+  }
   
   for (LcddlNode *child = node->first_child;
        NULL != child;
        child = child->next_sibling)
   {
-   if (!child->first_child &&
+   if (!lcddl_does_node_have_tag(child, "do_not_serialise") &&
+       !child->first_child &&
        child->kind == LCDDL_NODE_KIND_declaration &&
        child->declaration.type->type.indirection_level == 0)
    {
@@ -377,11 +395,24 @@ gen_serialisation_funcs(LcddlNode *node,
   write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
   fprintf(file, "(%s *x,\nU8 **read_pointer)\n{\n", node->declaration.name);
   
+  
+  if (version)
+  {
+   fprintf(file,
+           "U32 current_version = %u;\n"
+           "U32 version = *((U32 *)(*read_pointer));\n"
+           "*read_pointer += sizeof(U32);\n\n"
+           "if (version == current_version)\n"
+           "{\n",
+           version);
+  }
+  
   for (LcddlNode *child = node->first_child;
        NULL != child;
        child = child->next_sibling)
   {
-   if (!child->first_child &&
+   if (!lcddl_does_node_have_tag(child, "do_not_serialise") &&
+       !child->first_child &&
        child->kind == LCDDL_NODE_KIND_declaration &&
        child->declaration.type->type.indirection_level == 0)
    {
@@ -473,7 +504,166 @@ gen_serialisation_funcs(LcddlNode *node,
     }
    }
   }
+  
+  if (version)
+  {
+   fprintf(file, "}\n");
+   
+   for (int i = 0;
+        i < version;
+        ++i)
+   {
+    char version_name[256];
+    snprintf(version_name, sizeof(version_name), "%sV%d", node->declaration.name, i);
+    
+    if (lcddl_find_top_level_declaration(version_name))
+    {
+     fprintf(file,
+             "else if (version == %d)\n"
+             "{\n"
+             "%s y = {0};\n"
+             "deserialise_",
+             i,
+             version_name);
+     write_string_as_lowercase_with_underscores_f(file, version_name);
+     fprintf(file,
+             "(&y, read_pointer);\n"
+             "*x = ");
+     write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
+     fprintf(file, "_from_");
+     write_string_as_lowercase_with_underscores_f(file, version_name);
+     fprintf(file, "(y);\n}\n");
+    }
+   }
+  }
+  
   fprintf(file, "}\n\n");
+ }
+}
+
+//
+// NOTE(tbt): struct mappings
+//~
+
+static void
+gen_struct_mappings(LcddlNode *node,
+                    FILE *file)
+{
+ LcddlSearchResult *mappings = lcddl_find_annotations_with_tag(node, "map_to");
+ 
+ for (LcddlSearchResult *mapping = mappings;
+      NULL != mapping;
+      mapping = mapping->next)
+ {
+  if (mapping->node->annotation.value &&
+      mapping->node->annotation.value->kind == LCDDL_NODE_KIND_string_literal)
+  {
+   LcddlSearchResult *map_to_search_result = lcddl_find_top_level_declaration(mapping->node->annotation.value->literal.value);
+   
+   LcddlNode *map_to = NULL;
+   if (map_to_search_result)
+   {
+    map_to = map_to_search_result->node;
+   }
+   
+   if (map_to &&
+       map_to->kind == LCDDL_NODE_KIND_declaration)
+   {
+    fprintf(file, "internal %s\n", map_to->declaration.name);
+    write_string_as_lowercase_with_underscores_f(file, map_to->declaration.name);
+    fprintf(file, "_from_");
+    write_string_as_lowercase_with_underscores_f(file, node->declaration.name);
+    fprintf(file,
+            "(%s x)\n"
+            "{\n"
+            "%s result = {0};\n\n",
+            node->declaration.name,
+            map_to->declaration.name);
+    
+    for (LcddlNode *child = node->first_child;
+         NULL != child;
+         child = child->next_sibling)
+    {
+     LcddlNode *member_to_map_to = NULL;
+     
+     LcddlNode *explicit_mapping_annotation_value = NULL;
+     
+     // NOTE(tbt): explicit annotation based mapping
+     if ((explicit_mapping_annotation_value = lcddl_get_annotation_value(child, "map_to")) &&
+         explicit_mapping_annotation_value->kind == LCDDL_NODE_KIND_string_literal)
+     {
+      LcddlSearchResult *search_result = lcddl_find_declaration(map_to,
+                                                                explicit_mapping_annotation_value->literal.value);
+      if (search_result)
+      {
+       member_to_map_to = search_result->node;
+      }
+     }
+     // NOTE(tbt): implicit mapping based on names
+     else
+     {
+      LcddlSearchResult *search_result = lcddl_find_declaration(map_to,
+                                                                child->declaration.name);
+      if (search_result)
+      {
+       member_to_map_to = search_result->node;
+      }
+     }
+     
+     if (member_to_map_to)
+     {
+      if (0 == member_to_map_to->declaration.type->type.array_count &&
+          0 == child->declaration.type->type.array_count)
+      {
+       fprintf(file,
+               "result.%s = x.%s;\n",
+               member_to_map_to->declaration.name,
+               child->declaration.name);
+      }
+      else if (0 == strcmp(child->declaration.type->type.type_name,
+                           member_to_map_to->declaration.type->type.type_name))
+      {
+       unsigned long long elements_to_copy = child->declaration.type->type.array_count;
+       if (member_to_map_to->declaration.type->type.array_count < elements_to_copy)
+       {
+        elements_to_copy = member_to_map_to->declaration.type->type.array_count;
+       }
+       if (elements_to_copy < 1)
+       {
+        elements_to_copy = 1;
+       }
+       
+       fprintf(file,
+               "memcpy(result.%s, x.%s, %llu * sizeof(x.%s[0]));\n",
+               member_to_map_to->declaration.name,
+               child->declaration.name,
+               elements_to_copy,
+               child->declaration.name);
+      }
+      else
+      {
+       fprintf(stderr, "WARNING while generating struct mapping: incompatible types\n");
+      }
+     }
+     else
+     {
+      fprintf(stderr, "WARNING while generating struct mapping: could not find member to map to\n");
+     }
+    }
+    
+    fprintf(file,
+            "\nreturn result;\n"
+            "}\n\n");
+   }
+   else
+   {
+    fprintf(stderr, "ERROR while generating struct mapping: could not find struct to map to\n");
+   }
+  }
+  else
+  {
+   fprintf(stderr, "ERROR while generating struct mapping: incorrect format for `map_to` annotation\n");
+  }
  }
 }
 
@@ -499,6 +689,11 @@ main(int argc,
   if (lcddl_does_node_have_tag(decl, "c_struct"))
   {
    lcddl_write_node_to_file_as_c_struct(decl, f);
+   
+   if (lcddl_does_node_have_tag(decl, "map_to"))
+   {
+    gen_struct_mappings(decl, functions_file);
+   }
    
    if (lcddl_does_node_have_tag(decl, "gen_editor_ui"))
    {

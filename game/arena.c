@@ -47,7 +47,7 @@ initialise_memory_arena(MemoryArena *arena,
  arena->saved_offset = 0;
  
 #ifdef LUCERNA_DEBUG
- U32 len = strlen(name) + 1;
+ U32 len = calculate_utf8_cstring_size(name) + 1;
  memcpy(arena->name, name, len < ARENA_NAME_MAX ? len : ARENA_NAME_MAX);
 #endif
 }
@@ -106,6 +106,7 @@ _arena_allocate(MemoryArena *arena,
 #endif
   exit(-1);
  }
+ return NULL;
 }
 
 internal void

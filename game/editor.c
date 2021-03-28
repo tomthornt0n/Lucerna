@@ -165,7 +165,7 @@ do_level_editor(OpenGLFunctions *gl,
   if (saving_level)
   {
    serialise_level(&global_current_level);
-   error_opening_level = !set_current_level(gl, global_current_level.path, false);
+   error_opening_level = !set_current_level(gl, global_current_level.path, false, true, 0.0f, 0.0f);
    saving_level = false;
    cm_stop(global_current_level.music);
   }
@@ -215,7 +215,8 @@ do_level_editor(OpenGLFunctions *gl,
      }
      else
      {
-      error_opening_level = !set_current_level(gl, path, false);
+      error_opening_level = !set_current_level(gl, path, false, true, 0.0f, 0.0f);
+      cm_stop(global_current_level.music);
      }
     }
     
@@ -435,7 +436,7 @@ do_level_editor(OpenGLFunctions *gl,
     ui_do_window(input,
                  s8_literal("entity editor"),
                  s8_literal("entity editor"),
-                 32.0f, 32.0f, 800.0f)
+                 32.0f, 32.0f, 1600.0f)
     {
      do_entity_editor_ui(input, global_editor_selected_entity);
     }

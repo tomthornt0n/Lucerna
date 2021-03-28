@@ -1463,6 +1463,29 @@ lcddl_write_node_to_file_as_c_enum(LcddlNode *node,
 }
 
 LcddlSearchResult *
+lcddl_find_declaration(LcddlNode *root,
+                       char *name)
+{
+ LcddlSearchResult *result = NULL;
+ 
+ for (LcddlNode *node = root->first_child;
+      NULL != node;
+      node = node->next_sibling)
+ {
+  if (node->kind == LCDDL_NODE_KIND_declaration &&
+      0 == strcmp(node->declaration.name, name))
+  {
+   LcddlSearchResult *search_node = calloc(1, sizeof(*search_node));
+   search_node->next = result;
+   result = search_node;
+   search_node->node = node;
+  }
+ }
+ 
+ return result;
+}
+
+LcddlSearchResult *
 lcddl_find_top_level_declaration(char *name)
 {
  LcddlSearchResult *result = NULL;
@@ -1510,6 +1533,28 @@ lcddl_find_all_top_level_declarations_with_tag(char *tag)
     result = search_node;
     search_node->node = node;
    }
+  }
+ }
+ 
+ return result;
+}
+
+LcddlSearchResult *
+lcddl_find_annotations_with_tag(LcddlNode *node,
+                                char *tag)
+{
+ LcddlSearchResult *result = NULL;
+ 
+ for (LcddlNode *annotation = node->first_annotation;
+      NULL != annotation;
+      annotation = annotation->next_annotation)
+ {
+  if (0 == strcmp(annotation->annotation.tag, tag))
+  {
+   LcddlSearchResult *search_node = calloc(1, sizeof(*search_node));
+   search_node->next = result;
+   result = search_node;
+   search_node->node = annotation;
   }
  }
  

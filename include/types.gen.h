@@ -18,26 +18,6 @@ typedef enum
 	LEVEL_KIND_memory,
 } LevelKind;
 
-typedef struct Entity Entity;
-struct Entity
-{
-	U64 flags;
-	F32 teleport_to_x;
-	F32 teleport_to_y;
-	B32 teleport_do_not_persist_exposure;
-	B32 teleport_to_non_default_spawn;
-	U8 teleport_to_level[64];
-	I32 fade_out_direction;
-	U8 dialogue_path[64];
-	F32 dialogue_y;
-	F32 dialogue_x;
-	B32 repeat_dialogue;
-	U8 triggers;
-	Rect bounds;
-	Entity *next_free;
-	Entity *next;
-};
-
 typedef enum
 {
 	ENTITY_TRIGGER_player_left,
@@ -60,4 +40,26 @@ typedef enum
 	ENTITY_FLAG_marked_for_removal,
 	ENTITY_FLAG_fade_out,
 } EntityFlags;
+
+typedef struct Entity Entity;
+struct Entity
+{
+	U64 flags;
+	F32 teleport_to_x;
+	F32 teleport_to_y;
+	I32 teleport_on_trigger;
+	B32 teleport_do_not_persist_exposure;
+	B32 teleport_to_non_default_spawn;
+	U8 teleport_to_level[64];
+	I32 fade_out_direction;
+	U8 dialogue_path[64];
+	F32 dialogue_y;
+	F32 dialogue_x;
+	B32 dialogue_played;
+	B32 repeat_dialogue;
+	Rect bounds;
+	U8 triggers;
+	Entity *next_free;
+	Entity *next;
+};
 

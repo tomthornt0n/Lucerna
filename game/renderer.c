@@ -54,7 +54,7 @@ struct RenderMessage
  
  F32 *projection_matrix;
  Font *font;
- S8 string;
+ S32 string;
  TextureID texture;
  SubTexture sub_texture;
  F32 angle;
@@ -150,7 +150,7 @@ gl_debug_message_callback(GLenum source​,
                           const void *userParam​)
 {
  debug_log("\n*** %s ***\n", message);
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LUCERNA_DEBUG)
  __debugbreak();
 #endif
 }
@@ -732,16 +732,16 @@ stroke_rectangle(Rect rectangle,
  enqueue_render_message(&global_render_queue, message);
 }
 
-#define ui_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), UI_SORT_DEPTH, global_ui_projection_matrix) 
-#define world_draw_text(_font, _x, _y, _wrap_width, _colour, _string) draw_text((_font), (_x), (_y), (_wrap_width), (_colour), (_string), WORLD_SORT_DEPTH, global_projection_matrix) 
+#define ui_draw_s32(_font, _x, _y, _wrap_width, _colour, _string) draw_s32((_font), (_x), (_y), (_wrap_width), (_colour), (_string), UI_SORT_DEPTH, global_ui_projection_matrix) 
+#define world_draw_s32(_font, _x, _y, _wrap_width, _colour, _string) draw_s32((_font), (_x), (_y), (_wrap_width), (_colour), (_string), WORLD_SORT_DEPTH, global_projection_matrix) 
 internal void
-draw_text(Font *font,
-          F32 x, F32 y,
-          U32 wrap_width,
-          Colour colour,
-          S8 string,
-          U8 sort,
-          F32 *projection_matrix)
+draw_s32(Font *font,
+         F32 x, F32 y,
+         U32 wrap_width,
+         Colour colour,
+         S32 string,
+         U8 sort,
+         F32 *projection_matrix)
 {
  RenderMessage message = {0};
  
@@ -751,11 +751,31 @@ draw_text(Font *font,
  message.rectangle.x = x;
  message.rectangle.y = y;
  message.rectangle.w = wrap_width;
- message.string = copy_s8(&global_frame_memory, string);
+ message.string = string;
  message.sort = sort;
  message.projection_matrix = projection_matrix;
  
  enqueue_render_message(&global_render_queue, message);
+}
+
+#define ui_draw_s8(_font, _x, _y, _wrap_width, _colour, _string) draw_s8((_font), (_x), (_y), (_wrap_width), (_colour), (_string), UI_SORT_DEPTH, global_ui_projection_matrix) 
+#define world_draw_s8(_font, _x, _y, _wrap_width, _colour, _string) draw_s8((_font), (_x), (_y), (_wrap_width), (_colour), (_string), WORLD_SORT_DEPTH, global_projection_matrix) 
+internal void
+draw_s8(Font *font,
+        F32 x, F32 y,
+        U32 wrap_width,
+        Colour colour,
+        S8 string,
+        U8 sort,
+        F32 *projection_matrix)
+{
+ draw_s32(font,
+          x, y,
+          wrap_width,
+          colour,
+          s32_from_s8(&global_frame_memory, string),
+          sort,
+          projection_matrix);
 }
 
 #define ui_draw_gradient(_rectangle, _gradient) draw_gradient((_rectangle), (_gradient), UI_SORT_DEPTH, global_ui_projection_matrix)
@@ -1135,12 +1155,11 @@ process_render_queue(OpenGLFunctions *gl)
  
  sort_render_queue(&global_render_queue);
  
- gl->Clear(GL_COLOR_BUFFER_BIT);
- 
  while (dequeue_render_message(&global_render_queue, &message))
  {
   switch (message.kind)
   {
+   //~
    case RENDER_MESSAGE_draw_rectangle:
    {
     if (batch.texture != message.texture ||
@@ -1158,26 +1177,16 @@ process_render_queue(OpenGLFunctions *gl)
     
     batch.in_use = true;
     
-    // NOTE(tbt): seems to not make any difference speed wise
-    /*if (message.angle >  0.001 ||
-        message.angle < -0.001)
-    {*/
-    batch.buffer[batch.quad_count++] =
-     generate_rotated_quad(message.rectangle,
-                           message.angle,
-                           message.colour,
-                           message.sub_texture);
-    /*}
-    else
-    {
-     batch.buffer[batch.quad_count++] =
-      generate_quad(message.rectangle,
-                    message.colour,
-                    message.sub_texture);
-    }*/
+    batch.buffer[batch.quad_count] = generate_rotated_quad(message.rectangle,
+                                                           message.angle,
+                                                           message.colour,
+                                                           message.sub_texture);
+    batch.quad_count += 1;
     
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_stroke_rectangle:
    {
     Rect top, bottom, left, right;
@@ -1248,6 +1257,8 @@ process_render_queue(OpenGLFunctions *gl)
     
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_draw_text:
    {
     F32 line_start = message.rectangle.x;
@@ -1270,24 +1281,32 @@ process_render_queue(OpenGLFunctions *gl)
     
     batch.in_use = true;
     
-    for (I32 i = 0;
+    U32 font_bake_begin = message.font->bake_begin;
+    U32 font_bake_end = message.font->bake_end;
+    
+    for (U64 i = 0;
          i < message.string.len;
          ++i)
     {
-     if (message.string.buffer[i] >= FONT_BAKE_BEGIN &&
-         message.string.buffer[i] < FONT_BAKE_END)
+     if (message.string.buffer[i] == '\n')
+     {
+      x = line_start;
+      y += message.font->vertical_advance;
+     }
+     else if (message.string.buffer[i] >= font_bake_begin &&
+              message.string.buffer[i] < font_bake_end)
      {
       stbtt_aligned_quad q;
       Rect rectangle;
       SubTexture sub_texture;
       
-      stbtt_GetBakedQuad(message.font->char_data,
-                         message.font->texture.width,
-                         message.font->texture.height,
-                         message.string.buffer[i] - FONT_BAKE_BEGIN,
-                         &x,
-                         &y,
-                         &q);
+      stbtt_GetPackedQuad(message.font->char_data,
+                          message.font->texture.width,
+                          message.font->texture.height,
+                          message.string.buffer[i] - font_bake_begin,
+                          &x, &y,
+                          &q,
+                          false);
       
       sub_texture.min_x = q.s0;
       sub_texture.min_y = q.t0;
@@ -1313,15 +1332,12 @@ process_render_queue(OpenGLFunctions *gl)
        }
       }
      }
-     else if (message.string.buffer[i] == '\n')
-     {
-      y += message.font->size;
-      x = line_start;
-     }
     }
     
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_blur_screen_region:
    {
     flush_batch(gl, &batch);
@@ -1390,6 +1406,8 @@ process_render_queue(OpenGLFunctions *gl)
     
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_mask_rectangle_begin:
    {
     flush_batch(gl, &batch);
@@ -1404,6 +1422,8 @@ process_render_queue(OpenGLFunctions *gl)
     gl->Disable(GL_SCISSOR_TEST);
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_draw_gradient:
    {
     Quad quad;
@@ -1463,6 +1483,8 @@ process_render_queue(OpenGLFunctions *gl)
     
     break;
    }
+   
+   //~
    case RENDER_MESSAGE_do_post_processing:
    {
     flush_batch(gl, &batch);

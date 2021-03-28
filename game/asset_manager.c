@@ -27,8 +27,10 @@ free_for_stb(void *p)
 #include "stb_image.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
+#define STB_RECT_PACK_IMPLEMENTATION
 #define STBTT_malloc(x, u) ((void)(u),malloc_for_stb(x))
 #define STBTT_free(x, u) ((void)(u),free_for_stb(x))
+#include "stb_rect_pack.h"
 #include "stb_truetype.h"
 
 typedef U32 TextureID;
@@ -50,16 +52,47 @@ typedef struct
  F32 max_x, max_y;
 } SubTexture;
 
-#define FONT_BAKE_BEGIN 32
-#define FONT_BAKE_END 255
-
-typedef struct
+struct Font
 {
  Texture texture;
- stbtt_bakedchar char_data[FONT_BAKE_END - FONT_BAKE_BEGIN];
+ U32 bake_begin, bake_end;
+ stbtt_packedchar *char_data;
  U32 size;
- F32 estimate_char_width;
-} Font;
+ F32 vertical_advance;
+ F32 estimate_char_width; // NOTE(tbt): hacky thing for estimating the correct width for text entries
+};
+
+internal S8
+path_from_texture_path(MemoryArena *memory,
+                       S8 path)
+{
+ S8List *list = NULL;
+ list = push_s8_to_list(&global_frame_memory, list, path);
+ list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/textures/"));
+ return expand_s8_list(memory, list);
+}
+
+internal S8
+path_from_audio_path(MemoryArena *memory,
+                     S8 path)
+{
+ S8List *list = NULL;
+ list = push_s8_to_list(&global_frame_memory, list, path);
+ list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/audio/"));
+ return expand_s8_list(memory, list);
+}
+
+internal S8
+path_from_dialogue_path(MemoryArena *memory,
+                        S8 path)
+{
+ S8List *list = NULL;
+ list = push_s8_to_list(&global_frame_memory, list, path);
+ list = push_s8_to_list(&global_frame_memory, list, s8_literal("/"));
+ list = push_s8_to_list(&global_frame_memory, list, s8_from_locale(&global_frame_memory, global_current_locale_config.locale));
+ list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/dialogue/"));
+ return expand_s8_list(memory, list);
+}
 
 internal B32
 load_texture(OpenGLFunctions *gl,
@@ -69,7 +102,7 @@ load_texture(OpenGLFunctions *gl,
  U8 *pixels;
  
  I8 path_cstr[1024] = {0};
- snprintf(path_cstr, 1024, "%.*s", (I32)path.len, path.buffer);
+ snprintf(path_cstr, 1024, "%.*s", (I32)path.size, path.buffer);
  
  TextureID texture_id;
  I32 width, height;
@@ -154,96 +187,118 @@ sub_texture_from_texture(Texture *texture,
  return result;
 }
 
-/*
-internal void
-slice_animation(OpenGLFunctions *gl,
-                SubTexture *result,   // NOTE(tbt): must be an array with `horizontal_count * vertical_count` elements
-                Asset *texture,       // NOTE(tbt): the texture to slice from
-                F32 x, F32 y,         // NOTE(tbt): the coordinate in pixels of the top left corner of the top left frame
-                F32 w, F32 h,         // NOTE(tbt): the size in pixels of each frame
-                U32 horizontal_count, // NOTE(tbt): the number of frames horizontally
-                U32 vertical_count)   // NOTE(tbt): the number of frames vertically
-{
- I32 x_index, y_index;
- I32 index = 0;
- 
- for (y_index = 0;
-      y_index < vertical_count;
-      ++y_index)
- {
-  for (x_index = 0;
-       x_index < horizontal_count;
-       ++x_index)
-  {
-   result[index++] = sub_texture_from_texture(gl,
-                                              texture,
-                                              x + x_index * w,
-                                              y + y_index * h,
-                                              w, h);
-  }
- }
-}
-*/
-
 internal Font *
 load_font(OpenGLFunctions *gl,
+          MemoryArena *memory,
           S8 path,
-          U32 size)
+          U32 size,
+          U32 font_bake_begin,
+          U32 font_bake_count)
 {
- Font *result = arena_allocate(&global_static_memory, sizeof(*result));
+ Font *result = NULL;
  
- U8 pixels[1024 * 1024];
+ I32 font_texture_w = 2048 * 4;
+ I32 font_texture_h = 2048 * 4;
+ 
+ if (memory == &global_level_memory)
+ {
+  return NULL;
+ }
  
  arena_temporary_memory(&global_level_memory)
  {
   S8 file = platform_read_entire_file_p(&global_level_memory, path);
-  
-  assert(file.buffer);
-  
-  stbtt_BakeFontBitmap(file.buffer,
-                       0,
-                       size,
-                       pixels,
-                       1024, 1024,
-                       FONT_BAKE_BEGIN, FONT_BAKE_END - FONT_BAKE_BEGIN,
-                       result->char_data);
-  
-  result->texture.width = 1024;
-  result->texture.height = 1024;
-  result->size = size;
-  
-  gl->GenTextures(1, &result->texture.id);
-  gl->BindTexture(GL_TEXTURE_2D, result->texture.id);
-  
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  
-  gl->TexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_RED,
-                 result->texture.width,
-                 result->texture.height,
-                 0,
-                 GL_RED,
-                 GL_UNSIGNED_BYTE,
-                 pixels);
-  
-  F32 x = 0.0f, y = 0.0f;
-  stbtt_aligned_quad q;
-  stbtt_GetBakedQuad(result->char_data,
-                     result->texture.width,
-                     result->texture.height,
-                     'e' - 32,
-                     &x,
-                     &y,
-                     &q);
-  
-  result->estimate_char_width = x;
+  if (file.buffer)
+  {
+   U8 *bitmap = arena_allocate(&global_level_memory, font_texture_w * font_texture_h);
+   
+   stbtt_pack_context packing_context;
+   if (stbtt_PackBegin(&packing_context,
+                       bitmap,
+                       font_texture_w, font_texture_h,
+                       0, 1, NULL))
+    
+   {
+    result = arena_allocate(memory, sizeof(*result));
+    
+    result->char_data = arena_allocate(memory, sizeof(result->char_data[0]) * font_bake_count);
+    
+    stbtt_PackFontRange(&packing_context,
+                        file.buffer,
+                        0,
+                        size,
+                        font_bake_begin,
+                        font_bake_count,
+                        result->char_data);
+    
+    result->texture.width = font_texture_w;
+    result->texture.height = font_texture_h;
+    result->bake_begin = font_bake_begin;
+    result->bake_end = font_bake_begin + font_bake_count;
+    result->size = size;
+    
+    stbtt_fontinfo font_info = {0};
+    if (stbtt_InitFont(&font_info,
+                       file.buffer,
+                       0))
+    {
+     F32 scale = stbtt_ScaleForMappingEmToPixels(&font_info, size);
+     
+     I32 ascent, descent, line_gap;
+     stbtt_GetFontVMetrics(&font_info,
+                           &ascent,
+                           &descent,
+                           &line_gap);
+     result->vertical_advance = scale * (ascent - descent + line_gap);
+     
+     I32 advance_width, left_side_bearing;
+     stbtt_GetCodepointHMetrics(&font_info,
+                                'e',
+                                &advance_width,
+                                &left_side_bearing);
+     result->estimate_char_width = scale * (advance_width - left_side_bearing);
+    }
+    else
+    {
+     debug_log("warning loading font - could not get accurate metrics\n");
+     result->vertical_advance = size;
+     result->estimate_char_width = size;
+    }
+    
+    gl->GenTextures(1, &result->texture.id);
+    gl->BindTexture(GL_TEXTURE_2D, result->texture.id);
+    global_currently_bound_texture = result->texture.id;
+    
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    
+    gl->TexImage2D(GL_TEXTURE_2D,
+                   0,
+                   GL_RED,
+                   result->texture.width,
+                   result->texture.height,
+                   0,
+                   GL_RED,
+                   GL_UNSIGNED_BYTE,
+                   bitmap);
+   }
+   else
+   {
+    debug_log("error loading font - could not initialise packing context\n");
+    result = NULL;
+   }
+   
+   stbtt_PackEnd(&packing_context);
+  }
+  else
+  {
+   debug_log("error loading font - could not read file\n");
+   result = NULL;
+  }
  }
  
- debug_log("successfully loaded font: '%.*s'\n", (I32)path.len, path.buffer);
  return result;
 }
 
@@ -287,19 +342,19 @@ load_dialogue(MemoryArena *memory,
   line.buffer = file.buffer;
   
   for (U64 i = 0;
-       i <= file.len;
+       i <= file.size;
        ++i)
   {
    if (file.buffer[i] == '\n')
    {
     result= append_s8_to_list(memory, result, line);
     i += 1;
-    line.len = 0;
+    line.size = 0;
     line.buffer = file.buffer + i;
    }
    else
    {
-    line.len += 1;
+    line.size += 1;
    }
   }
   result = append_s8_to_list(memory, result, line);

@@ -15,7 +15,6 @@ patterns = {
 
 blacklist_patterns = {
 	".*",
-	"*.gen.*",
 };
 
 load_paths = {
@@ -75,5 +74,4 @@ command_list = {
 
 fkey_command[1] = "build";
 fkey_command[2] = "run";
-fkey_command[3] = "release_build";
 fkey_command[5] = "build_and_run";

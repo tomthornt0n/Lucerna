@@ -10,6 +10,21 @@
 
 internal MemoryArena global_platform_layer_frame_memory;
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_MALLOC(sz) arena_allocate(&global_platform_layer_frame_memory, sz)
+internal void *
+realloc_for_stb(void *p,
+                U64 old_size,
+                U64 new_size)
+{
+ void *result = arena_allocate(&global_platform_layer_frame_memory, new_size);
+ memcpy(result, p, old_size);
+ return result;
+}
+#define STBI_REALLOC_SIZED(p, old_size, new_size) realloc_for_stb(p, old_size, new_size)
+#define STBI_FREE(p) do {} while (0)
+#include "stb_image.h"
+
 internal void
 windows_print_error(U8 *function)
 {
@@ -89,7 +104,7 @@ platform_open_file_ex(S8 path,
   
   if (result->file == INVALID_HANDLE_VALUE)
   {
-   debug_log("failure opening file '%.*s' - ", (I32)path.len, path.buffer);
+   debug_log("failure opening file '%.*s' - ", (I32)path.size, path.buffer);
    windows_print_error("CreateFileA");
    platform_close_file(&result);
   }
@@ -98,8 +113,8 @@ platform_open_file_ex(S8 path,
 #ifdef LUCERNA_DEBUG
  if (result)
  {
-  result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.len + 1);
-  memcpy(result->name, path.buffer, path.len);
+  result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.size + 1);
+  memcpy(result->name, path.buffer, path.size);
  }
 #endif
  
@@ -182,7 +197,7 @@ platform_read_entire_file_f(MemoryArena *memory,
    ReadFile(file->file, read_data, bytes_to_read, &bytes_read, &overlapped);
    
    result.buffer = read_data;
-   result.len = (U64)bytes_read;
+   result.size = (U64)bytes_read;
    
    if (bytes_to_read == bytes_read &&
        read_data &&
@@ -777,22 +792,29 @@ window_proc(HWND window_handle,
   }
   case WM_SETCURSOR:
   {
-   // NOTE(tbt): fix resize cursor at window borders
+   // TODO(tbt): fix resize cursor at borders
    if (global_platform_state.mouse_x > 1 &&
        global_platform_state.mouse_y > 1 &&
-       global_platform_state.mouse_x < global_platform_state.window_w - 1 &&
-       global_platform_state.mouse_y < global_platform_state.window_h - 1 &&
+       global_platform_state.mouse_x < global_platform_state.window_w &&
+       global_platform_state.mouse_y < global_platform_state.window_h &&
        mouse_hover_active)
    {
     SetCursor(LoadCursorA(0, IDC_ARROW));
    }
-   result = DefWindowProc(window_handle, message, l_param, w_param);
+   else
+   {
+    result = DefWindowProc(window_handle, message, l_param, w_param);
+   }
+   
    break;
   }
   case WM_SIZE:
   {
-   global_platform_state.window_w = LOWORD(l_param);
-   global_platform_state.window_h = HIWORD(l_param);
+   RECT client_rect;
+   GetClientRect(window_handle, &client_rect);
+   
+   global_platform_state.window_w = client_rect.right - client_rect.left;
+   global_platform_state.window_h = client_rect.bottom - client_rect.top;
    break;
   }
   case WM_DESTROY:
@@ -876,7 +898,7 @@ windows_audio_thread_main(LPVOID arg)
    ZeroMemory(&wave_format, sizeof(wave_format));
    wave_format.wFormatTag = WAVE_FORMAT_PCM;
    wave_format.nChannels = 2;
-   wave_format.nSamplesPerSec = 44100;
+   wave_format.nSamplesPerSec = AUDIO_SAMPLERATE;
    wave_format.wBitsPerSample = 16;
    wave_format.nBlockAlign = (wave_format.wBitsPerSample *
                               wave_format.nChannels) / 8;
@@ -1054,6 +1076,71 @@ WinMain(HINSTANCE hInstance,
  assert(_game_cleanup);
  
  //
+ // NOTE(tbt): icons ugggh..
+ //~
+ 
+ HICON icon = NULL;
+ 
+ {
+  I32 width, height, channels;
+  U8 *pixels = stbi_load(ICON_PATH,
+                         &width, &height, &channels,
+                         4);
+  
+  if (pixels)
+  {
+   HDC dc = GetDC(NULL);
+   
+   union
+   {
+    BITMAPV5HEADER v5_header;
+    BITMAPINFO info;
+   } bitmap = {0};
+   bitmap.v5_header.bV5Size = sizeof(bitmap.v5_header);
+   bitmap.v5_header.bV5Width = width;
+   bitmap.v5_header.bV5Height = -height;
+   bitmap.v5_header.bV5Planes = 1;
+   bitmap.v5_header.bV5BitCount = 32;
+   bitmap.v5_header.bV5Compression = BI_BITFIELDS;
+   bitmap.v5_header.bV5RedMask = 0x00ff0000;
+   bitmap.v5_header.bV5GreenMask = 0x0000ff00;
+   bitmap.v5_header.bV5BlueMask = 0x000000ff;
+   bitmap.v5_header.bV5AlphaMask = 0xff000000;
+   
+   U8 *target;
+   HBITMAP colour = CreateDIBSection(dc,
+                                     &bitmap.info,
+                                     DIB_RGB_COLORS,
+                                     (void **)&target,
+                                     NULL, 0);
+   
+   ReleaseDC(NULL, dc);
+   
+   if (colour)
+   {
+    HBITMAP mask = CreateBitmap(width, height, 1, 1, NULL);
+    
+    if (mask)
+    {
+     memcpy(target, pixels, width * height * 4);
+     
+     ICONINFO icon_info = {0};
+     icon_info.fIcon    = true;
+     icon_info.xHotspot = width / 2;
+     icon_info.yHotspot = height / 2;
+     icon_info.hbmMask  = mask;
+     icon_info.hbmColor = colour;
+     
+     icon = CreateIconIndirect(&icon_info);
+     
+     DeleteObject(colour);
+     DeleteObject(mask);
+    }
+   }
+  }
+ }
+ 
+ //
  // NOTE(tbt): setup window and opengl context
  //~
  
@@ -1063,6 +1150,7 @@ WinMain(HINSTANCE hInstance,
  window_class.lpfnWndProc = window_proc;
  window_class.hInstance = hInstance;
  window_class.lpszClassName = "LUCERNA";
+ window_class.hIcon = icon;
  
  RegisterClassA(&window_class);
  
@@ -1199,6 +1287,8 @@ WinMain(HINSTANCE hInstance,
  
  platform_set_vsync(true);
  
+ _game_init(&gl);
+ 
  //
  // NOTE(tbt): setup audio thread
  //~
@@ -1210,7 +1300,6 @@ WinMain(HINSTANCE hInstance,
  // NOTE(tbt): main loop
  //~
  
- _game_init(&gl);
  
  QueryPerformanceFrequency(&clock_frequency);
  

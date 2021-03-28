@@ -160,7 +160,7 @@ do_player(OpenGLFunctions *gl,
  
  if (player->x_velocity >  0.01f)
  {
-  world_draw_sub_texture(rectangle_literal(player->x + 32.0f * scale,
+  world_draw_sub_texture(rectangle_literal(player->x + 31.0f * scale,
                                            player->y + (-153.0f + animation_y_offset) * scale,
                                            113.0f * scale, 203.0f * scale),
                          WHITE,
@@ -205,7 +205,7 @@ do_player(OpenGLFunctions *gl,
  
  else if (player->x_velocity < -0.01f)
  {
-  world_draw_sub_texture(rectangle_literal(player->x + 32 * scale,
+  world_draw_sub_texture(rectangle_literal(player->x + 31 * scale,
                                            player->y + (-153.0f + animation_y_offset) * scale,
                                            113.0f * scale, 203.0f * scale),
                          WHITE,
@@ -334,18 +334,18 @@ level_descriptor_from_level(LevelDescriptor *level_descriptor,
  level_descriptor->exposure = level->exposure;
  level_descriptor->floor_gradient = atan(level->y_offset_per_x);
  level_descriptor->player_scale = level->player_scale;
- memcpy(level_descriptor->bg_path, level->bg_path.buffer, level->bg_path.len);
- memcpy(level_descriptor->fg_path, level->fg_path.buffer, level->fg_path.len);
+ memcpy(level_descriptor->bg_path, level->bg_path.buffer, level->bg_path.size);
+ memcpy(level_descriptor->fg_path, level->fg_path.buffer, level->fg_path.size);
  if (level->music)
  {
-  memcpy(level_descriptor->music_path, level->music_path.buffer, level->music_path.len);
+  memcpy(level_descriptor->music_path, level->music_path.buffer, level->music_path.size);
  }
 }
 
 internal void
 serialise_level(Level *level)
 {
- debug_log("serialising level %.*s\n", (I32)level->path.len, level->path.buffer);
+ debug_log("serialising level %.*s\n", (I32)level->path.size, level->path.buffer);
  
  PlatformFile *file = platform_open_file_ex(level->path,
                                             PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_write | PLATFORM_OPEN_FILE_always_create);
@@ -381,69 +381,81 @@ level_from_level_descriptor(OpenGLFunctions *gl,
  level->y_offset_per_x = tan(level_descriptor->floor_gradient);
  level->player_scale = level_descriptor->player_scale;
  
- if (load_texture(gl, s8_literal(level_descriptor->bg_path), &level->bg))
+ // NOTE(tbt): background
  {
-  level->bg_path = copy_s8(memory, s8_literal(level_descriptor->bg_path));
-  level->bg_last_modified = platform_get_file_modified_time_p(level->bg_path);
- }
- else
- {
-  level->bg_path.len = 0;
-  level->bg_path.buffer = NULL;
-  level->bg_last_modified = 0;
-  level->bg = DUMMY_TEXTURE;
-  success = false;
-  debug_log("could not load background - using dummy background texture\n");
- }
- 
- if (load_texture(gl, s8_literal(level_descriptor->fg_path), &level->fg))
- {
-  level->fg_path = copy_s8(memory, s8_literal(level_descriptor->fg_path));
-  level->fg_last_modified = platform_get_file_modified_time_p(level->fg_path);
- }
- else
- {
-  level->fg_path.len = 0;
-  level->fg_path.buffer = NULL;
-  level->fg_last_modified = 0;
-  level->fg = DUMMY_TEXTURE;
-  success = false;
-  debug_log("could not load foreground - using dummy foreground texture\n");
+  S8 path = path_from_texture_path(&global_frame_memory,
+                                   s8_literal(level_descriptor->bg_path));
+  
+  if (load_texture(gl, path, &level->bg))
+  {
+   level->bg_path = copy_s8(memory, s8_literal(level_descriptor->bg_path));
+   level->bg_last_modified = platform_get_file_modified_time_p(path);
+  }
+  else
+  {
+   level->bg_path.size = 0;
+   level->bg_path.buffer = NULL;
+   level->bg_last_modified = 0;
+   level->bg = DUMMY_TEXTURE;
+   success = false;
+   debug_log("could not load background - using dummy background texture\n");
+  }
  }
  
- if (level->music = cm_new_source_from_file(level_descriptor->music_path))
+ // NOTE(tbt): foreground
  {
-  level->music_path = copy_s8(memory, s8_literal(level_descriptor->music_path));
+  S8 path = path_from_texture_path(&global_frame_memory,
+                                   s8_literal(level_descriptor->fg_path));
+  
+  if (load_texture(gl, path, &level->fg))
+  {
+   level->fg_path = copy_s8(memory, s8_literal(level_descriptor->fg_path));
+   level->fg_last_modified = platform_get_file_modified_time_p(path);
+  }
+  else
+  {
+   level->fg_path.size = 0;
+   level->fg_path.buffer = NULL;
+   level->fg_last_modified = 0;
+   level->fg = DUMMY_TEXTURE;
+   success = false;
+   debug_log("could not load foreground - using dummy foreground texture\n");
+  }
  }
- else
+ 
+ // NOTE(tbt): music
  {
-  success = false;
-  debug_log("could not load music\n");
+  S8 music_path = path_from_audio_path(&global_frame_memory,
+                                       s8_literal(level_descriptor->music_path));
+  if (level->music =
+      cm_new_source_from_file(cstring_from_s8(&global_frame_memory, music_path)))
+  {
+   level->music_path = copy_s8(memory, s8_literal(level_descriptor->music_path));
+  }
+  else
+  {
+   success = false;
+   debug_log("could not load music\n");
+  }
  }
  
  return success;
 }
 
-#if 0
-internal B32
-_current_level_from_level_descriptor(OpenGLFunctions *gl,
-                                     LevelDescriptor *level_descriptor)
-{
- return level_from_level_descriptor(gl, &global_level_memory, &global_current_level, level_descriptor);
-}
-#endif
-
 internal B32
 set_current_level(OpenGLFunctions *gl,
                   S8 path,
-                  B32 persist_exposure)
+                  B32 persist_exposure,
+                  B32 teleport_to_default_spawn,
+                  F32 spawn_x,
+                  F32 spawn_y)
 {
  B32 success = true;
  
  Level temp_level = {0};
  LevelDescriptor level_descriptor = {0};
  
- debug_log("loading level %.*s\n", (I32)path.len, path.buffer);
+ debug_log("loading level %.*s\n", (I32)path.size, path.buffer);
  
  // NOTE(tbt): read level file
  arena_temporary_memory(&global_static_memory)
@@ -473,7 +485,7 @@ set_current_level(OpenGLFunctions *gl,
     temp_level.path = copy_s8(&global_level_memory, temp_path);
     
     // NOTE(tbt): load entities
-    while (read - file.buffer < file.len)
+    while (read - file.buffer < file.size)
     {
      Entity *e = allocate_and_push_entity(&temp_level.entities);
      deserialise_entity(e, &read);
@@ -481,8 +493,17 @@ set_current_level(OpenGLFunctions *gl,
     
     // NOTE(tbt): save newly loaded level globally
     memcpy(&global_current_level, &temp_level, sizeof(global_current_level));
-    global_current_level.player.x = global_current_level.player_spawn_x;
-    global_current_level.player.y = global_current_level.player_spawn_y;
+    if (teleport_to_default_spawn)
+    {
+     global_current_level.player.x = global_current_level.player_spawn_x;
+     global_current_level.player.y = global_current_level.player_spawn_y;
+    }
+    else
+    {
+     global_current_level.player.x = spawn_x;
+     global_current_level.player.y = spawn_y;
+    }
+    
     if (!persist_exposure)
     {
      global_exposure = global_current_level.exposure;
@@ -500,14 +521,14 @@ set_current_level(OpenGLFunctions *gl,
    else
    {
     debug_log("failure loading level '%.*s' - error while initialising level from level descriptor\n",
-              (I32)path.len, path.buffer);
+              (I32)path.size, path.buffer);
     success = false;
    }
   }
   else
   {
    debug_log("failure loading level '%.*s' - could not read level file\n",
-             (I32)path.len, path.buffer);
+             (I32)path.size, path.buffer);
    success = false;
   }
  }
@@ -521,7 +542,7 @@ set_current_level_as_new_level(OpenGLFunctions *gl,
 {
  LevelDescriptor level_descriptor = {0};
  
- debug_log("creating level %.*s\n", (I32)path.len, path.buffer);
+ debug_log("creating level %.*s\n", (I32)path.size, path.buffer);
  
  // NOTE(tbt): save path temporarily
  S8 temp_path = copy_s8(&global_frame_memory, path);
@@ -627,11 +648,8 @@ do_entities(OpenGLFunctions *gl,
   
   // NOTE(tbt): teleports
   if (e->flags & (1 << ENTITY_FLAG_teleport) &&
-      e->triggers & (1 << ENTITY_TRIGGER_player_entered))
+      e->triggers & (1 << e->teleport_on_trigger))
   {
-   // NOTE(tbt): make a copy of the current entity, so we can read the spawn position from it once the new level has been loaded
-   Entity _e = *e;
-   
    S8List *level_path = NULL;
    level_path = push_s8_to_list(&global_frame_memory,
                                 level_path,
@@ -640,17 +658,11 @@ do_entities(OpenGLFunctions *gl,
                                 level_path,
                                 s8_literal("../assets/levels/"));
    
-   B32 success = set_current_level(gl, expand_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure);
-   
-   if (!success)
+   if (!set_current_level(gl, expand_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
+                          !e->teleport_to_non_default_spawn,
+                          e->teleport_to_x, e->teleport_to_y))
    {
     platform_quit();
-   }
-   
-   if (_e.teleport_to_non_default_spawn)
-   {
-    player->x = _e.teleport_to_x;
-    player->y = _e.teleport_to_y;
    }
   }
   
@@ -658,22 +670,19 @@ do_entities(OpenGLFunctions *gl,
   if (e->flags & (1 << ENTITY_FLAG_trigger_dialogue) &&
       e->triggers & (1 << ENTITY_TRIGGER_player_entered))
   {
-   S8List *dialogue_path = NULL;
-   dialogue_path = push_s8_to_list(&global_frame_memory,
-                                   dialogue_path,
-                                   s8_literal(e->dialogue_path));
-   dialogue_path = push_s8_to_list(&global_frame_memory,
-                                   dialogue_path,
-                                   s8_literal("../assets/dialogue/"));
-   
-   play_dialogue(&dialogue_state,
-                 load_dialogue(&global_level_memory,
-                               expand_s8_list(&global_frame_memory, dialogue_path)),
-                 e->dialogue_x, e->dialogue_y,
-                 WHITE);
-   if (!e->repeat_dialogue)
+   if (e->repeat_dialogue ||
+       !e->dialogue_played)
    {
-    e->flags &= ~(1 << ENTITY_FLAG_trigger_dialogue);
+    debug_log("playing dialogue\n");
+    
+    play_dialogue(&dialogue_state,
+                  load_dialogue(&global_level_memory,
+                                path_from_dialogue_path(&global_frame_memory,
+                                                        s8_literal(e->dialogue_path))),
+                  e->dialogue_x, e->dialogue_y,
+                  WHITE);
+    
+    e->dialogue_played = true;
    }
   }
  }
@@ -697,8 +706,9 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
   
   // NOTE(tbt): foreground
   {
+   S8 path = path_from_texture_path(&global_frame_memory, global_current_level.fg_path);
    
-   U64 fg_last_modified = platform_get_file_modified_time_p(global_current_level.fg_path);
+   U64 fg_last_modified = platform_get_file_modified_time_p(path);
    if (fg_last_modified > global_current_level.fg_last_modified)
    {
     Texture texture;
@@ -706,7 +716,7 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
     global_current_level.fg_last_modified = fg_last_modified;
     debug_log("foreground modified...\n");
     
-    if (load_texture(gl, global_current_level.fg_path, &texture))
+    if (load_texture(gl, path, &texture))
     {
      unload_texture(gl, &global_current_level.fg);
      global_current_level.fg = texture;
@@ -722,7 +732,9 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
   
   // NOTE(tbt): background
   {
-   U64 bg_last_modified = platform_get_file_modified_time_p(global_current_level.bg_path);
+   S8 path = path_from_texture_path(&global_frame_memory, global_current_level.bg_path);
+   
+   U64 bg_last_modified = platform_get_file_modified_time_p(path);
    if (bg_last_modified > global_current_level.bg_last_modified)
    {
     Texture texture;
@@ -730,7 +742,7 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
     global_current_level.bg_last_modified = bg_last_modified;
     debug_log("background modified...\n");
     
-    if (load_texture(gl, global_current_level.bg_path, &texture))
+    if (load_texture(gl, path, &texture))
     {
      unload_texture(gl, &global_current_level.bg);
      global_current_level.bg = texture;
@@ -743,7 +755,6 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
     }
    }
   }
-  
  }
 }
 internal void

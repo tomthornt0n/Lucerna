@@ -1,3 +1,48 @@
+//
+// NOTE(tbt): entities
+//~
+
+current_entity_version := 1;
+
+@c_struct @gen_editor_ui
+@serialisable @version=current_entity_version
+Entity
+{
+ @do_not_serialise @no_ui next : Entity*;
+ @do_not_serialise @no_ui next_free : Entity*;
+ @do_not_serialise @no_ui triggers : U8;
+ 
+ @no_ui bounds : Rect;
+ 
+ repeat_dialogue : B32;
+ @do_not_serialise @no_ui dialogue_played : B32;
+ @width=slider_width @min=0 @max=1920 @snap=1 dialogue_x : F32;
+ @width=slider_width @min=0 @max=1080 @snap=1 dialogue_y : F32;
+ dialogue_path : [64]U8;
+ 
+ @ui_horizontal_rule @radio_dropdown_source="FadeOutDir" fade_out_direction : I32;
+ 
+ @ui_horizontal_rule teleport_to_level : [64]U8;
+ teleport_to_non_default_spawn : B32;
+ teleport_do_not_persist_exposure : B32;
+ @radio_dropdown_source="EntityTriggers" teleport_on_trigger : I32;
+ @width=slider_width @min=0 @max=1080 @snap=1 teleport_to_y : F32;
+ @width=slider_width @min=0 @max=1920 @snap=1 teleport_to_x : F32;
+ 
+ @ui_horizontal_rule @flag_dropdown_source="EntityFlags" flags : U64;
+};
+
+//
+// NOTE(tbt): past entity versions
+//~
+
+
+
+//
+// NOTE(tbt): entity related enums
+//~
+
+
 @c_enum
 EntityFlags
 {
@@ -25,34 +70,10 @@ EntityTriggers
  ENTITY_TRIGGER_player_left;
 };
 
-@c_struct @gen_editor_ui @serialisable
-Entity
-{
- @no_ui next : Entity*;
- @no_ui next_free : Entity*;
- @no_ui bounds : Rect;
- @no_ui triggers : U8;
- 
- repeat_dialogue : B32;
- @width=slider_width @min=0 @max=1920 @snap=1
-  dialogue_x : F32;
- @width=slider_width @min=0 @max=1080 @snap=1
-  dialogue_y : F32;
- dialogue_path : [64]U8;
- 
- @ui_horizontal_rule @radio_dropdown_source="FadeOutDir"
-  fade_out_direction : I32;
- 
- @ui_horizontal_rule
-  teleport_to_level : [64]U8;
- 
- teleport_to_non_default_spawn : B32;
- teleport_do_not_persist_exposure : B32;
- @width=slider_width @min=0 @max=1080 @snap=1 teleport_to_y : F32;
- @width=slider_width @min=0 @max=1920 @snap=1 teleport_to_x : F32;
- 
- @ui_horizontal_rule @flag_dropdown_source="EntityFlags" flags : U64;
-};
+
+//
+// NOTE(tbt): level descriptors
+//~
 
 @c_enum
 LevelKind
