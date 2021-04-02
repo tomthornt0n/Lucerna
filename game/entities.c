@@ -152,7 +152,7 @@ do_player(OpenGLFunctions *gl,
  player->x += player->x_velocity;
  player->y += player->y_velocity;
  
- F32 scale = global_current_level.player_scale / (global_renderer_window_h - player->y);
+ F32 scale = global_current_level.player_scale / (global_rcx.window.h - player->y);
  
  //
  // NOTE(tbt): walk right animation
@@ -160,43 +160,48 @@ do_player(OpenGLFunctions *gl,
  
  if (player->x_velocity >  0.01f)
  {
-  world_draw_sub_texture(rectangle_literal(player->x + 31.0f * scale,
-                                           player->y + (-153.0f + animation_y_offset) * scale,
-                                           113.0f * scale, 203.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.right_head);
+  draw_sub_texture(rectangle_literal(player->x + 31.0f * scale,
+                                     player->y + (-153.0f + animation_y_offset) * scale,
+                                     113.0f * scale, 203.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.right_head,
+                   0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                                   player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
-                                                   71.0f * scale, 246.0f * scale),
-                                 (sin(global_time * 3.0f + 2.0f) * 0.1f + 0.03f) * scale,
-                                 colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
-                                 &global_player_art.texture,
-                                 global_player_art.right_leg);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
+                                             player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
+                                             71.0f * scale, 246.0f * scale),
+                           (sin(global_time * 3.0f + 2.0f) * 0.1f + 0.03f) * scale,
+                           colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
+                           &global_player_art.texture,
+                           global_player_art.right_leg,
+                           0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                                   player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
-                                                   71.0f * scale, 246.0f * scale),
-                                 (sin(global_time * 3.0f) * 0.1f + 0.03f) * scale,
-                                 WHITE,
-                                 &global_player_art.texture,
-                                 global_player_art.right_leg);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
+                                             player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
+                                             71.0f * scale, 246.0f * scale),
+                           (sin(global_time * 3.0f) * 0.1f + 0.03f) * scale,
+                           WHITE,
+                           &global_player_art.texture,
+                           global_player_art.right_leg,
+                           0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x,
-                                           player->y + animation_y_offset * scale,
-                                           110.0f * scale, 312.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.right_jacket);
+  draw_sub_texture(rectangle_literal(player->x,
+                                     player->y + animation_y_offset * scale,
+                                     110.0f * scale, 312.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.right_jacket,
+                   0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                                   player->y + (28.0f + animation_y_offset) * scale,
-                                                   42.0f * scale, 213.0f * scale),
-                                 (sin(global_time * 2.8f) * 0.12f) * scale,
-                                 WHITE,
-                                 &global_player_art.texture,
-                                 global_player_art.right_arm);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
+                                             player->y + (28.0f + animation_y_offset) * scale,
+                                             42.0f * scale, 213.0f * scale),
+                           (sin(global_time * 2.8f) * 0.12f) * scale,
+                           WHITE,
+                           &global_player_art.texture,
+                           global_player_art.right_arm,
+                           0, global_projection_matrix);
  }
  
  //
@@ -205,43 +210,48 @@ do_player(OpenGLFunctions *gl,
  
  else if (player->x_velocity < -0.01f)
  {
-  world_draw_sub_texture(rectangle_literal(player->x + 31 * scale,
-                                           player->y + (-153.0f + animation_y_offset) * scale,
-                                           113.0f * scale, 203.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.left_head);
+  draw_sub_texture(rectangle_literal(player->x + 31 * scale,
+                                     player->y + (-153.0f + animation_y_offset) * scale,
+                                     113.0f * scale, 203.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.left_head,
+                   0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
-                                                   player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
-                                                   71.0f * scale, 246.0f * scale),
-                                 (sin(global_time * 3.0f + 2.0f) * 0.1f - 0.03f) * scale,
-                                 colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
-                                 &global_player_art.texture,
-                                 global_player_art.left_leg);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
+                                             player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
+                                             71.0f * scale, 246.0f * scale),
+                           (sin(global_time * 3.0f + 2.0f) * 0.1f - 0.03f) * scale,
+                           colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
+                           &global_player_art.texture,
+                           global_player_art.left_leg,
+                           0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
-                                                   player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
-                                                   71.0f * scale, 246.0f * scale),
-                                 (sin(global_time * 3.0f) * 0.1f - 0.03f) * scale,
-                                 WHITE,
-                                 &global_player_art.texture,
-                                 global_player_art.left_leg);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
+                                             player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
+                                             71.0f * scale, 246.0f * scale),
+                           (sin(global_time * 3.0f) * 0.1f - 0.03f) * scale,
+                           WHITE,
+                           &global_player_art.texture,
+                           global_player_art.left_leg,
+                           0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x + 64 * scale,
-                                           player->y + animation_y_offset * scale,
-                                           110.0f * scale, 312.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.left_jacket);
+  draw_sub_texture(rectangle_literal(player->x + 64 * scale,
+                                     player->y + animation_y_offset * scale,
+                                     110.0f * scale, 312.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.left_jacket,
+                   0, global_projection_matrix);
   
-  world_draw_rotated_sub_texture(rectangle_literal(player->x + 86.0f * scale,
-                                                   player->y + (28.0f + animation_y_offset) * scale,
-                                                   42.0f * scale, 213.0f * scale),
-                                 (sin(global_time * 2.8f) * 0.12f) * scale,
-                                 WHITE,
-                                 &global_player_art.texture,
-                                 global_player_art.left_arm);
+  draw_rotated_sub_texture(rectangle_literal(player->x + 86.0f * scale,
+                                             player->y + (28.0f + animation_y_offset) * scale,
+                                             42.0f * scale, 213.0f * scale),
+                           (sin(global_time * 2.8f) * 0.12f) * scale,
+                           WHITE,
+                           &global_player_art.texture,
+                           global_player_art.left_arm,
+                           0, global_projection_matrix);
  }
  
  //
@@ -250,40 +260,45 @@ do_player(OpenGLFunctions *gl,
  
  else
  {
-  world_draw_sub_texture(rectangle_literal(player->x + 22.0f * scale,
-                                           player->y + 128.0f * scale,
-                                           131.0f * scale, 320.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.forward_lower_body);
+  draw_sub_texture(rectangle_literal(player->x + 22.0f * scale,
+                                     player->y + 128.0f * scale,
+                                     131.0f * scale, 320.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.forward_lower_body,
+                   0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x + 41.0f * scale,
-                                           player->y - 155.0f * scale,
-                                           88.0f * scale, 175.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.forward_head);
+  draw_sub_texture(rectangle_literal(player->x + 41.0f * scale,
+                                     player->y - 155.0f * scale,
+                                     88.0f * scale, 175.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.forward_head,
+                   0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x + 135.0f * scale,
-                                           player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
-                                           29.0f * scale, 216.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.forward_right_arm);
+  draw_sub_texture(rectangle_literal(player->x + 135.0f * scale,
+                                     player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
+                                     29.0f * scale, 216.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.forward_right_arm,
+                   0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x,
-                                           player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
-                                           43.0f * scale, 212.0f * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.forward_left_arm);
+  draw_sub_texture(rectangle_literal(player->x,
+                                     player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
+                                     43.0f * scale, 212.0f * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.forward_left_arm,
+                   0, global_projection_matrix);
   
-  world_draw_sub_texture(rectangle_literal(player->x,
-                                           player->y + (sin(global_time + 2.0f) * 3.0f) * scale,
-                                           175.0f * scale, 310.0 * scale),
-                         WHITE,
-                         &global_player_art.texture,
-                         global_player_art.forward_torso);
+  draw_sub_texture(rectangle_literal(player->x,
+                                     player->y + (sin(global_time + 2.0f) * 3.0f) * scale,
+                                     175.0f * scale, 310.0 * scale),
+                   WHITE,
+                   &global_player_art.texture,
+                   global_player_art.forward_torso,
+                   0, global_projection_matrix);
  }
  
  player->collision_bounds = rectangle_literal(player->x + PLAYER_COLLISION_X * scale,
@@ -458,9 +473,9 @@ set_current_level(OpenGLFunctions *gl,
  debug_log("loading level %.*s\n", (I32)path.size, path.buffer);
  
  // NOTE(tbt): read level file
- arena_temporary_memory(&global_static_memory)
+ arena_temporary_memory(&global_temp_memory)
  {
-  S8 file = platform_read_entire_file_p(&global_static_memory, path);
+  S8 file = platform_read_entire_file_p(&global_temp_memory, path);
   
   if (file.buffer)
   {
@@ -658,7 +673,7 @@ do_entities(OpenGLFunctions *gl,
                                 level_path,
                                 s8_literal("../assets/levels/"));
    
-   if (!set_current_level(gl, expand_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
+   if (!set_current_level(gl, join_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
                           !e->teleport_to_non_default_spawn,
                           e->teleport_to_x, e->teleport_to_y))
    {
@@ -768,12 +783,13 @@ do_current_level(OpenGLFunctions *gl,
   (F32)global_current_level.bg.height /
   (F32)global_current_level.bg.width;
  
- world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
-                        WHITE,
-                        &global_current_level.bg,
-                        ENTIRE_TEXTURE);
+ draw_sub_texture(rectangle_literal(0.0f, 0.0f,
+                                    SCREEN_WIDTH_IN_WORLD_UNITS,
+                                    SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
+                  WHITE,
+                  &global_current_level.bg,
+                  ENTIRE_TEXTURE,
+                  0, global_projection_matrix);
  
  do_entities(gl, frametime_in_s, global_current_level.entities, &global_current_level.player);
  
@@ -783,12 +799,13 @@ do_current_level(OpenGLFunctions *gl,
   (F32)global_current_level.fg.height /
   (F32)global_current_level.fg.width;
  
- world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
-                        WHITE,
-                        &global_current_level.fg,
-                        ENTIRE_TEXTURE);
+ draw_sub_texture(rectangle_literal(0.0f, 0.0f,
+                                    SCREEN_WIDTH_IN_WORLD_UNITS,
+                                    SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
+                  WHITE,
+                  &global_current_level.fg,
+                  ENTIRE_TEXTURE,
+                  0, global_projection_matrix);
  
  do_post_processing(global_exposure,
                     global_current_level.kind,

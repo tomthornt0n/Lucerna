@@ -1,3 +1,9 @@
+#include <immintrin.h>
+
+#define _stack_array_size(_arr) (sizeof(_arr) / sizeof(_arr[0]))
+
+#define _defer_loop(_begin, _end) for (I32 _i = ((_begin), 0); !_i; ((_end), (_i = 1)))
+
 #define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
@@ -120,6 +126,20 @@ colour_lerp(Colour a,
  return result;
 }
 
+internal B32
+rect_match(Rect a,
+           Rect b)
+{
+ F32 slop = 0.0015;
+ 
+ if (a.x < (b.x - slop) || a.x > (b.x + slop)) { return false; }
+ if (a.y < (b.y - slop) || a.y > (b.y + slop)) { return false; }
+ if (a.w < (b.w - slop) || a.w > (b.w + slop)) { return false; }
+ if (a.h < (b.h - slop) || a.h > (b.h + slop)) { return false; }
+ 
+ return true;
+}
+
 internal inline B32
 are_rectangles_intersecting(Rect a,
                             Rect b)
@@ -157,7 +177,7 @@ matrix_transform_point(F32 x, F32 y,
  
  *result_x = mul_results[0] + mul_results[1] + mul_results[2] + mul_results[3];
  
- ///////
+ //-
  
  matrix_row = _mm_load_ps(matrix + 4);
  res = _mm_mul_ps(matrix_row, vector_column);

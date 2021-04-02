@@ -1,14 +1,14 @@
 typedef struct
 {
  U8 *buffer;
- U64 size;
+ U32 size;
 } S8;
 
 typedef struct
 {
  U32 *buffer;
- U64 size; // NOTE(tbt): size of buffer in bytes
- U64 len;  // NOTE(tbt): number of characters
+ U32 size; // NOTE(tbt): size of buffer in bytes
+ U32 len;  // NOTE(tbt): number of characters
 } S32;
 
 typedef struct S8List S8List;
@@ -168,8 +168,8 @@ push_s8_to_list(MemoryArena *memory,
 }
 
 internal S8
-expand_s8_list(MemoryArena *memory,
-               S8List *list)
+join_s8_list(MemoryArena *memory,
+             S8List *list)
 {
  S8 result = {0};
  result.size = list->string.size;

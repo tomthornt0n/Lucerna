@@ -65,58 +65,64 @@ platform_open_file_ex(S8 path,
                       PlatformOpenFileFlags flags)
 {
  PlatformFile *result = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PlatformFile));
- 
- arena_temporary_memory(&global_platform_layer_frame_memory)
- {
-  U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
-  
-  DWORD desired_access =
-   (GENERIC_READ * !!(flags & PLATFORM_OPEN_FILE_read)) |
-   (GENERIC_WRITE * !!(flags & PLATFORM_OPEN_FILE_write));
-  
-  DWORD share_mode = 0;
-  SECURITY_ATTRIBUTES security_attributes =
-  {
-   (DWORD)sizeof(SECURITY_ATTRIBUTES),
-   0,
-   0,
-  };
-  DWORD creation_disposition = 0;
-  if (flags & PLATFORM_OPEN_FILE_always_create)
-  {
-   creation_disposition |= CREATE_ALWAYS;
-  }
-  else
-  {
-   creation_disposition |= OPEN_ALWAYS;
-  }
-  
-  DWORD flags_and_attributes = 0;
-  HANDLE template_file = 0;
-  
-  result->file = CreateFileA(path_cstr,
-                             desired_access,
-                             share_mode,
-                             &security_attributes,
-                             creation_disposition,
-                             flags_and_attributes,
-                             template_file);
-  
-  if (result->file == INVALID_HANDLE_VALUE)
-  {
-   debug_log("failure opening file '%.*s' - ", (I32)path.size, path.buffer);
-   windows_print_error("CreateFileA");
-   platform_close_file(&result);
-  }
- }
- 
-#ifdef LUCERNA_DEBUG
  if (result)
  {
-  result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.size + 1);
-  memcpy(result->name, path.buffer, path.size);
- }
+  arena_temporary_memory(&global_platform_layer_frame_memory)
+  {
+   U8 *path_cstr = cstring_from_s8(&global_platform_layer_frame_memory, path);
+   
+   DWORD desired_access =
+    (GENERIC_READ * !!(flags & PLATFORM_OPEN_FILE_read)) |
+    (GENERIC_WRITE * !!(flags & PLATFORM_OPEN_FILE_write));
+   
+   DWORD share_mode = 0;
+   SECURITY_ATTRIBUTES security_attributes =
+   {
+    (DWORD)sizeof(SECURITY_ATTRIBUTES),
+    0,
+    0,
+   };
+   
+   DWORD creation_disposition = 0;
+   if (flags & PLATFORM_OPEN_FILE_always_create)
+   {
+    creation_disposition |= CREATE_ALWAYS;
+   }
+   else if (flags & PLATFORM_OPEN_FILE_never_create)
+   {
+    creation_disposition |= OPEN_EXISTING;
+   }
+   else
+   {
+    creation_disposition |= OPEN_ALWAYS;
+   }
+   
+   DWORD flags_and_attributes = 0;
+   HANDLE template_file = 0;
+   
+   result->file = CreateFileA(path_cstr,
+                              desired_access,
+                              share_mode,
+                              &security_attributes,
+                              creation_disposition,
+                              flags_and_attributes,
+                              template_file);
+   
+   if (result->file == INVALID_HANDLE_VALUE)
+   {
+    debug_log("failure opening file '%.*s' - ", (I32)path.size, path.buffer);
+    windows_print_error("CreateFileA");
+    platform_close_file(&result);
+   }
+   else
+   {
+#ifdef LUCERNA_DEBUG
+    result->name = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, path.size + 1);
+    memcpy(result->name, path.buffer, path.size);
 #endif
+   }
+  }
+ }
  
  return result;
 }
@@ -280,7 +286,8 @@ platform_write_to_file_f(PlatformFile *file,
 U64
 platform_get_file_size_p(S8 path)
 {
- PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ PlatformFile *file = platform_open_file_ex(path,
+                                            PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_never_create);
  U64 result = platform_get_file_size_f(file);
  platform_close_file(&file);
  return result;
@@ -289,7 +296,8 @@ platform_get_file_size_p(S8 path)
 U64
 platform_get_file_modified_time_p(S8 path)
 {
- PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ PlatformFile *file = platform_open_file_ex(path,
+                                            PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_never_create);
  U64 result = platform_get_file_modified_time_f(file);
  platform_close_file(&file);
  return result;
@@ -299,7 +307,8 @@ S8
 platform_read_entire_file_p(MemoryArena *memory,
                             S8 path)
 {
- PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ PlatformFile *file = platform_open_file_ex(path,
+                                            PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_never_create);
  S8 result = platform_read_entire_file_f(memory, file);
  platform_close_file(&file);
  return result;
@@ -311,7 +320,8 @@ platform_read_file_p(S8 path,
                      U64 read_size,
                      void *buffer)
 {
- PlatformFile *file = platform_open_file_ex(path, PLATFORM_OPEN_FILE_read);
+ PlatformFile *file = platform_open_file_ex(path,
+                                            PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_never_create);
  U64 result = platform_read_file_f(file, offset, read_size, buffer);
  platform_close_file(&file);
  return result;
@@ -348,10 +358,10 @@ platform_append_to_file_p(S8 path,
 
 internal struct
 {
- PFNWGLSWAPINTERVALEXTPROC         SwapIntervalEXT;
- PFNWGLCHOOSEPIXELFORMATARBPROC    ChoosePixelFormatARB;
+ PFNWGLSWAPINTERVALEXTPROC SwapIntervalEXT;
+ PFNWGLCHOOSEPIXELFORMATARBPROC ChoosePixelFormatARB;
  PFNWGLCREATECONTEXTATTRIBSARBPROC CreateContextAttribsARB;
- PFNWGLGETEXTENSIONSSTRINGARBPROC  GetExtensionsStringARB;
+ PFNWGLGETEXTENSIONSSTRINGARBPROC GetExtensionsStringARB;
 } wgl;
 
 internal B32

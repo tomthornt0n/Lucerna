@@ -1,4 +1,4 @@
-shader(default, default)
+shader(texture, default)
 shader(text, default)
 shader(blur, fullscreen)
 shader(bloom_filter, fullscreen)

@@ -6,15 +6,17 @@ _measure_and_draw_s8(Font *font,
                      S8 text,
                      B32 centre_align)
 {
- Rect result = _ui_measure_text(font,
-                                x, y,
-                                wrap_width,
-                                s32_from_s8(&global_frame_memory, text));
+ Rect result = measure_s32(font,
+                           x, y,
+                           wrap_width,
+                           s32_from_s8(&global_frame_memory, text));
  if (centre_align)
  {
-  x -= result.w / 2.0f;
+  F32 offset = result.w / 2.0f;
+  x -= offset;
+  result.x -= offset;
  }
- ui_draw_s8(font, x, y, wrap_width, colour, text);
+ draw_s8(font, x, y, wrap_width, colour, text, 0, global_ui_projection_matrix);
  
  return result;
 }
@@ -25,7 +27,11 @@ _measure_and_draw_s8(Font *font,
 #define MAIN_MENU_BUTTON_REGION_TOLERANCE 16.0f
 
 #define _MAIN_MENU_BUTTON(_text, _y, _selected_with_keyboard)                                                       \
-Rect _button_bounds = _ui_measure_text(global_current_locale_config.normal_font, global_renderer_window_w / 2.0f, (_y), -1.0f, s32_from_s8(&global_frame_memory, (_text))); \
+Rect _button_bounds = measure_s32(global_current_locale_config.normal_font,                                        \
+global_rcx.window.w / 2.0f,                                                 \
+(_y),                                                                            \
+-1.0f,                                                                           \
+s32_from_s8(&global_frame_memory, (_text)));                                     \
 static B32 _hovered = false;                                                                                       \
 static F32 _x_offset = 0.0f;                                                                                       \
 if (is_point_in_region(input->mouse_x,                                                                             \
@@ -39,7 +45,7 @@ _button_bounds.h + MAIN_MENU_BUTTON_REGION_TOLERANCE)) ||                 \
 if (!_hovered)                                                                                                    \
 {                                                                                                                 \
 _hovered = true;                                                                                                 \
-cm_play(global_click_sound);                                                                           \
+cm_play(global_click_sound);                                                                                     \
 }                                                                                                                 \
 _x_offset = min(_x_offset + frametime_in_s * MAIN_MENU_BUTTON_SHIFT_SPEED, MAIN_MENU_BUTTON_SHIFT_AMOUNT);        \
 }                                                                                                                  \
@@ -48,11 +54,12 @@ else                                                                            
 _hovered = false;                                                                                                 \
 _x_offset = max(_x_offset - frametime_in_s * MAIN_MENU_BUTTON_SHIFT_SPEED, 0.0);                                  \
 }                                                                                                                  \
-ui_draw_s8(global_current_locale_config.normal_font,                                                                                   \
-global_renderer_window_w / 2.0f - _button_bounds.w / 2.0f + _x_offset, (_y),                          \
--1.0f,                                                                                                \
-MAIN_MENU_TEXT_COLOUR,                                                                                \
-(_text));                                                                                             \
+draw_s8(global_current_locale_config.normal_font,                                                                  \
+global_rcx.window.w / 2.0f - _button_bounds.w / 2.0f + _x_offset, (_y),                               \
+-1.0f,                                                                                                     \
+MAIN_MENU_TEXT_COLOUR,                                                                                     \
+(_text),                                                                                                   \
+0, global_ui_projection_matrix);                                                                           \
 if (_hovered &&                                                                                                    \
 (input->is_mouse_button_down[MOUSE_BUTTON_left] ||                                                             \
 is_key_pressed(input, KEY_enter, 0)))
@@ -79,7 +86,7 @@ do_main_menu(OpenGLFunctions *gl,
  }
  
  _measure_and_draw_s8(global_current_locale_config.title_font,
-                      global_renderer_window_w / 2.0f,
+                      global_rcx.window.w / 2.0f,
                       300.0f,
                       -1.0f,
                       colour_literal(1.0f, 1.0f, 1.0f, 1.0f),

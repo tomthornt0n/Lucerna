@@ -116,7 +116,7 @@ arena_free_all(MemoryArena *arena)
  arena->saved_offset = 0;
 }
 
-#define arena_temporary_memory(_arena) for (I32 i = (_temporary_memory_begin(_arena), 0); !i; (_temporary_memory_end(_arena), ++i))
+#define arena_temporary_memory(_arena) _defer_loop(_temporary_memory_begin(_arena), _temporary_memory_end(_arena))
 
 internal void
 _temporary_memory_begin(MemoryArena *arena)

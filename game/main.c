@@ -5,21 +5,19 @@
 #include <math.h>
 #include <ctype.h>
 
-#include <immintrin.h>
-
 #define LUCERNA_GAME
 #include "lucerna.h"
 
-/*
-  TODO LIST:
-- save game system
-- better unicode support
-- localisation
-- make the player walk less weirdly
-- finish in-game menus
-- cutscenes?
- - gameplay!!!!!!!
- */
+//-
+// TODO(tbt):
+//   - save game system
+//   - improved dev ui (or just use microui?)
+//   - make the player walk less weirdly
+//   - second pass on menus
+//   - cutscenes?
+//   - gameplay!!!!!!!
+//   - asset packing for release builds
+//-
 
 internal F64 global_time = 0.0;
 internal F32 global_exposure = 1.0;
@@ -29,8 +27,8 @@ internal F64 global_audio_master_level = 0.8;
 internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
+internal MemoryArena global_temp_memory;
 
-#include "util.c"
 #include "locale.c"
 #include "asset_manager.c"
 #include "cmixer.c"
@@ -55,11 +53,12 @@ cm_Source *global_click_sound = NULL;
 
 #include "types.gen.h"
 #include "renderer.c"
-#include "dev_ui.c"
+// #include "dev_ui.c"
+#include "dev_ui_v2.c"
 #include "funcs.gen.h"
 #include "dialogue.c"
 #include "entities.c"
-#include "editor.c"
+// #include "editor.c"
 #include "main_menu.c"
 
 
@@ -111,11 +110,12 @@ game_audio_callback(void *buffer,
 void
 game_init(OpenGLFunctions *gl)
 {
- initialise_arena_with_new_memory(&global_static_memory, 8 * ONE_MB);
+ initialise_arena_with_new_memory(&global_static_memory, 4 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
- initialise_arena_with_new_memory(&global_level_memory, 1.5 * ONE_GB);
+ initialise_arena_with_new_memory(&global_level_memory, 100 * ONE_MB);
+ initialise_arena_with_new_memory(&global_temp_memory, 100 * ONE_MB);
  
- set_locale(gl, LOCALE_sc);
+ set_locale(gl, LOCALE_en_gb);
  
  cm_init(AUDIO_SAMPLERATE);
  cm_set_lock(cmixer_lock_handler);
@@ -128,15 +128,18 @@ game_init(OpenGLFunctions *gl)
                             32, 255);
  
  global_click_sound = cm_new_source_from_file("../assets/audio/click.wav");
+ 
  load_player_art(gl);
  
  initialise_renderer(gl);
+ 
+ ui_initialise();
  
  set_camera_position(960.0f, 540.0f);
  
  // NOTE(tbt): look up table of main functions per game state
  global_main_functions[GAME_STATE_playing] = game_playing_main;
- global_main_functions[GAME_STATE_editor] = do_level_editor;
+ global_main_functions[GAME_STATE_editor] = do_main_menu /* edit_current_level */;
  global_main_functions[GAME_STATE_main_menu] = do_main_menu;
 }
 
@@ -155,7 +158,7 @@ game_update_and_render(OpenGLFunctions *gl,
  
  gl->Clear(GL_COLOR_BUFFER_BIT);
  
- ui_prepare();
+ ui_prepare(input, frametime_in_s);
  
  global_main_functions[global_game_state](gl, input, frametime_in_s);
  
@@ -163,13 +166,23 @@ game_update_and_render(OpenGLFunctions *gl,
  // NOTE(tbt): debug extras
  //~
 #ifdef LUCERNA_DEBUG
- I8 fps_str[128];
- snprintf(fps_str, 128, "%f ms (%f fps)", frametime_in_s * 1000.0, 1.0 / frametime_in_s);
- ui_draw_s8(global_ui_font, 16.0f, 16.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(fps_str));
+ U8 debug_overlay_str[256];
+ snprintf(debug_overlay_str,
+          sizeof(debug_overlay_str),
+          "frametime  : %f ms (%f fps)\n"
+          "player pos : %f %f",
+          frametime_in_s * 1000.0,
+          1.0 / frametime_in_s,
+          global_current_level.player.x,
+          global_current_level.player.y);
  
- I8 pos_str[128];
- snprintf(pos_str, 128, "%f %f", global_current_level.player.x, global_current_level.player.y);
- ui_draw_s8(global_ui_font, 16.0f, 64.0f, 0, colour_literal(1.0f, 1.0f, 1.0f, 1.0f), s8_literal(pos_str));
+ draw_s8(global_ui_font,
+         16.0f, 16.0f,
+         -1.0f,
+         colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
+         s8_literal(debug_overlay_str),
+         UI_SORT_DEPTH, global_ui_projection_matrix);
+ 
  
  if (is_key_pressed(input,
                     KEY_v,
@@ -212,17 +225,20 @@ game_update_and_render(OpenGLFunctions *gl,
   }
  }
  
- ui_draw_s8(global_ui_font,
-            global_renderer_window_w - 200,
-            32.0f,
-            200.0f,
-            colour_literal(1.0f, 0.0f, 0.0f, 1.0f),
-            s8_literal("debug build"));
+ draw_s8(global_ui_font,
+         global_rcx.window.w - 200,
+         32.0f,
+         200.0f,
+         colour_literal(1.0f, 0.0f, 0.0f, 1.0f),
+         s8_literal("debug build"),
+         UI_SORT_DEPTH, global_ui_projection_matrix);
 #endif
  
- ui_finish(input);
+ ui_finish();
  
- process_render_queue(gl);
+ renderer_flush_message_queue(gl);
+ 
+ arena_free_all(&global_frame_memory);
  
  global_time += frametime_in_s;
 }

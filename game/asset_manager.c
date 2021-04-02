@@ -1,7 +1,7 @@
 internal void *
 malloc_for_stb(U64 size)
 {
- return arena_allocate(&global_level_memory, size);
+ return arena_allocate(&global_temp_memory, size);
 }
 
 internal void *
@@ -9,7 +9,7 @@ realloc_for_stb(void *p,
                 U64 old_size,
                 U64 new_size)
 {
- void *result = arena_allocate(&global_level_memory, new_size);
+ void *result = arena_allocate(&global_temp_memory, new_size);
  memcpy(result, p, old_size);
  return result;
 }
@@ -35,7 +35,7 @@ free_for_stb(void *p)
 
 typedef U32 TextureID;
 
-#define DUMMY_TEXTURE ((Texture){ global_flat_colour_texture, 1, 1 })
+#define DUMMY_TEXTURE ((Texture){ global_rcx.flat_colour_texture, 1, 1 })
 
 typedef struct
 {
@@ -69,7 +69,7 @@ path_from_texture_path(MemoryArena *memory,
  S8List *list = NULL;
  list = push_s8_to_list(&global_frame_memory, list, path);
  list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/textures/"));
- return expand_s8_list(memory, list);
+ return join_s8_list(memory, list);
 }
 
 internal S8
@@ -79,7 +79,7 @@ path_from_audio_path(MemoryArena *memory,
  S8List *list = NULL;
  list = push_s8_to_list(&global_frame_memory, list, path);
  list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/audio/"));
- return expand_s8_list(memory, list);
+ return join_s8_list(memory, list);
 }
 
 internal S8
@@ -91,7 +91,7 @@ path_from_dialogue_path(MemoryArena *memory,
  list = push_s8_to_list(&global_frame_memory, list, s8_literal("/"));
  list = push_s8_to_list(&global_frame_memory, list, s8_from_locale(&global_frame_memory, global_current_locale_config.locale));
  list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/dialogue/"));
- return expand_s8_list(memory, list);
+ return join_s8_list(memory, list);
 }
 
 internal B32
@@ -107,7 +107,7 @@ load_texture(OpenGLFunctions *gl,
  TextureID texture_id;
  I32 width, height;
  
- arena_temporary_memory(&global_level_memory)
+ arena_temporary_memory(&global_temp_memory)
  {
   pixels = stbi_load(path_cstr,
                      &width,
@@ -117,7 +117,7 @@ load_texture(OpenGLFunctions *gl,
   if (!pixels)
   {
    debug_log("Error loading texture '%s'\n", path_cstr);
-   _temporary_memory_end(&global_level_memory);
+   _temporary_memory_end(&global_temp_memory);
    memset(result, 0, sizeof(*result));
    return false;
   }
@@ -149,14 +149,14 @@ load_texture(OpenGLFunctions *gl,
  return true;
 }
 
-internal void process_render_queue(OpenGLFunctions *gl);
+internal void renderer_flush_message_queue(OpenGLFunctions *gl);
 
 internal void
 unload_texture(OpenGLFunctions *gl,
                Texture *texture)
 {
  // NOTE(tbt): early process all currently queued render messages in case any of them depend on the texture about to be unloaded
- process_render_queue(gl);
+ renderer_flush_message_queue(gl);
  
  if (global_currently_bound_texture == texture->id)
  {
@@ -200,17 +200,12 @@ load_font(OpenGLFunctions *gl,
  I32 font_texture_w = 2048 * 4;
  I32 font_texture_h = 2048 * 4;
  
- if (memory == &global_level_memory)
+ arena_temporary_memory(&global_temp_memory)
  {
-  return NULL;
- }
- 
- arena_temporary_memory(&global_level_memory)
- {
-  S8 file = platform_read_entire_file_p(&global_level_memory, path);
+  S8 file = platform_read_entire_file_p(&global_temp_memory, path);
   if (file.buffer)
   {
-   U8 *bitmap = arena_allocate(&global_level_memory, font_texture_w * font_texture_h);
+   U8 *bitmap = arena_allocate(&global_temp_memory, font_texture_w * font_texture_h);
    
    stbtt_pack_context packing_context;
    if (stbtt_PackBegin(&packing_context,

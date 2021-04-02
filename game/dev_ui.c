@@ -21,88 +21,68 @@
 
 #define ANIMATION_SPEED 0.05f
 
-// NOTE(tbt): everything about this file is terrible but function is perhaps the worst offender
 internal Rect
 _ui_measure_text(Font *font,
                  F32 x, F32 y,
                  U32 wrap_width,
                  S32 string)
 {
- Rect result;
- stbtt_aligned_quad q;
+ Rect result = rectangle_literal(x, y, 0, 0);
+ 
  F32 line_start = x;
- 
- F32 min_x = x, min_y = y, max_x = 0.0f, max_y = 0.0f;
- 
- 
- U32 font_bake_begin = font->bake_begin;
- U32 font_bake_end = font->bake_end;
+ F32 curr_x = x, curr_y = y;
  
  for (I32 i = 0;
       i < string.len;
       ++i)
  {
-  if (string.buffer[i] >= font_bake_begin &&
-      string.buffer[i] < font_bake_end)
+  if (string.buffer[i] == '\n')
   {
-   F32 char_width, char_height;
-   
-   stbtt_GetPackedQuad(font->char_data,
-                       font->texture.width,
-                       font->texture.height,
-                       string.buffer[i] - font_bake_begin,
-                       &x, &y,
-                       &q,
-                       false);
-   
-   if (q.x0 < min_x)
-   {
-    min_x = q.x0;
-   }
-   if (q.y0 < min_y)
-   {
-    min_y = q.y0;
-   }
-   if (q.x1 > max_x)
-   {
-    max_x = q.x1;
-   }
-   if (q.y1 > max_y)
-   {
-    max_y = q.y1;
-   }
-   
-   // NOTE(tbt): need to check against the current position as well as
-   //            some characters don't have any width, just advance the
-   //            current position
-   if (x > max_x)
-   {
-    max_x = x;
-   }
-   if (y > max_y)
-   {
-    max_y = y;
-   }
-   
-   
-   if (wrap_width && isspace(string.buffer[i]))
-   {
-    if (x + (q.x1 - q.x0) * 2 >
-        line_start + wrap_width)
-    {
-     y += font->size;
-     x = line_start;
-    }
-   }
+   curr_x = line_start;
+   curr_y += font->vertical_advance;
   }
-  else if (string.buffer[i] == '\n')
+  else if (string.buffer[i] >= font->bake_begin &&
+           string.buffer[i] < font->bake_end)
   {
-   y += font->vertical_advance;
-   x = line_start;
+   stbtt_packedchar *b = font->char_data + (string.buffer[i] - font->bake_begin);
+   
+   if (wrap_width > 0.0f &&
+       isspace(string.buffer[i]) &&
+       curr_x > line_start + wrap_width)
+   {
+    curr_x = line_start;
+    curr_y += font->vertical_advance;
+   }
+   else
+   {
+    if (curr_x + b->xoff < result.x)
+    {
+     result.x = curr_x + b->xoff;
+    }
+    if (curr_x + b->xoff2 > (result.x + result.w))
+    {
+     result.w = (curr_x + b->xoff2) - result.x;
+    }
+    if (curr_y + b->yoff < result.y)
+    {
+     result.y = curr_y + b->yoff;
+    }
+    if (curr_y + b->yoff2 > (result.y + result.h))
+    {
+     result.h = (curr_y + b->yoff2) - result.y;
+    }
+    
+    curr_x += b->xadvance;
+   }
   }
  }
  
- result = rectangle_literal(min_x - PADDING, min_y - PADDING, max_x - min_x + PADDING * 2, max_y - min_y + PADDING * 2);
+ // NOTE(tbt): should this function do padding by default?
+ result.x -= PADDING;
+ result.y -= PADDING;
+ result.w += PADDING * 2;
+ result.h += PADDING * 2;
+ 
  return result;
 }
 

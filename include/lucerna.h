@@ -227,6 +227,7 @@ typedef struct
 internal U32 calculate_utf8_cstring_size(U8 *cstring);
 #include "../game/arena.c"
 #include "../game/strings.c"
+#include "../game/util.c"
 
 //
 // NOTE(tbt): functions in the game called by the platform layer
@@ -245,7 +246,7 @@ typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);               
 LC_API void platform_quit(void);
 
 // NOTE(tbt): control for a lock to be used with the audio thread
-#define platform_audio_critical_section for (I32 i = (platform_get_audio_lock, 0); !i; (++i, platform_release_audio_lock()))
+#define platform_audio_critical_section _defer_loop(platform_get_audio_lock(), platform_release_audio_lock())
 LC_API void platform_get_audio_lock(void);
 LC_API void platform_release_audio_lock(void);
 
@@ -259,9 +260,10 @@ typedef struct PlatformFile PlatformFile;
 typedef U32 PlatformOpenFileFlags;
 enum PlatformOpenFileFlags
 {
- PLATFORM_OPEN_FILE_always_create = 1 << 0,
- PLATFORM_OPEN_FILE_read          = 1 << 1,
- PLATFORM_OPEN_FILE_write         = 1 << 2,
+ PLATFORM_OPEN_FILE_never_create  = 1 << 0,
+ PLATFORM_OPEN_FILE_always_create = 1 << 1, // NOTE(tbt): takes precedence if `never_create` is also specified
+ PLATFORM_OPEN_FILE_read          = 1 << 2,
+ PLATFORM_OPEN_FILE_write         = 1 << 3,
 };
 
 LC_API PlatformFile *platform_open_file(S8 path);

@@ -83,7 +83,7 @@ LevelKind
 };
 
 floor_gradient_range := 1.5;
-slider_width := 524;
+slider_width := 515;
 
 @c_struct @gen_editor_ui @serialisable
 LevelDescriptor
