@@ -116,6 +116,8 @@ internal B32
 s8_match(S8 a,
          S8 b)
 {
+ if (a.size != b.size) { return false; }
+ 
  return 0 == strncmp(a.buffer,
                      b.buffer,
                      a.size < b.size ?

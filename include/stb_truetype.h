@@ -261,8 +261,152 @@
 //                      32-bit     64-bit
 //   Previous release:  8.83 s     7.68 s
 //   Pool allocations:  7.72 s     6.34 s
-//   New rasterizer  :  5.63 s     5.00 s
 //   Inline sort     :  6.54 s     5.65 s
+//   New rasterizer  :  5.63 s     5.00 s
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+////
+////  SAMPLE PROGRAMS
+////
+//
+//  Incomplete text-in-3d-api example, which draws quads properly aligned to be lossless
+//
+#if 0
+#define STB_TRUETYPE_IMPLEMENTATION  // force following include to generate implementation
+#include "stb_truetype.h"
+
+unsigned char ttf_buffer[1<<20];
+unsigned char temp_bitmap[512*512];
+
+stbtt_bakedchar cdata[96]; // ASCII 32..126 is 95 glyphs
+GLuint ftex;
+
+void my_stbtt_initfont(void)
+{
+ fread(ttf_buffer, 1, 1<<20, fopen("c:/windows/fonts/times.ttf", "rb"));
+ stbtt_BakeFontBitmap(ttf_buffer,0, 32.0, temp_bitmap,512,512, 32,96, cdata); // no guarantee this fits!
+ // can free ttf_buffer at this point
+ glGenTextures(1, &ftex);
+ glBindTexture(GL_TEXTURE_2D, ftex);
+ glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 512,512, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
+ // can free temp_bitmap at this point
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+}
+
+void my_stbtt_print(float x, float y, char *text)
+{
+ // assume orthographic projection with units = screen pixels, origin at top left
+ glEnable(GL_TEXTURE_2D);
+ glBindTexture(GL_TEXTURE_2D, ftex);
+ glBegin(GL_QUADS);
+ while (*text) {
+  if (*text >= 32 && *text < 128) {
+   stbtt_aligned_quad q;
+   stbtt_GetBakedQuad(cdata, 512,512, *text-32, &x,&y,&q,1);//1=opengl & d3d10+,0=d3d9
+   glTexCoord2f(q.s0,q.t1); glVertex2f(q.x0,q.y0);
+   glTexCoord2f(q.s1,q.t1); glVertex2f(q.x1,q.y0);
+   glTexCoord2f(q.s1,q.t0); glVertex2f(q.x1,q.y1);
+   glTexCoord2f(q.s0,q.t0); glVertex2f(q.x0,q.y1);
+  }
+  ++text;
+ }
+ glEnd();
+}
+#endif
+//
+//
+//////////////////////////////////////////////////////////////////////////////
+//
+// Complete program (this compiles): get a single bitmap, print as ASCII art
+//
+#if 0
+#include <stdio.h>
+#define STB_TRUETYPE_IMPLEMENTATION  // force following include to generate implementation
+#include "stb_truetype.h"
+
+char ttf_buffer[1<<25];
+
+int main(int argc, char **argv)
+{
+ stbtt_fontinfo font;
+ unsigned char *bitmap;
+ int w,h,i,j,c = (argc > 1 ? atoi(argv[1]) : 'a'), s = (argc > 2 ? atoi(argv[2]) : 20);
+ 
+ fread(ttf_buffer, 1, 1<<25, fopen(argc > 3 ? argv[3] : "c:/windows/fonts/arialbd.ttf", "rb"));
+ 
+ stbtt_InitFont(&font, ttf_buffer, stbtt_GetFontOffsetForIndex(ttf_buffer,0));
+ bitmap = stbtt_GetCodepointBitmap(&font, 0,stbtt_ScaleForPixelHeight(&font, s), c, &w, &h, 0,0);
+ 
+ for (j=0; j < h; ++j) {
+  for (i=0; i < w; ++i)
+   putchar(" .:ioVM@"[bitmap[j*w+i]>>5]);
+  putchar('\n');
+ }
+ return 0;
+}
+#endif
+//
+// Output:
+//
+//     .ii.
+//    @@@@@@.
+//   V@Mio@@o
+//   :i.  V@V
+//     :oM@@M
+//   :@@@MM@M
+//   @@o  o@M
+//  :@@.  M@M
+//   @@@o@@@@
+//   :M@@V:@@.
+//
+//////////////////////////////////////////////////////////////////////////////
+//
+// Complete program: print "Hello World!" banner, with bugs
+//
+#if 0
+char _buffer[24<<20];
+unsigned char screen[20][79];
+
+int main(int arg, char **argv)
+{
+ stbtt_fontinfo font;
+ int i,j,ascent,baseline,ch=0;
+ float scale, xpos=2; // leave a little padding in case the character extends left
+ char *text = "Heljo World!"; // intentionally misspelled to show 'lj' brokenness
+ 
+ fread(_buffer, 1, 1000000, fopen("c:/windows/fonts/arialbd.ttf", "rb"));
+ stbtt_InitFont(&font, _buffer, 0);
+ 
+ scale = stbtt_ScaleForPixelHeight(&font, 15);
+ stbtt_GetFontVMetrics(&font, &ascent,0,0);
+ baseline = (int) (ascent*scale);
+ 
+ while (text[ch]) {
+  int advance,lsb,x0,y0,x1,y1;
+  float x_shift = xpos - (float) floor(xpos);
+  stbtt_GetCodepointHMetrics(&font, text[ch], &advance, &lsb);
+  stbtt_GetCodepointBitmapBoxSubpixel(&font, text[ch], scale,scale,x_shift,0, &x0,&y0,&x1,&y1);
+  stbtt_MakeCodepointBitmapSubpixel(&font, &screen[baseline + y0][(int) xpos + x0], x1-x0,y1-y0, 79, scale,scale,x_shift,0, text[ch]);
+  // note that this stomps the old data, so where character boxes overlap (e.g. 'lj') it's wrong
+  // because this API is really for baking character bitmaps into textures. if you want to render
+  // a sequence of characters, you really need to render each bitmap to a temp buffer, then
+  // "alpha blend" that into the working buffer
+  xpos += (advance * scale);
+  if (text[ch+1])
+   xpos += scale*stbtt_GetCodepointKernAdvance(&font, text[ch],text[ch+1]);
+  ++ch;
+ }
+ 
+ for (j=0; j < 20; ++j) {
+  for (i=0; i < 78; ++i)
+   putchar(" .:ioVM@"[screen[j][i]>>5]);
+  putchar('\n');
+ }
+ 
+ return 0;
+}
+#endif
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -401,7 +545,8 @@ extern "C" {
  STBTT_DEF void stbtt_GetBakedQuad(const stbtt_bakedchar *chardata, int pw, int ph,  // same data as above
                                    int char_index,             // character to display
                                    float *xpos, float *ypos,   // pointers to current position in screen pixel space
-                                   stbtt_aligned_quad *q);     // output: quad to draw
+                                   stbtt_aligned_quad *q,      // output: quad to draw
+                                   int opengl_fillrule);       // true if opengl fill rule; false if DX9 or earlier
  // Call GetBakedQuad with char_index = 'character - first_char', and it
  // creates the quad you need to draw and advances the current position.
  //
@@ -3654,17 +3799,18 @@ static int stbtt_BakeFontBitmap_internal(unsigned char *data, int offset,  // fo
  return bottom_y;
 }
 
-STBTT_DEF void stbtt_GetBakedQuad(const stbtt_bakedchar *chardata, int pw, int ph, int char_index, float *xpos, float *ypos, stbtt_aligned_quad *q)
+STBTT_DEF void stbtt_GetBakedQuad(const stbtt_bakedchar *chardata, int pw, int ph, int char_index, float *xpos, float *ypos, stbtt_aligned_quad *q, int opengl_fillrule)
 {
+ float d3d_bias = opengl_fillrule ? 0 : -0.5f;
  float ipw = 1.0f / pw, iph = 1.0f / ph;
  const stbtt_bakedchar *b = chardata + char_index;
  int round_x = STBTT_ifloor((*xpos + b->xoff) + 0.5f);
  int round_y = STBTT_ifloor((*ypos + b->yoff) + 0.5f);
  
- q->x0 = round_x;
- q->y0 = round_y;
- q->x1 = round_x + b->x1 - b->x0;
- q->y1 = round_y + b->y1 - b->y0;
+ q->x0 = round_x + d3d_bias;
+ q->y0 = round_y + d3d_bias;
+ q->x1 = round_x + b->x1 - b->x0 + d3d_bias;
+ q->y1 = round_y + b->y1 - b->y0 + d3d_bias;
  
  q->s0 = b->x0 * ipw;
  q->t0 = b->y0 * iph;

@@ -24,6 +24,7 @@ typedef float    F32;
 typedef double   F64;
 
 typedef uint32_t B32;
+typedef float    B32_s;
 
 #include "errno.h"
 
@@ -217,6 +218,25 @@ is_key_pressed(PlatformState *input,
  return false;
 }
 
+internal B32
+is_mouse_button_pressed(PlatformState *input,
+                        MouseButton button,
+                        InputModifiers modifiers)
+{
+ for (PlatformEvent *event = input->events;
+      NULL != event;
+      event = event->next)
+ {
+  if (event->kind == PLATFORM_EVENT_mouse_press &&
+      event->mouse_button == button &&
+      event->modifiers == modifiers)
+  {
+   return true;
+  }
+ }
+ return false;
+}
+
 // NOTE(tbt): functions loaded by the platform layer before the game begins
 typedef struct
 {
@@ -234,9 +254,9 @@ internal U32 calculate_utf8_cstring_size(U8 *cstring);
 //
 
 typedef void ( *GameInit) (OpenGLFunctions *gl);                                                       // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
-typedef void ( *GameUpdateAndRender) (OpenGLFunctions *gl, PlatformState *input, F64 frametime_in_s);  // NOTE(tbt): called every frame
+typedef void ( *GameUpdateAndRender) (PlatformState *input, F64 frametime_in_s);  // NOTE(tbt): called every frame
 typedef void ( *GameAudioCallback) (void *buffer, U32 buffer_size);                                    // NOTE(tbt): called from the audio thread when the buffer needs refilling
-typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);                                      // NOTE(tbt): called when the window is closed and the main loop exits
+typedef void ( *GameCleanup) (void);                                      // NOTE(tbt): called when the window is closed and the main loop exits
 
 //
 // NOTE(tbt): functions in the platform layer called by the game
@@ -246,7 +266,7 @@ typedef void ( *GameCleanup) (OpenGLFunctions *opengl_functions);               
 LC_API void platform_quit(void);
 
 // NOTE(tbt): control for a lock to be used with the audio thread
-#define platform_audio_critical_section _defer_loop(platform_get_audio_lock(), platform_release_audio_lock())
+#define platform_audio_critical_section defer_loop(platform_get_audio_lock(), platform_release_audio_lock())
 LC_API void platform_get_audio_lock(void);
 LC_API void platform_release_audio_lock(void);
 

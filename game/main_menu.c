@@ -1,10 +1,10 @@
 internal Rect
-_measure_and_draw_s8(Font *font,
-                     F32 x, F32 y,
-                     F32 wrap_width,
-                     Colour colour,
-                     S8 text,
-                     B32 centre_align)
+main_menu_measure_and_draw_s8(Font *font,
+                              F32 x, F32 y,
+                              F32 wrap_width,
+                              Colour colour,
+                              S8 text,
+                              B32 centre_align)
 {
  Rect result = measure_s32(font,
                            x, y,
@@ -26,7 +26,7 @@ _measure_and_draw_s8(Font *font,
 #define MAIN_MENU_TEXT_COLOUR colour_literal(0.92f, 0.97f, 0.92f, 1.0f)
 #define MAIN_MENU_BUTTON_REGION_TOLERANCE 16.0f
 
-#define _MAIN_MENU_BUTTON(_text, _y, _selected_with_keyboard)                                                       \
+#define MAIN_MENU_BUTTON(_text, _y, _selected_with_keyboard)                                                       \
 Rect _button_bounds = measure_s32(global_current_locale_config.normal_font,                                        \
 global_rcx.window.w / 2.0f,                                                 \
 (_y),                                                                            \
@@ -65,8 +65,7 @@ if (_hovered &&                                                                 
 is_key_pressed(input, KEY_enter, 0)))
 
 internal void
-do_main_menu(OpenGLFunctions *gl,
-             PlatformState *input,
+do_main_menu(PlatformState *input,
              F64 frametime_in_s)
 {
  typedef enum
@@ -85,28 +84,28 @@ do_main_menu(OpenGLFunctions *gl,
   keyboard_selection = (keyboard_selection + 1) % MAIN_MENU_BUTTON_MAX;
  }
  
- _measure_and_draw_s8(global_current_locale_config.title_font,
-                      global_rcx.window.w / 2.0f,
-                      300.0f,
-                      -1.0f,
-                      colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
-                      global_current_locale_config.title,
-                      true);
+ main_menu_measure_and_draw_s8(global_current_locale_config.title_font,
+                               global_rcx.window.w / 2.0f,
+                               300.0f,
+                               -1.0f,
+                               colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
+                               global_current_locale_config.title,
+                               true);
  
  
  {
-  _MAIN_MENU_BUTTON(global_current_locale_config.play, 400.0f, keyboard_selection == MAIN_MENU_BUTTON_play)
+  MAIN_MENU_BUTTON(global_current_locale_config.play, 400.0f, keyboard_selection == MAIN_MENU_BUTTON_play)
   {
-   if (!set_current_level(gl, s8_literal("../assets/levels/office_1.level"), false, true, 0.0f, 0.0f))
+   if (!set_current_level(s8_literal("../assets/levels/office_1.level"), false, true, 0.0f, 0.0f))
    {
-    set_current_level_as_new_level(gl, s8_literal("../assets/levels/office_1.level"));
+    set_current_level_as_new_level(s8_literal("../assets/levels/office_1.level"));
    }
    global_game_state = GAME_STATE_playing;
   }
  }
  
  {
-  _MAIN_MENU_BUTTON(global_current_locale_config.exit, 450.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
+  MAIN_MENU_BUTTON(global_current_locale_config.exit, 450.0f, keyboard_selection == MAIN_MENU_BUTTON_exit)
   {
    platform_quit();
   }

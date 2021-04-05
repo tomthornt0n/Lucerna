@@ -1334,7 +1334,7 @@ WinMain(HINSTANCE hInstance,
   
   SwapBuffers(device_context);
   
-  _game_update_and_render(&gl, &global_platform_state, frametime_in_s);
+  _game_update_and_render(&global_platform_state, frametime_in_s);
   
   arena_free_all(&global_platform_layer_frame_memory);
   
@@ -1342,7 +1342,7 @@ WinMain(HINSTANCE hInstance,
   frametime_in_s = (F64)(end_time.QuadPart - start_time.QuadPart) / (F64)clock_frequency.QuadPart;
  }
  
- _game_cleanup(&gl);
+ _game_cleanup();
  
  FreeModule(game);
 }

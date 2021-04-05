@@ -30,13 +30,13 @@ internal struct
 } global_player_art = {0};
 
 internal void
-load_player_art(OpenGLFunctions *gl)
+load_player_art(void)
 {
  Texture texture;
  
  global_player_art.texture_path = s8_literal("../assets/textures/player.png");
  
- if (load_texture(gl, global_player_art.texture_path, &texture))
+ if (load_texture(global_player_art.texture_path, &texture))
  {
   global_player_art.forward_head = sub_texture_from_texture(&texture, 16.0f, 16.0f, 88.0f, 175.0f);
   global_player_art.forward_left_arm = sub_texture_from_texture(&texture, 112.0f, 16.0f, 43.0f, 212.0f);
@@ -64,8 +64,7 @@ load_player_art(OpenGLFunctions *gl)
 }
 
 internal void
-hot_reload_player_art(OpenGLFunctions *gl,
-                      F64 frametime_in_s)
+hot_reload_player_art(F64 frametime_in_s)
 {
  static F64 time = 0.0;
  time += frametime_in_s;
@@ -82,9 +81,9 @@ hot_reload_player_art(OpenGLFunctions *gl,
    debug_log("player texture modified...\n");
    
    Texture texture;
-   if (load_texture(gl, global_player_art.texture_path, &texture))
+   if (load_texture(global_player_art.texture_path, &texture))
    {
-    unload_texture(gl, &global_player_art.texture);
+    unload_texture(&global_player_art.texture);
     global_player_art.texture = texture;
     debug_log("successfully hot reloaded player art\n");
    }
@@ -132,8 +131,7 @@ internal Entity *global_editor_selected_entity = NULL;
 #define PLAYER_COLLISION_H  605.0f
 
 internal void
-do_player(OpenGLFunctions *gl,
-          PlatformState *input,
+do_player(PlatformState *input,
           F64 frametime_in_s,
           Player *player)
 {
@@ -307,28 +305,28 @@ do_player(OpenGLFunctions *gl,
 }
 
 #define MAX_ENTITIES 120
-internal U32 _global_entity_next_index = 0;
-internal Entity _global_dummy_entity = {0};
-internal Entity _global_entity_pool[MAX_ENTITIES] = {{0}};
-internal Entity *_global_entity_free_list = NULL;
+internal U32 global_entity_next_index = 0;
+internal Entity global_dummy_entity = {0};
+internal Entity global_entity_pool[MAX_ENTITIES] = {{0}};
+internal Entity *global_entity_free_list = NULL;
 
 internal Entity *
 allocate_and_push_entity(Entity **entities)
 {
  Entity *result;
  
- if (_global_entity_free_list)
+ if (global_entity_free_list)
  {
-  result = _global_entity_free_list;
-  _global_entity_free_list = _global_entity_free_list->next_free;
+  result = global_entity_free_list;
+  global_entity_free_list = global_entity_free_list->next_free;
  }
- else if (_global_entity_next_index < MAX_ENTITIES)
+ else if (global_entity_next_index < MAX_ENTITIES)
  {
-  result = &_global_entity_pool[_global_entity_next_index++];
+  result = &global_entity_pool[global_entity_next_index++];
  }
  else
  {
-  result = &_global_dummy_entity;
+  result = &global_dummy_entity;
  }
  
  memset(result, 0, sizeof(*result));
@@ -382,8 +380,7 @@ serialise_level(Level *level)
 }
 
 internal B32
-level_from_level_descriptor(OpenGLFunctions *gl,
-                            MemoryArena *memory,
+level_from_level_descriptor(MemoryArena *memory,
                             Level *level,
                             LevelDescriptor *level_descriptor)
 {
@@ -401,7 +398,7 @@ level_from_level_descriptor(OpenGLFunctions *gl,
   S8 path = path_from_texture_path(&global_frame_memory,
                                    s8_literal(level_descriptor->bg_path));
   
-  if (load_texture(gl, path, &level->bg))
+  if (load_texture(path, &level->bg))
   {
    level->bg_path = copy_s8(memory, s8_literal(level_descriptor->bg_path));
    level->bg_last_modified = platform_get_file_modified_time_p(path);
@@ -422,7 +419,7 @@ level_from_level_descriptor(OpenGLFunctions *gl,
   S8 path = path_from_texture_path(&global_frame_memory,
                                    s8_literal(level_descriptor->fg_path));
   
-  if (load_texture(gl, path, &level->fg))
+  if (load_texture(path, &level->fg))
   {
    level->fg_path = copy_s8(memory, s8_literal(level_descriptor->fg_path));
    level->fg_last_modified = platform_get_file_modified_time_p(path);
@@ -458,8 +455,7 @@ level_from_level_descriptor(OpenGLFunctions *gl,
 }
 
 internal B32
-set_current_level(OpenGLFunctions *gl,
-                  S8 path,
+set_current_level(S8 path,
                   B32 persist_exposure,
                   B32 teleport_to_default_spawn,
                   F32 spawn_x,
@@ -483,18 +479,18 @@ set_current_level(OpenGLFunctions *gl,
    
    // NOTE(tbt): load level descriptor
    deserialise_level_descriptor(&level_descriptor, &read);
-   if (level_from_level_descriptor(gl, &global_frame_memory, &temp_level, &level_descriptor))
+   if (level_from_level_descriptor(&global_frame_memory, &temp_level, &level_descriptor))
    {
     // NOTE(tbt): save path temporarily
     S8 temp_path = copy_s8(&global_frame_memory, path);
     
     // NOTE(tbt): unload existing level
-    unload_texture(gl, &global_current_level.fg);
-    unload_texture(gl, &global_current_level.bg);
+    unload_texture(&global_current_level.fg);
+    unload_texture(&global_current_level.bg);
     cm_destroy_source(global_current_level.music);
     global_current_level.entities = NULL;
-    _global_entity_next_index = 0;
-    _global_entity_free_list = NULL;
+    global_entity_next_index = 0;
+    global_entity_free_list = NULL;
     arena_free_all(&global_level_memory);
     
     temp_level.path = copy_s8(&global_level_memory, temp_path);
@@ -552,8 +548,7 @@ set_current_level(OpenGLFunctions *gl,
 }
 
 internal void
-set_current_level_as_new_level(OpenGLFunctions *gl,
-                               S8 path)
+set_current_level_as_new_level(S8 path)
 {
  LevelDescriptor level_descriptor = {0};
  
@@ -563,23 +558,22 @@ set_current_level_as_new_level(OpenGLFunctions *gl,
  S8 temp_path = copy_s8(&global_frame_memory, path);
  
  // NOTE(tbt): unload existing level
- unload_texture(gl, &global_current_level.fg);
- unload_texture(gl, &global_current_level.bg);
+ unload_texture(&global_current_level.fg);
+ unload_texture(&global_current_level.bg);
  cm_destroy_source(global_current_level.music);
  global_current_level.entities = NULL;
- _global_entity_next_index = 0;
- _global_entity_free_list = NULL;
+ global_entity_next_index = 0;
+ global_entity_free_list = NULL;
  arena_free_all(&global_level_memory);
  
  // NOTE(tbt): setup new level
  global_current_level.path = copy_s8(&global_level_memory, temp_path);
  platform_write_entire_file_p(path, &level_descriptor, sizeof(level_descriptor));
- level_from_level_descriptor(gl, &global_level_memory, &global_current_level, &level_descriptor);
+ level_from_level_descriptor(&global_level_memory, &global_current_level, &level_descriptor);
 }
 
 internal void
-do_entities(OpenGLFunctions *gl,
-            F64 frametime_in_s,
+do_entities(F64 frametime_in_s,
             Entity *entities,
             Player *player)
 {
@@ -673,7 +667,7 @@ do_entities(OpenGLFunctions *gl,
                                 level_path,
                                 s8_literal("../assets/levels/"));
    
-   if (!set_current_level(gl, join_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
+   if (!set_current_level(join_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
                           !e->teleport_to_non_default_spawn,
                           e->teleport_to_x, e->teleport_to_y))
    {
@@ -706,8 +700,7 @@ do_entities(OpenGLFunctions *gl,
 }
 
 internal void
-hot_reload_current_level_art(OpenGLFunctions *gl,
-                             F64 frametime_in_s)
+hot_reload_current_level_art(F64 frametime_in_s)
 {
  static F64 time = 0.0;
  time += frametime_in_s;
@@ -731,9 +724,9 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
     global_current_level.fg_last_modified = fg_last_modified;
     debug_log("foreground modified...\n");
     
-    if (load_texture(gl, path, &texture))
+    if (load_texture(path, &texture))
     {
-     unload_texture(gl, &global_current_level.fg);
+     unload_texture(&global_current_level.fg);
      global_current_level.fg = texture;
      
      debug_log("successfully hot reloaded foreground\n");
@@ -757,9 +750,9 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
     global_current_level.bg_last_modified = bg_last_modified;
     debug_log("background modified...\n");
     
-    if (load_texture(gl, path, &texture))
+    if (load_texture(path, &texture))
     {
-     unload_texture(gl, &global_current_level.bg);
+     unload_texture(&global_current_level.bg);
      global_current_level.bg = texture;
      
      debug_log("successfully hot reloaded background\n");
@@ -773,8 +766,7 @@ hot_reload_current_level_art(OpenGLFunctions *gl,
  }
 }
 internal void
-do_current_level(OpenGLFunctions *gl,
-                 PlatformState *input,
+do_current_level(PlatformState *input,
                  F64 frametime_in_s)
 {
  F32 aspect;
@@ -791,9 +783,9 @@ do_current_level(OpenGLFunctions *gl,
                   ENTIRE_TEXTURE,
                   0, global_projection_matrix);
  
- do_entities(gl, frametime_in_s, global_current_level.entities, &global_current_level.player);
+ do_entities(frametime_in_s, global_current_level.entities, &global_current_level.player);
  
- do_player(gl, input, frametime_in_s, &global_current_level.player);
+ do_player(input, frametime_in_s, &global_current_level.player);
  
  aspect =
   (F32)global_current_level.fg.height /

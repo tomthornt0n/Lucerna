@@ -7,7 +7,7 @@ typedef enum
 
 typedef struct Font Font;
 internal Font *
-load_font(OpenGLFunctions *gl, MemoryArena *memory, S8 path, U32 size, U32 bake_begin, U32 bake_count);
+load_font(MemoryArena *memory, S8 path, U32 size, U32 bake_begin, U32 bake_count);
 
 typedef struct
 {
@@ -26,8 +26,7 @@ typedef struct
 internal LocaleConfig global_current_locale_config = {0};
 
 internal void
-set_locale(OpenGLFunctions *gl,
-           Locale locale)
+set_locale(Locale locale)
 {
  if (locale == LOCALE_en_gb)
  {
@@ -36,14 +35,12 @@ set_locale(OpenGLFunctions *gl,
   U32 font_bake_begin = 32;
   U32 font_bake_end = 255;
   
-  global_current_locale_config.normal_font = load_font(gl,
-                                                       &global_static_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(gl,
-                                                      &global_static_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
@@ -62,14 +59,12 @@ set_locale(OpenGLFunctions *gl,
   U32 font_bake_begin = 32;
   U32 font_bake_end = 255;
   
-  global_current_locale_config.normal_font = load_font(gl,
-                                                       &global_static_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(gl,
-                                                      &global_static_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
@@ -88,14 +83,12 @@ set_locale(OpenGLFunctions *gl,
   U32 font_bake_begin = 0x4E00;
   U32 font_bake_end = 0x9FFF;
   
-  global_current_locale_config.normal_font = load_font(gl,
-                                                       &global_static_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8_literal("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(gl,
-                                                      &global_static_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8_literal("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,

@@ -19,6 +19,9 @@
 //   - asset packing for release builds
 //-
 
+#define gl_func(_type, _func) internal PFNGL ## _type ## PROC gl ## _func;
+#include "gl_funcs.h"
+
 internal F64 global_time = 0.0;
 internal F32 global_exposure = 1.0;
 
@@ -46,7 +49,7 @@ typedef enum
 
 internal GameState global_game_state = GAME_STATE_main_menu;
 
-typedef void ( *PerGameStateMainFunction)(OpenGLFunctions *, PlatformState *, F64);
+typedef void ( *PerGameStateMainFunction)(PlatformState *, F64);
 internal PerGameStateMainFunction global_main_functions[GAME_STATE_MAX];
 
 cm_Source *global_click_sound = NULL;
@@ -67,16 +70,70 @@ cm_Source *global_click_sound = NULL;
 //~
 
 internal void
-game_playing_main(OpenGLFunctions *gl,
-                  PlatformState *input,
+game_playing_main(PlatformState *input,
                   F64 frametime_in_s)
 {
 #ifdef LUCERNA_DEBUG
- hot_reload_current_level_art(gl, frametime_in_s);
- hot_reload_player_art(gl, frametime_in_s);
- hot_reload_shaders(gl, frametime_in_s);
+ hot_reload_current_level_art(frametime_in_s);
+ hot_reload_player_art(frametime_in_s);
+ hot_reload_shaders(frametime_in_s);
 #endif
- do_current_level(gl, input, frametime_in_s);
+ do_current_level(input, frametime_in_s);
+ 
+ ui_prepare(input, frametime_in_s);
+ {
+  ui_width(1280.0f, 0.0f) ui_height(320.0f, 0.0f)
+   ui_window(s8_literal("test window"))
+  {
+   ui_height(48.0f, 0.0f)
+    ui_row()
+   {
+    ui_label(s8_literal("this is a test"));
+    
+    ui_width(256.0f, 0.0f) ui_height(32.0f, 0.0f)
+    {
+     if (ui_button(s8_literal("move up")))
+     {
+      global_current_level.player.y -= 32.0f;
+     }
+     
+     if (ui_button(s8_literal("move down")))
+     {
+      global_current_level.player.y += 32.0f;
+     }
+    }
+   }
+   
+   ui_height(48.0f, 0.0f)
+    ui_row()
+   {
+    static B32 text_is_red = false;
+    ui_width(250.0f, 0.0f) ui_height(32.0f, 0.0f)
+     ui_toggle_button(s8_literal("is this text red ->"),
+                      &text_is_red);
+    if (text_is_red)
+    {
+     ui_colour(colour_literal(1.0f, 0.0f, 0.0f, 1.0f))
+      ui_label(s8_literal("this text is red"));
+    }
+    else
+    {
+     ui_label(s8_literal("it's not red"));
+    }
+   }
+   
+   ui_height(48.0f, 0.0f)
+    ui_row()
+   {
+    ui_colour(colour_literal(1.0f, 0.0f, 0.0f, 1.0f))
+     ui_label(s8_literal("this is on another row!"));
+    
+    ui_label(s8_literal("this should fill the available space"));
+    
+    ui_label(s8_literal("here is yet another label..."));
+   }
+  }
+ } ui_finish(input);
 }
 
 //
@@ -110,28 +167,31 @@ game_audio_callback(void *buffer,
 void
 game_init(OpenGLFunctions *gl)
 {
+ // NOTE(tbt): copy OpenGLFunctions struct to global function pointers
+#define gl_func(_type, _func) gl ## _func = gl-> ## _func;
+#include "gl_funcs.h"
+ 
  initialise_arena_with_new_memory(&global_static_memory, 4 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
  initialise_arena_with_new_memory(&global_level_memory, 100 * ONE_MB);
  initialise_arena_with_new_memory(&global_temp_memory, 100 * ONE_MB);
  
- set_locale(gl, LOCALE_en_gb);
+ set_locale(LOCALE_en_gb);
  
  cm_init(AUDIO_SAMPLERATE);
  cm_set_lock(cmixer_lock_handler);
  cm_set_master_gain(global_audio_master_level);
  
- global_ui_font = load_font(gl,
-                            &global_static_memory,
+ global_ui_font = load_font(&global_static_memory,
                             s8_literal("../assets/fonts/mononoki.ttf"),
                             19,
                             32, 255);
  
  global_click_sound = cm_new_source_from_file("../assets/audio/click.wav");
  
- load_player_art(gl);
+ load_player_art();
  
- initialise_renderer(gl);
+ initialise_renderer();
  
  ui_initialise();
  
@@ -148,19 +208,14 @@ game_init(OpenGLFunctions *gl)
 //~
 
 void
-game_update_and_render(OpenGLFunctions *gl,
-                       PlatformState *input,
+game_update_and_render(PlatformState *input,
                        F64 frametime_in_s)
 {
- set_renderer_window_size(gl,
-                          input->window_w,
-                          input->window_h);
+ set_renderer_window_size(input->window_w, input->window_h);
  
- gl->Clear(GL_COLOR_BUFFER_BIT);
+ glClear(GL_COLOR_BUFFER_BIT);
  
- ui_prepare(input, frametime_in_s);
- 
- global_main_functions[global_game_state](gl, input, frametime_in_s);
+ global_main_functions[global_game_state](input, frametime_in_s);
  
  //
  // NOTE(tbt): debug extras
@@ -176,12 +231,12 @@ game_update_and_render(OpenGLFunctions *gl,
           global_current_level.player.x,
           global_current_level.player.y);
  
- draw_s8(global_ui_font,
+ /*draw_s8(global_ui_font,
          16.0f, 16.0f,
          -1.0f,
          colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
          s8_literal(debug_overlay_str),
-         UI_SORT_DEPTH, global_ui_projection_matrix);
+         UI_SORT_DEPTH, global_ui_projection_matrix);*/
  
  
  if (is_key_pressed(input,
@@ -206,7 +261,7 @@ game_update_and_render(OpenGLFunctions *gl,
    global_editor_selected_entity = NULL;
    
    serialise_level(&global_current_level);
-   set_current_level(gl, global_current_level.path,
+   set_current_level(global_current_level.path,
                      false,
                      false,
                      global_current_level.player.x,
@@ -234,9 +289,7 @@ game_update_and_render(OpenGLFunctions *gl,
          UI_SORT_DEPTH, global_ui_projection_matrix);
 #endif
  
- ui_finish();
- 
- renderer_flush_message_queue(gl);
+ renderer_flush_message_queue();
  
  arena_free_all(&global_frame_memory);
  
@@ -244,7 +297,7 @@ game_update_and_render(OpenGLFunctions *gl,
 }
 
 void
-game_cleanup(OpenGLFunctions *gl)
+game_cleanup(void)
 {
 }
 

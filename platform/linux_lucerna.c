@@ -914,7 +914,7 @@ main(int argc,
   }
   
   glX.SwapBuffers(global_display, global_drawable);
-  game_update_and_render(&gl,
+  game_update_and_render(&gl
                          &input,
                          frametime_in_s);
   

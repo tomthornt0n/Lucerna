@@ -1,6 +1,5 @@
 internal void
-do_level_editor(OpenGLFunctions *gl,
-                PlatformState *input,
+do_level_editor(PlatformState *input,
                 F64 frametime_in_s)
 {
  F32 aspect;
@@ -165,7 +164,7 @@ do_level_editor(OpenGLFunctions *gl,
   if (saving_level)
   {
    serialise_level(&global_current_level);
-   error_opening_level = !set_current_level(gl, global_current_level.path, false, true, 0.0f, 0.0f);
+   error_opening_level = !set_current_level(global_current_level.path, false, true, 0.0f, 0.0f);
    saving_level = false;
    cm_stop(global_current_level.music);
   }
@@ -210,12 +209,12 @@ do_level_editor(OpenGLFunctions *gl,
      
      if (creating_level)
      {
-      set_current_level_as_new_level(gl, path);
+      set_current_level_as_new_level(path);
       editing_level_meta = true;
      }
      else
      {
-      error_opening_level = !set_current_level(gl, path, false, true, 0.0f, 0.0f);
+      error_opening_level = !set_current_level(path, false, true, 0.0f, 0.0f);
       cm_stop(global_current_level.music);
      }
     }
@@ -283,7 +282,7 @@ do_level_editor(OpenGLFunctions *gl,
                      15.0f))
     {
      ui_delete_node(s8_literal("level metadata editor"));
-     level_from_level_descriptor(gl, &global_level_memory, &global_current_level, &level_descriptor);
+     level_from_level_descriptor(&global_level_memory, &global_current_level, &level_descriptor);
      saving_level = true;
      editing_level_meta = false;
     }

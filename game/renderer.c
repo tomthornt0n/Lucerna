@@ -121,19 +121,19 @@ typedef struct
  struct RcxUniformLocations
  {
   // NOTE(tbt): uniforms for texture shader
-  struct
+  struct RcxTextureShaderUniformLocations
   {
    I32 projection_matrix;
   } texture;
   
   // NOTE(tbt): uniforms for text shader
-  struct
+  struct RcxTextShaderUniformLocations
   {
    I32 projection_matrix;
   } text;
   
   // NOTE(tbt): uniforms for blur shader
-  struct
+  struct RcxBlurShaderUniformLocations
   {
    I32 direction;
   } blur;
@@ -371,39 +371,39 @@ generate_rotated_quad(Rect rectangle,
 shader_src = cstring_from_s8(&global_static_memory,                                                         \
 platform_read_entire_file_p(&global_static_memory,                             \
 s8_literal("../assets/shaders/" #_name ".frag"))); \
-fragment_shader = gl->CreateShader(GL_FRAGMENT_SHADER);                                                     \
-gl->ShaderSource(fragment_shader, 1, &shader_src, NULL);                                                    \
-gl->CompileShader(fragment_shader);                                                                         \
-gl->GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);                                               \
+fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);                                                       \
+glShaderSource(fragment_shader, 1, &shader_src, NULL);                                                      \
+glCompileShader(fragment_shader);                                                                         \
+glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &status);                                               \
 if (status == GL_FALSE)                                                                                     \
 {                                                                                                           \
 I8 msg[SHADER_INFO_LOG_MAX_LEN];                                                                           \
-gl->GetShaderInfoLog(fragment_shader,                                                                      \
+glGetShaderInfoLog(fragment_shader,                                                                      \
 SHADER_INFO_LOG_MAX_LEN,                                                              \
 NULL,                                                                                 \
 msg);                                                                                 \
 debug_log(#_name " fragment shader compilation failure. '%s'\n", msg);                                     \
 exit(-1);                                                                                                  \
 }                                                                                                           \
-gl->AttachShader(global_rcx.shaders. ## _name, fragment_shader);                                            \
-gl->LinkProgram(global_rcx.shaders. ## _name);                                                              \
-gl->GetProgramiv(global_rcx.shaders. ## _name, GL_LINK_STATUS, &status);                                    \
+glAttachShader(global_rcx.shaders. ## _name, fragment_shader);                                            \
+glLinkProgram(global_rcx.shaders. ## _name);                                                              \
+glGetProgramiv(global_rcx.shaders. ## _name, GL_LINK_STATUS, &status);                                    \
 if (status == GL_FALSE)                                                                                     \
 {                                                                                                           \
 I8 msg[SHADER_INFO_LOG_MAX_LEN];                                                                           \
-gl->GetShaderInfoLog(global_rcx.shaders. ## _name,                                                         \
+glGetShaderInfoLog(global_rcx.shaders. ## _name,                                                         \
 SHADER_INFO_LOG_MAX_LEN,                                                              \
 NULL,                                                                                 \
 msg);                                                                                 \
-gl->DeleteProgram(global_rcx.shaders. ## _name);                                                           \
-gl->DeleteShader(_vertex_shader);                                                                          \
-gl->DeleteShader(fragment_shader);                                                                         \
+glDeleteProgram(global_rcx.shaders. ## _name);                                                           \
+glDeleteShader(_vertex_shader);                                                                          \
+glDeleteShader(fragment_shader);                                                                         \
 debug_log(#_name " shader link failure. '%s'\n", msg);                                                     \
 exit(-1);                                                                                                  \
 }                                                                                                           \
-gl->DetachShader(global_rcx.shaders. ## _name, _vertex_shader);                                             \
-gl->DetachShader(global_rcx.shaders. ## _name, fragment_shader);                                            \
-gl->DeleteShader(fragment_shader);                                                                          \
+glDetachShader(global_rcx.shaders. ## _name, _vertex_shader);                                             \
+glDetachShader(global_rcx.shaders. ## _name, fragment_shader);                                            \
+glDeleteShader(fragment_shader);                                                                          \
 global_rcx.shaders.last_modified. ## _name = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"))
 
 //
@@ -411,31 +411,30 @@ global_rcx.shaders.last_modified. ## _name = platform_get_file_modified_time_p(s
 //~
 
 internal void
-cache_uniform_locations(OpenGLFunctions *gl)
+cache_uniform_locations(void)
 {
- global_rcx.uniform_locations.texture.projection_matrix = gl->GetUniformLocation(global_rcx.shaders.texture, "u_projection_matrix");
+ global_rcx.uniform_locations.texture.projection_matrix = glGetUniformLocation(global_rcx.shaders.texture, "u_projection_matrix");
  
- global_rcx.uniform_locations.text.projection_matrix = gl->GetUniformLocation(global_rcx.shaders.text, "u_projection_matrix");
+ global_rcx.uniform_locations.text.projection_matrix = glGetUniformLocation(global_rcx.shaders.text, "u_projection_matrix");
  
- global_rcx.uniform_locations.blur.direction = gl->GetUniformLocation(global_rcx.shaders.blur, "u_direction");
+ global_rcx.uniform_locations.blur.direction = glGetUniformLocation(global_rcx.shaders.blur, "u_direction");
  
- global_rcx.uniform_locations.post_processing.time = gl->GetUniformLocation(global_rcx.shaders.post_processing, "u_time");
- global_rcx.uniform_locations.post_processing.exposure = gl->GetUniformLocation(global_rcx.shaders.post_processing, "u_exposure");
- global_rcx.uniform_locations.post_processing.screen_texture = gl->GetUniformLocation(global_rcx.shaders.post_processing, "u_screen_texture");
- global_rcx.uniform_locations.post_processing.blur_texture = gl->GetUniformLocation(global_rcx.shaders.post_processing, "u_blur_texture");
+ global_rcx.uniform_locations.post_processing.time = glGetUniformLocation(global_rcx.shaders.post_processing, "u_time");
+ global_rcx.uniform_locations.post_processing.exposure = glGetUniformLocation(global_rcx.shaders.post_processing, "u_exposure");
+ global_rcx.uniform_locations.post_processing.screen_texture = glGetUniformLocation(global_rcx.shaders.post_processing, "u_screen_texture");
+ global_rcx.uniform_locations.post_processing.blur_texture = glGetUniformLocation(global_rcx.shaders.post_processing, "u_blur_texture");
  
- global_rcx.uniform_locations.memory_post_processing.time = gl->GetUniformLocation(global_rcx.shaders.memory_post_processing, "u_time");
- global_rcx.uniform_locations.memory_post_processing.exposure = gl->GetUniformLocation(global_rcx.shaders.memory_post_processing, "u_exposure");
- global_rcx.uniform_locations.memory_post_processing.screen_texture = gl->GetUniformLocation(global_rcx.shaders.memory_post_processing, "u_screen_texture");
- global_rcx.uniform_locations.memory_post_processing.blur_texture = gl->GetUniformLocation(global_rcx.shaders.memory_post_processing, "u_blur_texture");
+ global_rcx.uniform_locations.memory_post_processing.time = glGetUniformLocation(global_rcx.shaders.memory_post_processing, "u_time");
+ global_rcx.uniform_locations.memory_post_processing.exposure = glGetUniformLocation(global_rcx.shaders.memory_post_processing, "u_exposure");
+ global_rcx.uniform_locations.memory_post_processing.screen_texture = glGetUniformLocation(global_rcx.shaders.memory_post_processing, "u_screen_texture");
+ global_rcx.uniform_locations.memory_post_processing.blur_texture = glGetUniformLocation(global_rcx.shaders.memory_post_processing, "u_blur_texture");
 }
 
-internal void renderer_flush_message_queue(OpenGLFunctions *gl);
+internal void renderer_flush_message_queue(void);
 
 // NOTE(tbt): I have no idea why I chose this preprocessor monstrosity over a simple LCDDL metaprogram, but it works
 internal void
-hot_reload_shaders(OpenGLFunctions *gl,
-                   F64 frametime_in_s)
+hot_reload_shaders(F64 frametime_in_s)
 {
  static F64 time = 0.0;
  time += frametime_in_s;
@@ -452,26 +451,26 @@ hot_reload_shaders(OpenGLFunctions *gl,
 U64 last_modified = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"));\
 if (last_modified > global_rcx.shaders.last_modified. ## _name) \
 {\
-renderer_flush_message_queue(gl);\
+renderer_flush_message_queue();\
 global_rcx.shaders.last_modified. ## _name = last_modified;\
 debug_log("hot reloading " #_name " shader\n");\
 shader_src = cstring_from_s8(&global_temp_memory, platform_read_entire_file_p(&global_temp_memory, s8_literal("../assets/shaders/" #_vertex_shader_name ".vert")));\
-U32 _vertex_shader_name ## _vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);\
-gl->ShaderSource(_vertex_shader_name ## _vertex_shader, 1, &shader_src, NULL);\
-gl->CompileShader(_vertex_shader_name ## _vertex_shader);\
-gl->GetShaderiv(_vertex_shader_name ## _vertex_shader, GL_COMPILE_STATUS, &status);\
+U32 _vertex_shader_name ## _vertex_shader = glCreateShader(GL_VERTEX_SHADER);\
+glShaderSource(_vertex_shader_name ## _vertex_shader, 1, &shader_src, NULL);\
+glCompileShader(_vertex_shader_name ## _vertex_shader);\
+glGetShaderiv(_vertex_shader_name ## _vertex_shader, GL_COMPILE_STATUS, &status);\
 if (status == GL_FALSE)\
 {\
 I8 msg[SHADER_INFO_LOG_MAX_LEN];\
-gl->GetShaderInfoLog(_vertex_shader_name ## _vertex_shader, SHADER_INFO_LOG_MAX_LEN, NULL, msg);\
-gl->DeleteShader(_vertex_shader_name ## _vertex_shader);\
+glGetShaderInfoLog(_vertex_shader_name ## _vertex_shader, SHADER_INFO_LOG_MAX_LEN, NULL, msg);\
+glDeleteShader(_vertex_shader_name ## _vertex_shader);\
 debug_log("vertex shader compilation failure. '%s'\n", msg);\
 exit(-1);\
 }\
-gl->AttachShader(global_rcx.shaders. ## _name, _vertex_shader_name ## _vertex_shader);\
+glAttachShader(global_rcx.shaders. ## _name, _vertex_shader_name ## _vertex_shader);\
 renderer_compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);\
-gl->DeleteShader(_vertex_shader_name ## _vertex_shader);\
-cache_uniform_locations(gl);\
+glDeleteShader(_vertex_shader_name ## _vertex_shader);\
+cache_uniform_locations();\
 }\
 }
 #include "shader_list.h"
@@ -480,7 +479,7 @@ cache_uniform_locations(gl);\
 }
 
 internal void
-initialise_renderer(OpenGLFunctions *gl)
+initialise_renderer(void)
 {
  I32 i;
  I32 offset;
@@ -492,40 +491,40 @@ initialise_renderer(OpenGLFunctions *gl)
  //~
  
 #ifdef LUCERNA_DEBUG
- gl->DebugMessageCallback(gl_debug_message_callback, NULL);
+ glDebugMessageCallback(gl_debug_message_callback, NULL);
 #endif
  
- gl->GenVertexArrays(1, &global_rcx.vao);
- gl->BindVertexArray(global_rcx.vao);
+ glGenVertexArrays(1, &global_rcx.vao);
+ glBindVertexArray(global_rcx.vao);
  
- gl->GenBuffers(1, &global_rcx.vbo);
- gl->BindBuffer(GL_ARRAY_BUFFER, global_rcx.vbo);
+ glGenBuffers(1, &global_rcx.vbo);
+ glBindBuffer(GL_ARRAY_BUFFER, global_rcx.vbo);
  
- gl->EnableVertexAttribArray(0);
- gl->VertexAttribPointer(0,
-                         2,
-                         GL_FLOAT,
-                         GL_FALSE,
-                         sizeof(Vertex),
-                         NULL);
+ glEnableVertexAttribArray(0);
+ glVertexAttribPointer(0,
+                       2,
+                       GL_FLOAT,
+                       GL_FALSE,
+                       sizeof(Vertex),
+                       NULL);
  
- gl->EnableVertexAttribArray(1);
- gl->VertexAttribPointer(1,
-                         4,
-                         GL_FLOAT,
-                         GL_FALSE,
-                         sizeof(Vertex),
-                         (const void *)(2 * sizeof(F32)));
+ glEnableVertexAttribArray(1);
+ glVertexAttribPointer(1,
+                       4,
+                       GL_FLOAT,
+                       GL_FALSE,
+                       sizeof(Vertex),
+                       (const void *)(2 * sizeof(F32)));
  
- gl->EnableVertexAttribArray(2);
- gl->VertexAttribPointer(2,
-                         2,
-                         GL_FLOAT,
-                         GL_FALSE,
-                         sizeof(Vertex),
-                         (const void *)(6 * sizeof(F32)));
+ glEnableVertexAttribArray(2);
+ glVertexAttribPointer(2,
+                       2,
+                       GL_FLOAT,
+                       GL_FALSE,
+                       sizeof(Vertex),
+                       (const void *)(6 * sizeof(F32)));
  
- gl->GenBuffers(1, &global_rcx.ibo);
+ glGenBuffers(1, &global_rcx.ibo);
  offset = 0;
  for (i = 0; i < BATCH_SIZE * 6; i += 6)
  {
@@ -540,23 +539,23 @@ initialise_renderer(OpenGLFunctions *gl)
   offset += 4;
  }
  
- gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, global_rcx.ibo);
- gl->BufferData(GL_ELEMENT_ARRAY_BUFFER,
-                BATCH_SIZE * 6 * sizeof(indices[0]),
-                indices,
-                GL_STATIC_DRAW);
+ glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, global_rcx.ibo);
+ glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+              BATCH_SIZE * 6 * sizeof(indices[0]),
+              indices,
+              GL_STATIC_DRAW);
  
- gl->BufferData(GL_ARRAY_BUFFER,
-                BATCH_SIZE * 4 * sizeof(Vertex),
-                NULL,
-                GL_DYNAMIC_DRAW);
+ glBufferData(GL_ARRAY_BUFFER,
+              BATCH_SIZE * 4 * sizeof(Vertex),
+              NULL,
+              GL_DYNAMIC_DRAW);
  
- gl->ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+ glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
  
- gl->Enable(GL_BLEND);
- gl->BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+ glEnable(GL_BLEND);
+ glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
  
- gl->Enable(GL_SCISSOR_TEST);
+ glEnable(GL_SCISSOR_TEST);
  
  //
  // NOTE(tbt): setup 1x1 white texture for rendering flat colours
@@ -564,35 +563,35 @@ initialise_renderer(OpenGLFunctions *gl)
  
  U32 flat_colour_texture_data = 0xffffffff;
  
- gl->GenTextures(1, &global_rcx.flat_colour_texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.flat_colour_texture);
+ glGenTextures(1, &global_rcx.flat_colour_texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.flat_colour_texture);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                1,
-                1,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                &flat_colour_texture_data);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              1,
+              1,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              &flat_colour_texture_data);
  
  //
  // NOTE(tbt): shader compilation
  //~
  
  I32 status;
- global_rcx.shaders.texture = gl->CreateProgram();
- global_rcx.shaders.blur = gl->CreateProgram();
- global_rcx.shaders.text = gl->CreateProgram();
- global_rcx.shaders.post_processing = gl->CreateProgram();
- global_rcx.shaders.bloom_filter = gl->CreateProgram();
- global_rcx.shaders.memory_post_processing = gl->CreateProgram();
+ global_rcx.shaders.texture = glCreateProgram();
+ global_rcx.shaders.blur = glCreateProgram();
+ global_rcx.shaders.text = glCreateProgram();
+ global_rcx.shaders.post_processing = glCreateProgram();
+ global_rcx.shaders.bloom_filter = glCreateProgram();
+ global_rcx.shaders.memory_post_processing = glCreateProgram();
  const GLchar *shader_src;
  ShaderID default_vertex_shader, fullscreen_vertex_shader;
  ShaderID fragment_shader;
@@ -604,21 +603,21 @@ initialise_renderer(OpenGLFunctions *gl)
                                platform_read_entire_file_p(&global_temp_memory,
                                                            s8_literal("../assets/shaders/default.vert")));
   
-  default_vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
-  gl->ShaderSource(default_vertex_shader, 1, &shader_src, NULL);
-  gl->CompileShader(default_vertex_shader);
+  default_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+  glShaderSource(default_vertex_shader, 1, &shader_src, NULL);
+  glCompileShader(default_vertex_shader);
   
   // NOTE(tbt): check for default vertex shader compilation errors
-  gl->GetShaderiv(default_vertex_shader, GL_COMPILE_STATUS, &status);
+  glGetShaderiv(default_vertex_shader, GL_COMPILE_STATUS, &status);
   if (status == GL_FALSE)
   {
    I8 msg[SHADER_INFO_LOG_MAX_LEN];
    
-   gl->GetShaderInfoLog(default_vertex_shader,
-                        SHADER_INFO_LOG_MAX_LEN,
-                        NULL,
-                        msg);
-   gl->DeleteShader(default_vertex_shader);
+   glGetShaderInfoLog(default_vertex_shader,
+                      SHADER_INFO_LOG_MAX_LEN,
+                      NULL,
+                      msg);
+   glDeleteShader(default_vertex_shader);
    
    debug_log("default vertex shader compilation failure. '%s'\n", msg);
    exit(-1);
@@ -631,21 +630,21 @@ initialise_renderer(OpenGLFunctions *gl)
                                platform_read_entire_file_p(&global_temp_memory,
                                                            s8_literal("../assets/shaders/fullscreen.vert")));
   
-  fullscreen_vertex_shader = gl->CreateShader(GL_VERTEX_SHADER);
-  gl->ShaderSource(fullscreen_vertex_shader, 1, &shader_src, NULL);
-  gl->CompileShader(fullscreen_vertex_shader);
+  fullscreen_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+  glShaderSource(fullscreen_vertex_shader, 1, &shader_src, NULL);
+  glCompileShader(fullscreen_vertex_shader);
   
   // NOTE(tbt): check for fullscreen vertex shader compilation errors
-  gl->GetShaderiv(fullscreen_vertex_shader, GL_COMPILE_STATUS, &status);
+  glGetShaderiv(fullscreen_vertex_shader, GL_COMPILE_STATUS, &status);
   if (status == GL_FALSE)
   {
    I8 msg[SHADER_INFO_LOG_MAX_LEN];
    
-   gl->GetShaderInfoLog(fullscreen_vertex_shader,
-                        SHADER_INFO_LOG_MAX_LEN,
-                        NULL,
-                        msg);
-   gl->DeleteShader(fullscreen_vertex_shader);
+   glGetShaderInfoLog(fullscreen_vertex_shader,
+                      SHADER_INFO_LOG_MAX_LEN,
+                      NULL,
+                      msg);
+   glDeleteShader(fullscreen_vertex_shader);
    
    debug_log("fullscreen vertex shader compilation failure. '%s'\n", msg);
    exit(-1);
@@ -654,25 +653,25 @@ initialise_renderer(OpenGLFunctions *gl)
   debug_log("successfully compiled fullscreen vertex shader\n");
   
   // NOTE(tbt): attach vertex shaders to shader programs
-  gl->AttachShader(global_rcx.shaders.texture, default_vertex_shader);
-  gl->AttachShader(global_rcx.shaders.blur, fullscreen_vertex_shader);
-  gl->AttachShader(global_rcx.shaders.text, default_vertex_shader);
-  gl->AttachShader(global_rcx.shaders.post_processing, fullscreen_vertex_shader);
-  gl->AttachShader(global_rcx.shaders.bloom_filter, fullscreen_vertex_shader);
-  gl->AttachShader(global_rcx.shaders.memory_post_processing, fullscreen_vertex_shader);
+  glAttachShader(global_rcx.shaders.texture, default_vertex_shader);
+  glAttachShader(global_rcx.shaders.blur, fullscreen_vertex_shader);
+  glAttachShader(global_rcx.shaders.text, default_vertex_shader);
+  glAttachShader(global_rcx.shaders.post_processing, fullscreen_vertex_shader);
+  glAttachShader(global_rcx.shaders.bloom_filter, fullscreen_vertex_shader);
+  glAttachShader(global_rcx.shaders.memory_post_processing, fullscreen_vertex_shader);
   
 #define shader(_name, _vertex_shader_name) renderer_compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);
 #include "shader_list.h"
   
   // NOTE(tbt): cleanup shader stuff
-  gl->DeleteShader(default_vertex_shader);
-  gl->DeleteShader(fullscreen_vertex_shader);
+  glDeleteShader(default_vertex_shader);
+  glDeleteShader(fullscreen_vertex_shader);
  }
  
- cache_uniform_locations(gl);
+ cache_uniform_locations();
  
  // NOTE(tbt): reset currently bound shader
- gl->UseProgram(global_rcx.shaders.current);
+ glUseProgram(global_rcx.shaders.current);
  
  
  //
@@ -680,159 +679,159 @@ initialise_renderer(OpenGLFunctions *gl)
  //~
  
  // NOTE(tbt): framebuffer for first blur pass
- gl->GenFramebuffers(1, &global_rcx.framebuffers.blur_a.target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
+ glGenFramebuffers(1, &global_rcx.framebuffers.blur_a.target);
+ glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
  
- gl->GenTextures(1, &global_rcx.framebuffers.blur_a.texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
+ glGenTextures(1, &global_rcx.framebuffers.blur_a.texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
-                DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
+              DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
- gl->FramebufferTexture2D(GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D,
-                          global_rcx.framebuffers.blur_a.texture,
-                          0);
+ glFramebufferTexture2D(GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        global_rcx.framebuffers.blur_a.texture,
+                        0);
  
  // NOTE(tbt): framebuffer for second blur pass
- gl->GenFramebuffers(1, &global_rcx.framebuffers.blur_b.target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_b.target);
+ glGenFramebuffers(1, &global_rcx.framebuffers.blur_b.target);
+ glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_b.target);
  
- gl->GenTextures(1, &global_rcx.framebuffers.blur_b.texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
+ glGenTextures(1, &global_rcx.framebuffers.blur_b.texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
-                DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
+              DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
- gl->FramebufferTexture2D(GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D,
-                          global_rcx.framebuffers.blur_b.texture,
-                          0);
+ glFramebufferTexture2D(GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        global_rcx.framebuffers.blur_b.texture,
+                        0);
  
  // NOTE(tbt): framebuffer for first blur pass for bloom
- gl->GenFramebuffers(1, &global_rcx.framebuffers.bloom_blur_a.target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.bloom_blur_a.target);
+ glGenFramebuffers(1, &global_rcx.framebuffers.bloom_blur_a.target);
+ glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.bloom_blur_a.target);
  
- gl->GenTextures(1, &global_rcx.framebuffers.bloom_blur_a.texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_a.texture);
+ glGenTextures(1, &global_rcx.framebuffers.bloom_blur_a.texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_a.texture);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
-                DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
+              DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
- gl->FramebufferTexture2D(GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D,
-                          global_rcx.framebuffers.bloom_blur_a.texture,
-                          0);
+ glFramebufferTexture2D(GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        global_rcx.framebuffers.bloom_blur_a.texture,
+                        0);
  
  // NOTE(tbt): framebuffer for second blur pass for bloom
- gl->GenFramebuffers(1, &global_rcx.framebuffers.bloom_blur_b.target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.bloom_blur_b.target);
+ glGenFramebuffers(1, &global_rcx.framebuffers.bloom_blur_b.target);
+ glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.bloom_blur_b.target);
  
- gl->GenTextures(1, &global_rcx.framebuffers.bloom_blur_b.texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_b.texture);
+ glGenTextures(1, &global_rcx.framebuffers.bloom_blur_b.texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_b.texture);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
-                DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
+              DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
- gl->FramebufferTexture2D(GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D,
-                          global_rcx.framebuffers.bloom_blur_b.texture,
-                          0);
+ glFramebufferTexture2D(GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        global_rcx.framebuffers.bloom_blur_b.texture,
+                        0);
  
  // NOTE(tbt): framebuffer for post processing
- gl->GenFramebuffers(1, &global_rcx.framebuffers.post_processing.target);
- gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.post_processing.target);
+ glGenFramebuffers(1, &global_rcx.framebuffers.post_processing.target);
+ glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.post_processing.target);
  
- gl->GenTextures(1, &global_rcx.framebuffers.post_processing.texture);
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
+ glGenTextures(1, &global_rcx.framebuffers.post_processing.texture);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
  
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                DEFAULT_WINDOW_WIDTH,
-                DEFAULT_WINDOW_HEIGHT,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              DEFAULT_WINDOW_WIDTH,
+              DEFAULT_WINDOW_HEIGHT,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
  
- gl->FramebufferTexture2D(GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D,
-                          global_rcx.framebuffers.post_processing.texture,
-                          0);
+ glFramebufferTexture2D(GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        global_rcx.framebuffers.post_processing.texture,
+                        0);
  
- gl->BindTexture(GL_TEXTURE_2D, 0);
- gl->BindFramebuffer(GL_FRAMEBUFFER, 0);
+ glBindTexture(GL_TEXTURE_2D, 0);
+ glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 //
 // NOTE(tbt): controls for mask stack
 //~
 
-#define mask_rectangle(_mask) _defer_loop(renderer_push_mask(_mask), renderer_pop_mask())
+#define mask_rectangle(_mask) defer_loop(renderer_push_mask(_mask), renderer_pop_mask())
 
 internal void
 renderer_push_mask(Rect mask)
 {
- if (global_rcx.mask_stack_size < _stack_array_size(global_rcx.mask_stack))
+ if (global_rcx.mask_stack_size < stack_array_size(global_rcx.mask_stack))
  {
   global_rcx.mask_stack_size += 1;
   global_rcx.mask_stack[global_rcx.mask_stack_size] = mask;
@@ -860,7 +859,24 @@ renderer_enqueue_message(RenderMessage message)
                  sizeof(*queued_message));
  
  *queued_message = message;
- queued_message->mask = global_rcx.mask_stack[global_rcx.mask_stack_size];
+ 
+ // NOTE(tbt): copy mask from stack
+ {
+  queued_message->mask = global_rcx.mask_stack[global_rcx.mask_stack_size];
+  
+  if (queued_message->mask.x < 0.0f)
+  {
+   queued_message->mask.w -= queued_message->mask.x;
+   queued_message->mask.x = 0.0f;
+  }
+  if (queued_message->mask.y < 0.0f)
+  {
+   queued_message->mask.h -= queued_message->mask.y;
+   queued_message->mask.y = 0.0f;
+  }
+  queued_message->mask.w = max_f(queued_message->mask.w, 0.0f);
+  queued_message->mask.h = max_f(queued_message->mask.h, 0.0f);
+ }
  
  if (global_rcx.message_queue.end)
  {
@@ -1068,72 +1084,71 @@ renderer_recalculate_world_projection_matrix(void)
 }
 
 internal void
-set_renderer_window_size(OpenGLFunctions *gl,
-                         U32 w, U32 h)
+set_renderer_window_size(U32 w, U32 h)
 {
  global_rcx.window.w = w;
  global_rcx.window.h = h;
  
  global_rcx.mask_stack[0] = rectangle_literal(0.0f, 0.0f, (F32)w, (F32)h);
  
- gl->Viewport(0, 0, w, h);
+ glViewport(0, 0, w, h);
  
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                w >> BLUR_TEXTURE_SCALE,
-                h >> BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              w >> BLUR_TEXTURE_SCALE,
+              h >> BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                w >> BLUR_TEXTURE_SCALE,
-                h >> BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              w >> BLUR_TEXTURE_SCALE,
+              h >> BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_a.texture);
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                w >> BLOOM_BLUR_TEXTURE_SCALE,
-                h >> BLOOM_BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_a.texture);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              w >> BLOOM_BLUR_TEXTURE_SCALE,
+              h >> BLOOM_BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_b.texture);
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                w >> BLOOM_BLUR_TEXTURE_SCALE,
-                h >> BLOOM_BLUR_TEXTURE_SCALE,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_b.texture);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              w >> BLOOM_BLUR_TEXTURE_SCALE,
+              h >> BLOOM_BLUR_TEXTURE_SCALE,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
- gl->TexImage2D(GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                w,
-                h,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                NULL);
+ glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
+ glTexImage2D(GL_TEXTURE_2D,
+              0,
+              GL_RGBA8,
+              w,
+              h,
+              0,
+              GL_RGBA,
+              GL_UNSIGNED_BYTE,
+              NULL);
  
- gl->BindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
+ glBindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
  
  generate_orthographic_projection_matrix(global_ui_projection_matrix,
                                          0, w,
@@ -1141,7 +1156,7 @@ set_renderer_window_size(OpenGLFunctions *gl,
  
  renderer_recalculate_world_projection_matrix();
  
- gl->UseProgram(global_rcx.shaders.current);
+ glUseProgram(global_rcx.shaders.current);
 }
 
 internal void
@@ -1159,52 +1174,51 @@ set_camera_position(F32 x,
 //~
 
 internal void
-renderer_flush_batch(OpenGLFunctions *gl,
-                     RenderBatch *batch)
+renderer_flush_batch(RenderBatch *batch)
 {
  if (!batch->in_use) return;
  
- gl->Scissor(batch->mask.x,
-             global_rcx.window.h - batch->mask.y - batch->mask.h,
-             batch->mask.w,
-             batch->mask.h);
+ glScissor(batch->mask.x,
+           global_rcx.window.h - batch->mask.y - batch->mask.h,
+           batch->mask.w,
+           batch->mask.h);
  
  if (global_rcx.shaders.current != batch->shader)
  {
-  gl->UseProgram(batch->shader);
+  glUseProgram(batch->shader);
   global_rcx.shaders.current = batch->shader;
  }
  
  if (global_currently_bound_texture != batch->texture)
  {
-  gl->BindTexture(GL_TEXTURE_2D, batch->texture);
+  glBindTexture(GL_TEXTURE_2D, batch->texture);
   global_currently_bound_texture = batch->texture;
  }
  
  if (batch->shader == global_rcx.shaders.texture)
  {
-  gl->UniformMatrix4fv(global_rcx.uniform_locations.texture.projection_matrix,
-                       1,
-                       GL_FALSE,
-                       batch->projection_matrix);
+  glUniformMatrix4fv(global_rcx.uniform_locations.texture.projection_matrix,
+                     1,
+                     GL_FALSE,
+                     batch->projection_matrix);
  }
  else if (batch->shader == global_rcx.shaders.text)
  {
-  gl->UniformMatrix4fv(global_rcx.uniform_locations.text.projection_matrix,
-                       1,
-                       GL_FALSE,
-                       batch->projection_matrix);
+  glUniformMatrix4fv(global_rcx.uniform_locations.text.projection_matrix,
+                     1,
+                     GL_FALSE,
+                     batch->projection_matrix);
  }
  
- gl->BufferData(GL_ARRAY_BUFFER,
-                batch->quad_count * sizeof(Quad),
-                batch->buffer,
-                GL_DYNAMIC_DRAW);
+ glBufferData(GL_ARRAY_BUFFER,
+              batch->quad_count * sizeof(Quad),
+              batch->buffer,
+              GL_DYNAMIC_DRAW);
  
- gl->DrawElements(GL_TRIANGLES,
-                  batch->quad_count * 6,
-                  GL_UNSIGNED_INT,
-                  NULL);
+ glDrawElements(GL_TRIANGLES,
+                batch->quad_count * 6,
+                GL_UNSIGNED_INT,
+                NULL);
  
  batch->quad_count = 0;
  batch->texture = 0;
@@ -1214,7 +1228,7 @@ renderer_flush_batch(OpenGLFunctions *gl,
 }
 
 internal void
-renderer_flush_message_queue(OpenGLFunctions *gl)
+renderer_flush_message_queue()
 {
  RenderMessage message;
  
@@ -1224,6 +1238,7 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
  batch.shader = 0;
  batch.in_use = false;
  
+ glEnable(GL_SCISSOR_TEST);
  //
  // NOTE(tbt): sort message queue
  //~
@@ -1293,7 +1308,7 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
         !rect_match(batch.mask, message.mask) ||
         !(batch.in_use))
     {
-     renderer_flush_batch(gl, &batch);
+     renderer_flush_batch(&batch);
      
      batch.shader = global_rcx.shaders.texture;
      batch.texture = message.texture;
@@ -1325,7 +1340,7 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
         !rect_match(batch.mask, message.mask) ||
         !(batch.in_use))
     {
-     renderer_flush_batch(gl, &batch);
+     renderer_flush_batch(&batch);
      
      batch.shader = global_rcx.shaders.texture;
      batch.texture = global_rcx.flat_colour_texture;
@@ -1401,7 +1416,7 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
         !rect_match(batch.mask, message.mask) ||
         !(batch.in_use))
     {
-     renderer_flush_batch(gl, &batch);
+     renderer_flush_batch(&batch);
      
      batch.shader = global_rcx.shaders.text;
      batch.texture = message.font->texture.id;
@@ -1471,63 +1486,64 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
    //~
    case RENDER_MESSAGE_blur_screen_region:
    {
-    renderer_flush_batch(gl, &batch);
+    renderer_flush_batch(&batch);
     
-    gl->Disable(GL_SCISSOR_TEST);
+    glDisable(GL_SCISSOR_TEST);
     
     // NOTE(tbt): blit screen to framebuffer
-    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
     
-    gl->Viewport(0,
-                 0,
-                 global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                 global_rcx.window.h >> BLUR_TEXTURE_SCALE);
+    glViewport(0,
+               0,
+               global_rcx.window.w >> BLUR_TEXTURE_SCALE,
+               global_rcx.window.h >> BLUR_TEXTURE_SCALE);
     
-    gl->BlitFramebuffer(0,
-                        0,
-                        global_rcx.window.w,
-                        global_rcx.window.h,
-                        0,
-                        0,
-                        global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                        global_rcx.window.h >> BLUR_TEXTURE_SCALE,
-                        GL_COLOR_BUFFER_BIT,
-                        GL_LINEAR);
+    glBlitFramebuffer(0,
+                      0,
+                      global_rcx.window.w,
+                      global_rcx.window.h,
+                      0,
+                      0,
+                      global_rcx.window.w >> BLUR_TEXTURE_SCALE,
+                      global_rcx.window.h >> BLUR_TEXTURE_SCALE,
+                      GL_COLOR_BUFFER_BIT,
+                      GL_LINEAR);
     
-    gl->UseProgram(global_rcx.shaders.blur);
+    glUseProgram(global_rcx.shaders.blur);
+    global_rcx.shaders.current = global_rcx.shaders.blur;
     
     for (I32 i = 0;
          i < message.strength;
          ++i)
     {
      // NOTE(tbt): apply first (horizontal) blur pass
-     gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_b.target);
-     gl->Uniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
-     gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
-     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_b.target);
+     glUniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
+     glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
+     glDrawArrays(GL_TRIANGLES, 0, 6);
      
      // NOTE(tbt): apply second (vertical) blur pass
-     gl->BindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
-     gl->Uniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
-     gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
-     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     glBindFramebuffer(GL_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
+     glUniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
+     glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
+     glDrawArrays(GL_TRIANGLES, 0, 6);
     }
     
     // NOTE(tbt): blit desired region back to screen
-    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     
-    gl->Viewport(0,
-                 0,
-                 global_rcx.window.w,
-                 global_rcx.window.h);
+    glViewport(0,
+               0,
+               global_rcx.window.w,
+               global_rcx.window.h);
     
-    gl->Enable(GL_SCISSOR_TEST);
-    gl->Scissor(message.mask.x,
-                global_rcx.window.h - message.mask.y - message.mask.h,
-                message.mask.w,
-                message.mask.h);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(message.mask.x,
+              global_rcx.window.h - message.mask.y - message.mask.h,
+              message.mask.w,
+              message.mask.h);
     
     I32 x0, y0 , x1, y1;
     x0 = message.rectangle.x;
@@ -1535,13 +1551,16 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
     y0 = global_rcx.window.h - message.rectangle.y;
     y1 = global_rcx.window.h - message.rectangle.y - message.rectangle.h;
     
-    gl->BlitFramebuffer(x0 >> BLUR_TEXTURE_SCALE,
-                        y0 >> BLUR_TEXTURE_SCALE,
-                        x1 >> BLUR_TEXTURE_SCALE,
-                        y1 >> BLUR_TEXTURE_SCALE,
-                        x0, y0, x1, y1,
-                        GL_COLOR_BUFFER_BIT,
-                        GL_LINEAR);
+    glBlitFramebuffer(x0 >> BLUR_TEXTURE_SCALE,
+                      y0 >> BLUR_TEXTURE_SCALE,
+                      x1 >> BLUR_TEXTURE_SCALE,
+                      y1 >> BLUR_TEXTURE_SCALE,
+                      x0, y0, x1, y1,
+                      GL_COLOR_BUFFER_BIT,
+                      GL_LINEAR);
+    
+    // NOTE(tbt): reset current texture
+    glBindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
     
     break;
    }
@@ -1594,7 +1613,7 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
         !rect_match(batch.mask, message.mask) ||
         !(batch.in_use))
     {
-     renderer_flush_batch(gl, &batch);
+     renderer_flush_batch(&batch);
      
      batch.shader = global_rcx.shaders.texture;
      batch.texture = global_rcx.flat_colour_texture;
@@ -1612,12 +1631,12 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
    //~
    case RENDER_MESSAGE_do_post_processing:
    {
-    renderer_flush_batch(gl, &batch);
+    renderer_flush_batch(&batch);
     
-    gl->Scissor(message.mask.x,
-                global_rcx.window.h - message.mask.y - message.mask.h,
-                message.mask.w,
-                message.mask.h);
+    glScissor(message.mask.x,
+              global_rcx.window.h - message.mask.y - message.mask.h,
+              message.mask.w,
+              message.mask.h);
     
     U32 post_shader;
     Framebuffer *blur_framebuffer_1;
@@ -1644,54 +1663,54 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
     }
     
     // NOTE(tbt): blit screen to framebuffers
-    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.post_processing.target);
-    gl->BlitFramebuffer(0,
-                        0,
-                        global_rcx.window.w,
-                        global_rcx.window.h,
-                        0,
-                        0,
-                        global_rcx.window.w,
-                        global_rcx.window.h,
-                        GL_COLOR_BUFFER_BIT,
-                        GL_LINEAR);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.post_processing.target);
+    glBlitFramebuffer(0,
+                      0,
+                      global_rcx.window.w,
+                      global_rcx.window.h,
+                      0,
+                      0,
+                      global_rcx.window.w,
+                      global_rcx.window.h,
+                      GL_COLOR_BUFFER_BIT,
+                      GL_LINEAR);
     
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, blur_framebuffer_1->target);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blur_framebuffer_1->target);
     
     if (message.post_processing_kind == POST_PROCESSING_KIND_world)
     {
-     gl->Viewport(0,
-                  0,
-                  global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                  global_rcx.window.h >> BLUR_TEXTURE_SCALE);
+     glViewport(0,
+                0,
+                global_rcx.window.w >> BLUR_TEXTURE_SCALE,
+                global_rcx.window.h >> BLUR_TEXTURE_SCALE);
      
-     gl->BlitFramebuffer(0,
-                         0,
-                         global_rcx.window.w,
-                         global_rcx.window.h,
-                         0,
-                         0,
-                         global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                         global_rcx.window.h >> BLUR_TEXTURE_SCALE,
-                         GL_COLOR_BUFFER_BIT,
-                         GL_LINEAR);
+     glBlitFramebuffer(0,
+                       0,
+                       global_rcx.window.w,
+                       global_rcx.window.h,
+                       0,
+                       0,
+                       global_rcx.window.w >> BLUR_TEXTURE_SCALE,
+                       global_rcx.window.h >> BLUR_TEXTURE_SCALE,
+                       GL_COLOR_BUFFER_BIT,
+                       GL_LINEAR);
     }
     else if (message.post_processing_kind == POST_PROCESSING_KIND_memory)
     {
-     gl->Viewport(0,
-                  0,
-                  global_rcx.window.w >> BLOOM_BLUR_TEXTURE_SCALE,
-                  global_rcx.window.h >> BLOOM_BLUR_TEXTURE_SCALE);
+     glViewport(0,
+                0,
+                global_rcx.window.w >> BLOOM_BLUR_TEXTURE_SCALE,
+                global_rcx.window.h >> BLOOM_BLUR_TEXTURE_SCALE);
      
-     gl->UseProgram(global_rcx.shaders.bloom_filter);
-     gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
-     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     glUseProgram(global_rcx.shaders.bloom_filter);
+     glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
+     glDrawArrays(GL_TRIANGLES, 0, 6);
     }
     
     // NOTE(tbt): blur for bloom
-    gl->UseProgram(global_rcx.shaders.blur);
+    glUseProgram(global_rcx.shaders.blur);
     
     
     const I32 blur_passes = 2;
@@ -1700,50 +1719,51 @@ renderer_flush_message_queue(OpenGLFunctions *gl)
          ++i)
     {
      // NOTE(tbt): apply first (horizontal) blur pass
-     gl->BindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_2->target);
-     gl->Uniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
-     gl->BindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
-     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_2->target);
+     glUniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
+     glBindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
+     glDrawArrays(GL_TRIANGLES, 0, 6);
      
      // NOTE(tbt): apply second (vertical) blur pass
-     gl->BindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_1->target);
-     gl->Uniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
-     gl->BindTexture(GL_TEXTURE_2D, blur_framebuffer_2->texture);
-     gl->DrawArrays(GL_TRIANGLES, 0, 6);
+     glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_1->target);
+     glUniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
+     glBindTexture(GL_TEXTURE_2D, blur_framebuffer_2->texture);
+     glDrawArrays(GL_TRIANGLES, 0, 6);
     }
     
     // NOTE(tbt): blend back to screen
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     
-    gl->UseProgram(post_shader);
-    gl->Uniform1f(uniforms->time, (F32)global_time);
-    gl->Uniform1f(uniforms->exposure, message.exposure);
+    glUseProgram(post_shader);
+    glUniform1f(uniforms->time, (F32)global_time);
+    glUniform1f(uniforms->exposure, message.exposure);
     
-    gl->ActiveTexture(GL_TEXTURE0);
-    gl->BindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
-    gl->Uniform1i(uniforms->blur_texture, 0);
-    gl->ActiveTexture(GL_TEXTURE1);
-    gl->BindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
-    gl->Uniform1i(uniforms->screen_texture, 1);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
+    glUniform1i(uniforms->blur_texture, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
+    glUniform1i(uniforms->screen_texture, 1);
     
-    gl->Viewport(0,
-                 0,
-                 global_rcx.window.w,
-                 global_rcx.window.h);
+    glViewport(0,
+               0,
+               global_rcx.window.w,
+               global_rcx.window.h);
     
-    gl->DrawArrays(GL_TRIANGLES, 0, 6);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     
-    gl->ActiveTexture(GL_TEXTURE0);
-    gl->BindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
-    gl->UseProgram(global_rcx.shaders.current);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, global_currently_bound_texture);
+    glUseProgram(global_rcx.shaders.current);
     
     break;
    }
   }
  }
  
- renderer_flush_batch(gl, &batch);
+ renderer_flush_batch(&batch);
  
  global_rcx.message_queue.start = NULL;
  global_rcx.message_queue.end = NULL;
+ glDisable(GL_SCISSOR_TEST);
 }

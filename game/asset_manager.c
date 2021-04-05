@@ -95,74 +95,71 @@ path_from_dialogue_path(MemoryArena *memory,
 }
 
 internal B32
-load_texture(OpenGLFunctions *gl,
-             S8 path,
+load_texture(S8 path,
              Texture *result)
 {
- U8 *pixels;
- 
- I8 path_cstr[1024] = {0};
- snprintf(path_cstr, 1024, "%.*s", (I32)path.size, path.buffer);
+ B32 success;
  
  TextureID texture_id;
  I32 width, height;
  
  arena_temporary_memory(&global_temp_memory)
  {
-  pixels = stbi_load(path_cstr,
-                     &width,
-                     &height,
-                     NULL, 4);
+  U8 *pixels = stbi_load(cstring_from_s8(&global_temp_memory, path),
+                         &width,
+                         &height,
+                         NULL, 4);
   
-  if (!pixels)
+  if (pixels)
   {
-   debug_log("Error loading texture '%s'\n", path_cstr);
-   _temporary_memory_end(&global_temp_memory);
-   memset(result, 0, sizeof(*result));
-   return false;
+   glGenTextures(1, &texture_id);
+   glBindTexture(GL_TEXTURE_2D, texture_id);
+   
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+   
+   glTexImage2D(GL_TEXTURE_2D,
+                0,
+                GL_RGBA8,
+                width,
+                height,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                pixels);
+   
+   result->id = texture_id;
+   result->width = width;
+   result->height = height;
+   
+   debug_log("successfully loaded texture: '%.*s'\n", (I32)path.size, path.buffer);
+   success = true;
   }
-  
-  gl->GenTextures(1, &texture_id);
-  gl->BindTexture(GL_TEXTURE_2D, texture_id);
-  
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  
-  gl->TexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_RGBA8,
-                 width,
-                 height,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 pixels);
+  else
+  {
+   debug_log("error loading texture: '%.*s'\n", (I32)path.size, path.buffer);
+   success = false;
+  }
  }
  
- result->id = texture_id;
- result->width = width;
- result->height = height;
- 
- debug_log("successfully loaded texture: '%s'\n", path_cstr);
- return true;
+ return success;
 }
 
-internal void renderer_flush_message_queue(OpenGLFunctions *gl);
+internal void renderer_flush_message_queue(void);
 
 internal void
-unload_texture(OpenGLFunctions *gl,
-               Texture *texture)
+unload_texture(Texture *texture)
 {
  // NOTE(tbt): early process all currently queued render messages in case any of them depend on the texture about to be unloaded
- renderer_flush_message_queue(gl);
+ renderer_flush_message_queue();
  
  if (global_currently_bound_texture == texture->id)
  {
   global_currently_bound_texture = 0;
  }
- gl->DeleteTextures(1, &texture->id);
+ glDeleteTextures(1, &texture->id);
  
  texture->id = 0;
  texture->width = 0;
@@ -188,8 +185,7 @@ sub_texture_from_texture(Texture *texture,
 }
 
 internal Font *
-load_font(OpenGLFunctions *gl,
-          MemoryArena *memory,
+load_font(MemoryArena *memory,
           S8 path,
           U32 size,
           U32 font_bake_begin,
@@ -260,24 +256,24 @@ load_font(OpenGLFunctions *gl,
      result->estimate_char_width = size;
     }
     
-    gl->GenTextures(1, &result->texture.id);
-    gl->BindTexture(GL_TEXTURE_2D, result->texture.id);
+    glGenTextures(1, &result->texture.id);
+    glBindTexture(GL_TEXTURE_2D, result->texture.id);
     global_currently_bound_texture = result->texture.id;
     
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     
-    gl->TexImage2D(GL_TEXTURE_2D,
-                   0,
-                   GL_RED,
-                   result->texture.width,
-                   result->texture.height,
-                   0,
-                   GL_RED,
-                   GL_UNSIGNED_BYTE,
-                   bitmap);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RED,
+                 result->texture.width,
+                 result->texture.height,
+                 0,
+                 GL_RED,
+                 GL_UNSIGNED_BYTE,
+                 bitmap);
    }
    else
    {
@@ -295,33 +291,6 @@ load_font(OpenGLFunctions *gl,
  }
  
  return result;
-}
-
-internal U8 *
-_find_wav_sub_chunk(U8 *data,
-                    U32 data_size,
-                    U8 *name,
-                    I32 *size)
-{
- U8 *p = data + 12;
- 
- next:
- *size = *((U32 *)(p + 4));
- if (memcmp(p, name, 4))
- {
-  p += 8 + *size;
-  if (p > data + data_size)
-  {
-   *size = 0;
-   return NULL;
-  }
-  else
-  {
-   goto next;
-  }
- }
- 
- return p + 8;
 }
 
 internal S8List *

@@ -1,8 +1,8 @@
 #include <immintrin.h>
 
-#define _stack_array_size(_arr) (sizeof(_arr) / sizeof(_arr[0]))
+#define stack_array_size(_arr) (sizeof(_arr) / sizeof(_arr[0]))
 
-#define _defer_loop(_begin, _end) for (I32 _i = ((_begin), 0); !_i; ((_end), (_i = 1)))
+#define defer_loop(_begin, _end) for (I32 _i = ((_begin), 0); !_i; ((_end), (_i = 1)))
 
 #define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
 typedef struct
@@ -117,7 +117,6 @@ colour_lerp(Colour a,
 {
  Colour result;
  
- // NOTE(tbt): kind of unnecessary, but would be relatively easy to SIMDize
  result.r = (a.r * t) + (b.r * (1.0f - t));
  result.g = (a.g * t) + (b.g * (1.0f - t));
  result.b = (a.b * t) + (b.b * (1.0f - t));
