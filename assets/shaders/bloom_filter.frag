@@ -7,7 +7,7 @@ in vec2 v_texture_coordinates;
 
 uniform sampler2D u_texture;
 
-const float filter_threshold = 0.89;
+uniform float filter_threshold = 0.98;
 
 const float desired_aspect = 9.0 / 16.0;
 

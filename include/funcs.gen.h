@@ -2,33 +2,33 @@ internal void
 do_level_descriptor_editor_ui(PlatformState *input,
 LevelDescriptor *x)
 {
-ui_do_text_entry(input, s8_literal("gen music_path entry 41"), x->music_path, NULL, 64);
-ui_do_label(s8_literal("gen music_path label 18467"), s8_literal("music path:"), 100.0f);
+ui_do_text_entry(input, s8("gen music_path entry 41"), x->music_path, NULL, 64);
+ui_do_label(s8("gen music_path label 18467"), s8("music path:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_text_entry(input, s8_literal("gen fg_path entry 6334"), x->fg_path, NULL, 64);
-ui_do_label(s8_literal("gen fg_path label 26500"), s8_literal("fg path:"), 100.0f);
+ui_do_text_entry(input, s8("gen fg_path entry 6334"), x->fg_path, NULL, 64);
+ui_do_label(s8("gen fg_path label 26500"), s8("fg path:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_text_entry(input, s8_literal("gen bg_path entry 19169"), x->bg_path, NULL, 64);
-ui_do_label(s8_literal("gen bg_path label 15724"), s8_literal("bg path:"), 100.0f);
+ui_do_text_entry(input, s8("gen bg_path entry 19169"), x->bg_path, NULL, 64);
+ui_do_label(s8("gen bg_path label 15724"), s8("bg path:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen player_scale slider 11478"), 350.000000f, 750.000000f, 1.000000f, 515.000000f, &x->player_scale);
-ui_do_label(s8_literal("gen player_scale label 29358"), s8_literal("player scale:"), 100.0f);
+ui_do_slider_f(input, s8("gen player_scale slider 11478"), 350.000000f, 750.000000f, 1.000000f, 515.000000f, &x->player_scale);
+ui_do_label(s8("gen player_scale label 29358"), s8("player scale:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen floor_gradient slider 26962"), -1.500000f, 1.500000f, 0.010000f, 515.000000f, &x->floor_gradient);
-ui_do_label(s8_literal("gen floor_gradient label 24464"), s8_literal("floor gradient:"), 100.0f);
+ui_do_slider_f(input, s8("gen floor_gradient slider 26962"), -1.500000f, 1.500000f, 0.010000f, 515.000000f, &x->floor_gradient);
+ui_do_label(s8("gen floor_gradient label 24464"), s8("floor gradient:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen exposure slider 5705"), 0.100000f, 3.000000f, 0.020000f, 515.000000f, &x->exposure);
-ui_do_label(s8_literal("gen exposure label 28145"), s8_literal("exposure:"), 100.0f);
+ui_do_slider_f(input, s8("gen exposure slider 5705"), 0.100000f, 3.000000f, 0.020000f, 515.000000f, &x->exposure);
+ui_do_label(s8("gen exposure label 28145"), s8("exposure:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen player_spawn_x slider 23281"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->player_spawn_x);
-ui_do_label(s8_literal("gen player_spawn_x label 16827"), s8_literal("player spawn x:"), 100.0f);
+ui_do_slider_f(input, s8("gen player_spawn_x slider 23281"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->player_spawn_x);
+ui_do_label(s8("gen player_spawn_x label 16827"), s8("player spawn x:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen player_spawn_y slider 9961"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->player_spawn_y);
-ui_do_label(s8_literal("gen player_spawn_y label 491"), s8_literal("player spawn y:"), 100.0f);
+ui_do_slider_f(input, s8("gen player_spawn_y slider 9961"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->player_spawn_y);
+ui_do_label(s8("gen player_spawn_y label 491"), s8("player spawn y:"), 100.0f);
 _ui_do_line_break(false);
-_ui_begin_dropdown(input, s8_literal("gen kind 2995"), s8_literal("kind"), -1.0f);
-if (ui_do_button(input, s8_literal("gen LEVEL_KIND_world 11942"), s8_literal("LEVEL_KIND_world"), -1.0f)) { x->kind = LEVEL_KIND_world; }
-if (ui_do_button(input, s8_literal("gen LEVEL_KIND_memory 4827"), s8_literal("LEVEL_KIND_memory"), -1.0f)) { x->kind = LEVEL_KIND_memory; }
+_ui_begin_dropdown(input, s8("gen kind 2995"), s8("kind"), -1.0f);
+if (ui_do_button(input, s8("gen LEVEL_KIND_world 11942"), s8("LEVEL_KIND_world"), -1.0f)) { x->kind = LEVEL_KIND_world; }
+if (ui_do_button(input, s8("gen LEVEL_KIND_memory 4827"), s8("LEVEL_KIND_memory"), -1.0f)) { x->kind = LEVEL_KIND_memory; }
 _ui_pop_insertion_point();
 _ui_do_line_break(false);
 }
@@ -76,48 +76,48 @@ internal void
 do_entity_editor_ui(PlatformState *input,
 Entity *x)
 {
-_ui_begin_dropdown(input, s8_literal("gen flags 5436"), s8_literal("flags"), -1.0f);
-ui_do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_trigger_dialogue 32391"), s8_literal("ENTITY_FLAG_trigger_dialogue"), &x->flags, ENTITY_FLAG_trigger_dialogue, -1.0f);
-ui_do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_teleport 14604"), s8_literal("ENTITY_FLAG_teleport"), &x->flags, ENTITY_FLAG_teleport, -1.0f);
-ui_do_bit_toggle_button(input, s8_literal("gen ENTITY_FLAG_fade_out 3902"), s8_literal("ENTITY_FLAG_fade_out"), &x->flags, ENTITY_FLAG_fade_out, -1.0f);
+_ui_begin_dropdown(input, s8("gen flags 5436"), s8("flags"), -1.0f);
+ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_trigger_dialogue 32391"), s8("ENTITY_FLAG_trigger_dialogue"), &x->flags, ENTITY_FLAG_trigger_dialogue, -1.0f);
+ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_teleport 14604"), s8("ENTITY_FLAG_teleport"), &x->flags, ENTITY_FLAG_teleport, -1.0f);
+ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_fade_out 3902"), s8("ENTITY_FLAG_fade_out"), &x->flags, ENTITY_FLAG_fade_out, -1.0f);
 _ui_pop_insertion_point();
 _ui_do_line_break(true);
-ui_do_slider_f(input, s8_literal("gen teleport_to_x slider 153"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->teleport_to_x);
-ui_do_label(s8_literal("gen teleport_to_x label 292"), s8_literal("teleport to x:"), 100.0f);
+ui_do_slider_f(input, s8("gen teleport_to_x slider 153"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->teleport_to_x);
+ui_do_label(s8("gen teleport_to_x label 292"), s8("teleport to x:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen teleport_to_y slider 12382"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->teleport_to_y);
-ui_do_label(s8_literal("gen teleport_to_y label 17421"), s8_literal("teleport to y:"), 100.0f);
+ui_do_slider_f(input, s8("gen teleport_to_y slider 12382"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->teleport_to_y);
+ui_do_label(s8("gen teleport_to_y label 17421"), s8("teleport to y:"), 100.0f);
 _ui_do_line_break(false);
-_ui_begin_dropdown(input, s8_literal("gen teleport_on_trigger 18716"), s8_literal("teleport on trigger"), -1.0f);
-if (ui_do_button(input, s8_literal("gen ENTITY_TRIGGER_player_left 19718"), s8_literal("ENTITY_TRIGGER_player_left"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_left; }
-if (ui_do_button(input, s8_literal("gen ENTITY_TRIGGER_player_intersecting 19895"), s8_literal("ENTITY_TRIGGER_player_intersecting"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_intersecting; }
-if (ui_do_button(input, s8_literal("gen ENTITY_TRIGGER_player_entered 5447"), s8_literal("ENTITY_TRIGGER_player_entered"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_entered; }
+_ui_begin_dropdown(input, s8("gen teleport_on_trigger 18716"), s8("teleport on trigger"), -1.0f);
+if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_left 19718"), s8("ENTITY_TRIGGER_player_left"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_left; }
+if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_intersecting 19895"), s8("ENTITY_TRIGGER_player_intersecting"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_intersecting; }
+if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_entered 5447"), s8("ENTITY_TRIGGER_player_entered"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_entered; }
 _ui_pop_insertion_point();
 _ui_do_line_break(false);
-ui_do_toggle_button(input, s8_literal("gen teleport_do_not_persist_exposure 21726"), s8_literal("teleport do not persist exposure"), -1.0f, &x->teleport_do_not_persist_exposure);
+ui_do_toggle_button(input, s8("gen teleport_do_not_persist_exposure 21726"), s8("teleport do not persist exposure"), -1.0f, &x->teleport_do_not_persist_exposure);
 _ui_do_line_break(false);
-ui_do_toggle_button(input, s8_literal("gen teleport_to_non_default_spawn 14771"), s8_literal("teleport to non default spawn"), -1.0f, &x->teleport_to_non_default_spawn);
+ui_do_toggle_button(input, s8("gen teleport_to_non_default_spawn 14771"), s8("teleport to non default spawn"), -1.0f, &x->teleport_to_non_default_spawn);
 _ui_do_line_break(false);
-ui_do_text_entry(input, s8_literal("gen teleport_to_level entry 11538"), x->teleport_to_level, NULL, 64);
-ui_do_label(s8_literal("gen teleport_to_level label 1869"), s8_literal("teleport to level:"), 100.0f);
+ui_do_text_entry(input, s8("gen teleport_to_level entry 11538"), x->teleport_to_level, NULL, 64);
+ui_do_label(s8("gen teleport_to_level label 1869"), s8("teleport to level:"), 100.0f);
 _ui_do_line_break(true);
-_ui_begin_dropdown(input, s8_literal("gen fade_out_direction 19912"), s8_literal("fade out direction"), -1.0f);
-if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_w 25667"), s8_literal("FADE_OUT_DIR_w"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_w; }
-if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_s 26299"), s8_literal("FADE_OUT_DIR_s"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_s; }
-if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_e 17035"), s8_literal("FADE_OUT_DIR_e"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_e; }
-if (ui_do_button(input, s8_literal("gen FADE_OUT_DIR_n 9894"), s8_literal("FADE_OUT_DIR_n"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_n; }
+_ui_begin_dropdown(input, s8("gen fade_out_direction 19912"), s8("fade out direction"), -1.0f);
+if (ui_do_button(input, s8("gen FADE_OUT_DIR_w 25667"), s8("FADE_OUT_DIR_w"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_w; }
+if (ui_do_button(input, s8("gen FADE_OUT_DIR_s 26299"), s8("FADE_OUT_DIR_s"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_s; }
+if (ui_do_button(input, s8("gen FADE_OUT_DIR_e 17035"), s8("FADE_OUT_DIR_e"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_e; }
+if (ui_do_button(input, s8("gen FADE_OUT_DIR_n 9894"), s8("FADE_OUT_DIR_n"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_n; }
 _ui_pop_insertion_point();
 _ui_do_line_break(true);
-ui_do_text_entry(input, s8_literal("gen dialogue_path entry 28703"), x->dialogue_path, NULL, 64);
-ui_do_label(s8_literal("gen dialogue_path label 23811"), s8_literal("dialogue path:"), 100.0f);
+ui_do_text_entry(input, s8("gen dialogue_path entry 28703"), x->dialogue_path, NULL, 64);
+ui_do_label(s8("gen dialogue_path label 23811"), s8("dialogue path:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen dialogue_y slider 31322"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->dialogue_y);
-ui_do_label(s8_literal("gen dialogue_y label 30333"), s8_literal("dialogue y:"), 100.0f);
+ui_do_slider_f(input, s8("gen dialogue_y slider 31322"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->dialogue_y);
+ui_do_label(s8("gen dialogue_y label 30333"), s8("dialogue y:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_slider_f(input, s8_literal("gen dialogue_x slider 17673"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->dialogue_x);
-ui_do_label(s8_literal("gen dialogue_x label 4664"), s8_literal("dialogue x:"), 100.0f);
+ui_do_slider_f(input, s8("gen dialogue_x slider 17673"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->dialogue_x);
+ui_do_label(s8("gen dialogue_x label 4664"), s8("dialogue x:"), 100.0f);
 _ui_do_line_break(false);
-ui_do_toggle_button(input, s8_literal("gen repeat_dialogue 15141"), s8_literal("repeat dialogue"), -1.0f, &x->repeat_dialogue);
+ui_do_toggle_button(input, s8("gen repeat_dialogue 15141"), s8("repeat dialogue"), -1.0f, &x->repeat_dialogue);
 _ui_do_line_break(false);
 }
 

@@ -8,16 +8,16 @@
 #define LUCERNA_GAME
 #include "lucerna.h"
 
-//-
-// TODO(tbt):
+//-TODO:
+//
 //   - save game system
-//   - improved dev ui (or just use microui?)
 //   - make the player walk less weirdly
 //   - second pass on menus
 //   - cutscenes?
-//   - gameplay!!!!!!!
 //   - asset packing for release builds
-//-
+//   - gameplay!!!!!!!
+//
+//~
 
 #define gl_func(_type, _func) internal PFNGL ## _type ## PROC gl ## _func;
 #include "gl_funcs.h"
@@ -66,6 +66,127 @@ cm_Source *global_click_sound = NULL;
 
 
 //
+// NOTE(tbt): test new ui stuff
+//~
+
+internal void
+demo_ui(PlatformState *input,
+        F64 frametime_in_s,
+        S8 title)
+{
+ static F32 width  = 656.0f;
+ static F32 height = 574.0f;
+ 
+ ui_width(width, 1.0f) ui_height(height, 1.0f) ui_window(title)
+ {
+  ui_height(36.0f, 0.8f)
+  {
+   static B32 toggled;
+   
+   ui_width(999999.0f, 0.0f) ui_label(s8_from_format_string(&global_frame_memory,
+                                                            "window dimensions: %f x %f",
+                                                            width, height));
+   if (global_ui_context.hot)
+   {
+    ui_width(999999.0f, 0.0f) ui_label(s8_concatenate(&global_frame_memory,
+                                                      &global_frame_memory,
+                                                      2,
+                                                      s8("hot widget: "),
+                                                      global_ui_context.hot->key));
+   }
+   else
+   {
+    ui_width(999999.0f, 0.0f) ui_label(s8("no hot widget currently"));
+   }
+   
+   ui_width(99999999.0f, 0.0f) ui_row()
+   {
+    ui_width(150.0f, 0.0f)
+    {
+     if (ui_button(s8("make taller")))
+     {
+      height += 16.0f;
+     }
+     
+     if (ui_button(s8("make wider")))
+     {
+      width += 16.0f;
+     }
+     
+     if (ui_button(s8("make shorter")))
+     {
+      height -= 16.0f;
+     }
+     
+     if (ui_button(s8("make narrower")))
+     {
+      width -= 16.0f;
+     }
+    }
+   }
+   
+   static B32 is_memory = false;
+   ui_width(200.0f, 0.5f) ui_toggle_button(s8("level is memory"), &is_memory);
+   
+   if (is_memory)
+   {
+    global_current_level.kind = LEVEL_KIND_memory;
+   }
+   else
+   {
+    global_current_level.kind = LEVEL_KIND_world;
+   }
+   
+   ui_width(200.0f, 1.0f) ui_label(s8("list of toggles:"));
+   
+   ui_width(120.0f, 0.5f) ui_indent(32.0f)
+   {
+    static B32 toggleds[5] = {0};
+    for (I32 i = 0;
+         i < array_count(toggleds);
+         ++i)
+    {
+     F32 col_transition = clamp_f((F32)i / (F32)array_count(toggleds),
+                                  0.0f, 1.0f);
+     ui_colour(colour_literal(1.0f, col_transition, 1.0f - col_transition, 1.0f))
+      ui_toggle_button(s8_from_format_string(&global_frame_memory,
+                                             "- toggle %d", i),
+                       toggleds + i);
+    }
+   }
+   
+   ui_width(500.0f, 1.0f) ui_row()
+   {
+    ui_width(100.0f, 1.0f) ui_label(s8("player x:"));
+    ui_width(300.0f, 1.0f) ui_slider_f32(s8("player x slider"),
+                                         &global_current_level.player.x,
+                                         0.0f, 1920.0f);
+   }
+   ui_width(500.0f, 1.0f) ui_row()
+   {
+    ui_width(100.0f, 1.0f) ui_label(s8("player y:"));
+    ui_width(300.0f, 1.0f) ui_slider_f32(s8("player y slider"),
+                                         &global_current_level.player.y,
+                                         0.0f, 1080.0f);
+   }
+   ui_width(500.0f, 1.0f) ui_row()
+   {
+    ui_width(100.0f, 1.0f) ui_label(s8("exposure:"));
+    ui_width(300.0f, 1.0f) ui_slider_f32(s8("exposure slider"),
+                                         &global_exposure,
+                                         0.0f, 3.0f);
+   }
+   
+   ui_width(500.0f, 1.0f)
+   {
+    S8 test = ui_line_edit(s8("test line edit"));
+    ui_label(test);
+   }
+  }
+ }
+}
+
+//
 // NOTE(tbt): main loop for game_playing state
 //~
 
@@ -79,61 +200,9 @@ game_playing_main(PlatformState *input,
  hot_reload_shaders(frametime_in_s);
 #endif
  do_current_level(input, frametime_in_s);
- 
  ui_prepare(input, frametime_in_s);
- {
-  ui_width(1280.0f, 0.0f) ui_height(320.0f, 0.0f)
-   ui_window(s8_literal("test window"))
-  {
-   ui_height(48.0f, 0.0f)
-    ui_row()
-   {
-    ui_label(s8_literal("this is a test"));
-    
-    ui_width(256.0f, 0.0f) ui_height(32.0f, 0.0f)
-    {
-     if (ui_button(s8_literal("move up")))
-     {
-      global_current_level.player.y -= 32.0f;
-     }
-     
-     if (ui_button(s8_literal("move down")))
-     {
-      global_current_level.player.y += 32.0f;
-     }
-    }
-   }
-   
-   ui_height(48.0f, 0.0f)
-    ui_row()
-   {
-    static B32 text_is_red = false;
-    ui_width(250.0f, 0.0f) ui_height(32.0f, 0.0f)
-     ui_toggle_button(s8_literal("is this text red ->"),
-                      &text_is_red);
-    if (text_is_red)
-    {
-     ui_colour(colour_literal(1.0f, 0.0f, 0.0f, 1.0f))
-      ui_label(s8_literal("this text is red"));
-    }
-    else
-    {
-     ui_label(s8_literal("it's not red"));
-    }
-   }
-   
-   ui_height(48.0f, 0.0f)
-    ui_row()
-   {
-    ui_colour(colour_literal(1.0f, 0.0f, 0.0f, 1.0f))
-     ui_label(s8_literal("this is on another row!"));
-    
-    ui_label(s8_literal("this should fill the available space"));
-    
-    ui_label(s8_literal("here is yet another label..."));
-   }
-  }
- } ui_finish(input);
+ demo_ui(input, frametime_in_s, s8("test"));
+ ui_finish();
 }
 
 //
@@ -183,7 +252,7 @@ game_init(OpenGLFunctions *gl)
  cm_set_master_gain(global_audio_master_level);
  
  global_ui_font = load_font(&global_static_memory,
-                            s8_literal("../assets/fonts/mononoki.ttf"),
+                            s8("../assets/fonts/mononoki.ttf"),
                             19,
                             32, 255);
  
@@ -220,7 +289,7 @@ game_update_and_render(PlatformState *input,
  //
  // NOTE(tbt): debug extras
  //~
-#ifdef LUCERNA_DEBUG
+#if defined LUCERNA_DEBUG
  U8 debug_overlay_str[256];
  snprintf(debug_overlay_str,
           sizeof(debug_overlay_str),
@@ -231,13 +300,12 @@ game_update_and_render(PlatformState *input,
           global_current_level.player.x,
           global_current_level.player.y);
  
- /*draw_s8(global_ui_font,
+ draw_s8(global_ui_font,
          16.0f, 16.0f,
          -1.0f,
          colour_literal(1.0f, 1.0f, 1.0f, 1.0f),
-         s8_literal(debug_overlay_str),
-         UI_SORT_DEPTH, global_ui_projection_matrix);*/
- 
+         s8(debug_overlay_str),
+         UI_SORT_DEPTH, global_ui_projection_matrix);
  
  if (is_key_pressed(input,
                     KEY_v,
@@ -285,7 +353,7 @@ game_update_and_render(PlatformState *input,
          32.0f,
          200.0f,
          colour_literal(1.0f, 0.0f, 0.0f, 1.0f),
-         s8_literal("debug build"),
+         s8("debug build"),
          UI_SORT_DEPTH, global_ui_projection_matrix);
 #endif
  

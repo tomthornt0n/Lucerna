@@ -1,14 +1,19 @@
 //
-// NOTE(tbt): defines
+// NOTE(tbt): constants
 //~
 
-#define BATCH_SIZE 1024
-
-#define SHADER_INFO_LOG_MAX_LEN 4096
-
-
-#define BLUR_TEXTURE_SCALE 1 // NOTE(tbt): bitshift window dimensions right by this much to get size of blur texture
-#define BLOOM_BLUR_TEXTURE_SCALE 4 // NOTE(tbt): bitshift window dimensions right by this much to get size of blur texture used by the bloom for memory post processing
+enum
+{
+ BATCH_SIZE = 1024,
+ 
+ SHADER_INFO_LOG_MAX_LEN = 4096,
+ 
+ SCREEN_W_IN_WORLD_UNITS = 1920,
+ SCREEN_H_IN_WORLD_UNITS = 1080,
+ 
+ BLUR_TEXTURE_W = SCREEN_W_IN_WORLD_UNITS / 2,
+ BLUR_TEXTURE_H = SCREEN_H_IN_WORLD_UNITS / 2,
+};
 
 //
 // NOTE(tbt): types
@@ -224,7 +229,7 @@ measure_s32(Font *font,
             U32 wrap_width,
             S32 string)
 {
- Rect result = rectangle_literal(x, y, 0, 0);
+ Rect result = rect(x, y, 0, 0);
  
  F32 line_start = x;
  F32 curr_x = x, curr_y = y;
@@ -252,6 +257,7 @@ measure_s32(Font *font,
    }
    else
    {
+    result.w += b->xadvance;
     if (curr_x + b->xoff < result.x)
     {
      result.x = curr_x + b->xoff;
@@ -268,7 +274,6 @@ measure_s32(Font *font,
     {
      result.h = (curr_y + b->yoff2) - result.y;
     }
-    
     curr_x += b->xadvance;
    }
   }
@@ -338,7 +343,7 @@ generate_rotated_quad(Rect rectangle,
  //            and it is then translated to be at the intended position.
  //
  
- Rect at_origin = rectangle_literal(0.0f, 0.0f, rectangle.w, rectangle.h);
+ Rect at_origin = rect(0.0f, 0.0f, rectangle.w, rectangle.h);
  
  result = generate_quad(at_origin, colour, sub_texture);
  
@@ -370,7 +375,7 @@ generate_rotated_quad(Rect rectangle,
 #define renderer_compile_and_link_fragment_shader(_name, _vertex_shader)                                     \
 shader_src = cstring_from_s8(&global_static_memory,                                                         \
 platform_read_entire_file_p(&global_static_memory,                             \
-s8_literal("../assets/shaders/" #_name ".frag"))); \
+s8("../assets/shaders/" #_name ".frag"))); \
 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);                                                       \
 glShaderSource(fragment_shader, 1, &shader_src, NULL);                                                      \
 glCompileShader(fragment_shader);                                                                         \
@@ -404,7 +409,7 @@ exit(-1);                                                                       
 glDetachShader(global_rcx.shaders. ## _name, _vertex_shader);                                             \
 glDetachShader(global_rcx.shaders. ## _name, fragment_shader);                                            \
 glDeleteShader(fragment_shader);                                                                          \
-global_rcx.shaders.last_modified. ## _name = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"))
+global_rcx.shaders.last_modified. ## _name = platform_get_file_modified_time_p(s8("../assets/shaders/" #_name ".frag"))
 
 //
 // NOTE(tbt): get the location of all uniforms and save them in a global variable
@@ -448,13 +453,13 @@ hot_reload_shaders(F64 frametime_in_s)
  {
 #define shader(_name, _vertex_shader_name) \
 {\
-U64 last_modified = platform_get_file_modified_time_p(s8_literal("../assets/shaders/" #_name ".frag"));\
+U64 last_modified = platform_get_file_modified_time_p(s8("../assets/shaders/" #_name ".frag"));\
 if (last_modified > global_rcx.shaders.last_modified. ## _name) \
 {\
 renderer_flush_message_queue();\
 global_rcx.shaders.last_modified. ## _name = last_modified;\
 debug_log("hot reloading " #_name " shader\n");\
-shader_src = cstring_from_s8(&global_temp_memory, platform_read_entire_file_p(&global_temp_memory, s8_literal("../assets/shaders/" #_vertex_shader_name ".vert")));\
+shader_src = cstring_from_s8(&global_temp_memory, platform_read_entire_file_p(&global_temp_memory, s8("../assets/shaders/" #_vertex_shader_name ".vert")));\
 U32 _vertex_shader_name ## _vertex_shader = glCreateShader(GL_VERTEX_SHADER);\
 glShaderSource(_vertex_shader_name ## _vertex_shader, 1, &shader_src, NULL);\
 glCompileShader(_vertex_shader_name ## _vertex_shader);\
@@ -590,7 +595,6 @@ initialise_renderer(void)
  global_rcx.shaders.blur = glCreateProgram();
  global_rcx.shaders.text = glCreateProgram();
  global_rcx.shaders.post_processing = glCreateProgram();
- global_rcx.shaders.bloom_filter = glCreateProgram();
  global_rcx.shaders.memory_post_processing = glCreateProgram();
  const GLchar *shader_src;
  ShaderID default_vertex_shader, fullscreen_vertex_shader;
@@ -601,7 +605,7 @@ initialise_renderer(void)
   // NOTE(tbt): compile the default vertex shader
   shader_src = cstring_from_s8(&global_temp_memory,
                                platform_read_entire_file_p(&global_temp_memory,
-                                                           s8_literal("../assets/shaders/default.vert")));
+                                                           s8("../assets/shaders/default.vert")));
   
   default_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(default_vertex_shader, 1, &shader_src, NULL);
@@ -628,7 +632,7 @@ initialise_renderer(void)
   // NOTE(tbt): compile the fullscreen vertex shader
   shader_src = cstring_from_s8(&global_temp_memory,
                                platform_read_entire_file_p(&global_temp_memory,
-                                                           s8_literal("../assets/shaders/fullscreen.vert")));
+                                                           s8("../assets/shaders/fullscreen.vert")));
   
   fullscreen_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(fullscreen_vertex_shader, 1, &shader_src, NULL);
@@ -653,13 +657,10 @@ initialise_renderer(void)
   debug_log("successfully compiled fullscreen vertex shader\n");
   
   // NOTE(tbt): attach vertex shaders to shader programs
-  glAttachShader(global_rcx.shaders.texture, default_vertex_shader);
-  glAttachShader(global_rcx.shaders.blur, fullscreen_vertex_shader);
-  glAttachShader(global_rcx.shaders.text, default_vertex_shader);
-  glAttachShader(global_rcx.shaders.post_processing, fullscreen_vertex_shader);
-  glAttachShader(global_rcx.shaders.bloom_filter, fullscreen_vertex_shader);
-  glAttachShader(global_rcx.shaders.memory_post_processing, fullscreen_vertex_shader);
+#define shader(_name, _vertex_shader_name) glAttachShader(global_rcx.shaders. ## _name, _vertex_shader_name ## _vertex_shader);
+#include "shader_list.h"
   
+  // NOTE(tbt): compile and line fragment shaders
 #define shader(_name, _vertex_shader_name) renderer_compile_and_link_fragment_shader(_name, _vertex_shader_name ## _vertex_shader);
 #include "shader_list.h"
   
@@ -688,8 +689,8 @@ initialise_renderer(void)
  glTexImage2D(GL_TEXTURE_2D,
               0,
               GL_RGBA8,
-              DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
-              DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
+              BLUR_TEXTURE_W,
+              BLUR_TEXTURE_H,
               0,
               GL_RGBA,
               GL_UNSIGNED_BYTE,
@@ -716,8 +717,8 @@ initialise_renderer(void)
  glTexImage2D(GL_TEXTURE_2D,
               0,
               GL_RGBA8,
-              DEFAULT_WINDOW_WIDTH >> BLUR_TEXTURE_SCALE,
-              DEFAULT_WINDOW_HEIGHT >> BLUR_TEXTURE_SCALE,
+              BLUR_TEXTURE_W,
+              BLUR_TEXTURE_H,
               0,
               GL_RGBA,
               GL_UNSIGNED_BYTE,
@@ -744,8 +745,8 @@ initialise_renderer(void)
  glTexImage2D(GL_TEXTURE_2D,
               0,
               GL_RGBA8,
-              DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
-              DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
+              BLUR_TEXTURE_W,
+              BLUR_TEXTURE_H,
               0,
               GL_RGBA,
               GL_UNSIGNED_BYTE,
@@ -772,8 +773,8 @@ initialise_renderer(void)
  glTexImage2D(GL_TEXTURE_2D,
               0,
               GL_RGBA8,
-              DEFAULT_WINDOW_WIDTH >> BLOOM_BLUR_TEXTURE_SCALE,
-              DEFAULT_WINDOW_HEIGHT >> BLOOM_BLUR_TEXTURE_SCALE,
+              BLUR_TEXTURE_W,
+              BLUR_TEXTURE_H,
               0,
               GL_RGBA,
               GL_UNSIGNED_BYTE,
@@ -831,7 +832,7 @@ initialise_renderer(void)
 internal void
 renderer_push_mask(Rect mask)
 {
- if (global_rcx.mask_stack_size < stack_array_size(global_rcx.mask_stack))
+ if (global_rcx.mask_stack_size < array_count(global_rcx.mask_stack))
  {
   global_rcx.mask_stack_size += 1;
   global_rcx.mask_stack[global_rcx.mask_stack_size] = mask;
@@ -847,6 +848,12 @@ renderer_pop_mask(void)
  }
 }
 
+internal Rect
+renderer_current_mask(void)
+{
+ return global_rcx.mask_stack[global_rcx.mask_stack_size];
+}
+
 //
 // NOTE(tbt): controls for render message queue
 //~
@@ -855,8 +862,8 @@ internal void
 renderer_enqueue_message(RenderMessage message)
 {
  RenderMessage *queued_message =
-  arena_allocate(&global_frame_memory,
-                 sizeof(*queued_message));
+  arena_push(&global_frame_memory,
+             sizeof(*queued_message));
  
  *queued_message = message;
  
@@ -1064,15 +1071,13 @@ do_post_processing(F32 exposure,
 // NOTE(tbt): more 'public' API that does not necessarily map to a render message
 //~
 
-#define SCREEN_WIDTH_IN_WORLD_UNITS 1920
-
-#define MOUSE_WORLD_X ((((F32)input->mouse_x / (F32)global_renderer_window_w) - 0.5f) * SCREEN_WIDTH_IN_WORLD_UNITS + global_camera_x)
-#define MOUSE_WORLD_Y ((((F32)input->mouse_y / (F32)global_renderer_window_h) - 0.5f) * (SCREEN_WIDTH_IN_WORLD_UNITS * ((F32)global_renderer_window_h / (F32)global_renderer_window_w)) + global_camera_y)
+#define MOUSE_WORLD_X ((((F32)input->mouse_x / (F32)global_renderer_window_w) - 0.5f) * SCREEN_W_IN_WORLD_UNITS + global_camera_x)
+#define MOUSE_WORLD_Y ((((F32)input->mouse_y / (F32)global_renderer_window_h) - 0.5f) * (SCREEN_W_IN_WORLD_UNITS * ((F32)global_renderer_window_h / (F32)global_renderer_window_w)) + global_camera_y)
 
 internal void
 renderer_recalculate_world_projection_matrix(void)
 {
- static F32 half_screen_width_in_world_units = (F32)(SCREEN_WIDTH_IN_WORLD_UNITS >> 1);
+ static F32 half_screen_width_in_world_units = (F32)(SCREEN_W_IN_WORLD_UNITS >> 1);
  
  F32 aspect = (F32)global_rcx.window.h / (F32)global_rcx.window.w;
  
@@ -1089,53 +1094,9 @@ set_renderer_window_size(U32 w, U32 h)
  global_rcx.window.w = w;
  global_rcx.window.h = h;
  
- global_rcx.mask_stack[0] = rectangle_literal(0.0f, 0.0f, (F32)w, (F32)h);
+ global_rcx.mask_stack[0] = rect(0.0f, 0.0f, w, h);
  
  glViewport(0, 0, w, h);
- 
- glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_a.texture);
- glTexImage2D(GL_TEXTURE_2D,
-              0,
-              GL_RGBA8,
-              w >> BLUR_TEXTURE_SCALE,
-              h >> BLUR_TEXTURE_SCALE,
-              0,
-              GL_RGBA,
-              GL_UNSIGNED_BYTE,
-              NULL);
- 
- glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.blur_b.texture);
- glTexImage2D(GL_TEXTURE_2D,
-              0,
-              GL_RGBA8,
-              w >> BLUR_TEXTURE_SCALE,
-              h >> BLUR_TEXTURE_SCALE,
-              0,
-              GL_RGBA,
-              GL_UNSIGNED_BYTE,
-              NULL);
- 
- glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_a.texture);
- glTexImage2D(GL_TEXTURE_2D,
-              0,
-              GL_RGBA8,
-              w >> BLOOM_BLUR_TEXTURE_SCALE,
-              h >> BLOOM_BLUR_TEXTURE_SCALE,
-              0,
-              GL_RGBA,
-              GL_UNSIGNED_BYTE,
-              NULL);
- 
- glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.bloom_blur_b.texture);
- glTexImage2D(GL_TEXTURE_2D,
-              0,
-              GL_RGBA8,
-              w >> BLOOM_BLUR_TEXTURE_SCALE,
-              h >> BLOOM_BLUR_TEXTURE_SCALE,
-              0,
-              GL_RGBA,
-              GL_UNSIGNED_BYTE,
-              NULL);
  
  glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
  glTexImage2D(GL_TEXTURE_2D,
@@ -1336,7 +1297,7 @@ renderer_flush_message_queue()
     if (batch.texture != global_rcx.flat_colour_texture ||
         batch.shader != global_rcx.shaders.texture||
         batch.projection_matrix != message.projection_matrix ||
-        batch.quad_count >= BATCH_SIZE ||
+        batch.quad_count >= BATCH_SIZE - 4 || // NOTE(tbt): 4 quads to stroke a rectangle
         !rect_match(batch.mask, message.mask) ||
         !(batch.in_use))
     {
@@ -1352,31 +1313,33 @@ renderer_flush_message_queue()
     
     stroke_width = message.stroke_width;
     
-    top = rectangle_literal(message.rectangle.x,
-                            message.rectangle.y,
-                            message.rectangle.w,
-                            stroke_width);
+    top = rect(message.rectangle.x,
+               message.rectangle.y,
+               message.rectangle.w,
+               stroke_width);
     
-    bottom = rectangle_literal(message.rectangle.x,
-                               message.rectangle.y +
-                               message.rectangle.h,
-                               message.rectangle.w,
-                               -stroke_width);
+    bottom = rect(message.rectangle.x,
+                  message.rectangle.y +
+                  message.rectangle.h -
+                  stroke_width,
+                  message.rectangle.w,
+                  stroke_width);
     
-    left = rectangle_literal(message.rectangle.x,
-                             message.rectangle.y +
-                             stroke_width,
-                             stroke_width,
-                             message.rectangle.h -
-                             stroke_width * 2);
+    left = rect(message.rectangle.x,
+                message.rectangle.y +
+                stroke_width,
+                stroke_width,
+                message.rectangle.h -
+                stroke_width * 2);
     
-    right = rectangle_literal(message.rectangle.x +
-                              message.rectangle.w,
-                              message.rectangle.y +
-                              stroke_width,
-                              -stroke_width,
-                              message.rectangle.h -
-                              stroke_width * 2);
+    right = rect(message.rectangle.x +
+                 message.rectangle.w -
+                 stroke_width,
+                 message.rectangle.y +
+                 stroke_width,
+                 stroke_width,
+                 message.rectangle.h -
+                 stroke_width * 2);
     
     batch.buffer[batch.quad_count++] =
      generate_quad(top,
@@ -1459,15 +1422,26 @@ renderer_flush_message_queue()
       sub_texture.max_x = q.s1;
       sub_texture.max_y = q.t1;
       
-      rectangle = rectangle_literal(q.x0, q.y0,
-                                    q.x1 - q.x0,
-                                    q.y1 - q.y0);
+      rectangle = rect(q.x0, q.y0,
+                       q.x1 - q.x0,
+                       q.y1 - q.y0);
       
-      batch.buffer[batch.quad_count++] =
-       generate_quad(rectangle,
-                     message.colour,
-                     sub_texture);
-      
+      if (batch.quad_count >= BATCH_SIZE)
+      {
+       renderer_flush_batch(&batch);
+       
+       batch.shader = global_rcx.shaders.text;
+       batch.texture = message.font->texture.id;
+       batch.projection_matrix = message.projection_matrix;
+       batch.mask = message.mask;
+      }
+      else
+      {
+       batch.buffer[batch.quad_count++] =
+        generate_quad(rectangle,
+                      message.colour,
+                      sub_texture);
+      }
       if (wrap_width > 0.0f &&
           isspace(consume.codepoint))
       {
@@ -1494,10 +1468,7 @@ renderer_flush_message_queue()
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.blur_a.target);
     
-    glViewport(0,
-               0,
-               global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-               global_rcx.window.h >> BLUR_TEXTURE_SCALE);
+    glViewport(0, 0, BLUR_TEXTURE_W, BLUR_TEXTURE_H);
     
     glBlitFramebuffer(0,
                       0,
@@ -1505,8 +1476,8 @@ renderer_flush_message_queue()
                       global_rcx.window.h,
                       0,
                       0,
-                      global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                      global_rcx.window.h >> BLUR_TEXTURE_SCALE,
+                      BLUR_TEXTURE_W,
+                      BLUR_TEXTURE_H,
                       GL_COLOR_BUFFER_BIT,
                       GL_LINEAR);
     
@@ -1545,16 +1516,17 @@ renderer_flush_message_queue()
               message.mask.w,
               message.mask.h);
     
-    I32 x0, y0 , x1, y1;
-    x0 = message.rectangle.x;
-    x1 = message.rectangle.x + message.rectangle.w;
-    y0 = global_rcx.window.h - message.rectangle.y;
-    y1 = global_rcx.window.h - message.rectangle.y - message.rectangle.h;
+    F32 x0 = message.rectangle.x;
+    F32 y0 = global_rcx.window.h - message.rectangle.y;
+    F32 x1 = message.rectangle.x + message.rectangle.w;
+    F32 y1 = global_rcx.window.h - message.rectangle.y - message.rectangle.h;
     
-    glBlitFramebuffer(x0 >> BLUR_TEXTURE_SCALE,
-                      y0 >> BLUR_TEXTURE_SCALE,
-                      x1 >> BLUR_TEXTURE_SCALE,
-                      y1 >> BLUR_TEXTURE_SCALE,
+    F32 x_scale = (F32)BLUR_TEXTURE_W / (F32)global_rcx.window.w;
+    F32 y_scale = (F32)BLUR_TEXTURE_H / (F32)global_rcx.window.h;
+    glBlitFramebuffer(x0 * x_scale,
+                      y0 * y_scale,
+                      x1 * x_scale,
+                      y1 * y_scale,
                       x0, y0, x1, y1,
                       GL_COLOR_BUFFER_BIT,
                       GL_LINEAR);
@@ -1633,10 +1605,9 @@ renderer_flush_message_queue()
    {
     renderer_flush_batch(&batch);
     
-    glScissor(message.mask.x,
-              global_rcx.window.h - message.mask.y - message.mask.h,
-              message.mask.w,
-              message.mask.h);
+    glDisable(GL_SCISSOR_TEST);
+    
+    //-NOTE(tbt): setup for relevant post processing kind
     
     U32 post_shader;
     Framebuffer *blur_framebuffer_1;
@@ -1662,76 +1633,40 @@ renderer_flush_message_queue()
      break;
     }
     
-    // NOTE(tbt): blit screen to framebuffers
+    //-NOTE(tbt): blit screen to framebuffers
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, global_rcx.framebuffers.post_processing.target);
-    glBlitFramebuffer(0,
-                      0,
-                      global_rcx.window.w,
-                      global_rcx.window.h,
-                      0,
-                      0,
-                      global_rcx.window.w,
-                      global_rcx.window.h,
-                      GL_COLOR_BUFFER_BIT,
-                      GL_LINEAR);
+    {
+     glBlitFramebuffer(0, 0, global_rcx.window.w, global_rcx.window.h,
+                       0, 0, global_rcx.window.w, global_rcx.window.h,
+                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    }
     
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blur_framebuffer_1->target);
-    
-    if (message.post_processing_kind == POST_PROCESSING_KIND_world)
     {
-     glViewport(0,
-                0,
-                global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                global_rcx.window.h >> BLUR_TEXTURE_SCALE);
-     
-     glBlitFramebuffer(0,
-                       0,
-                       global_rcx.window.w,
-                       global_rcx.window.h,
-                       0,
-                       0,
-                       global_rcx.window.w >> BLUR_TEXTURE_SCALE,
-                       global_rcx.window.h >> BLUR_TEXTURE_SCALE,
-                       GL_COLOR_BUFFER_BIT,
-                       GL_LINEAR);
-    }
-    else if (message.post_processing_kind == POST_PROCESSING_KIND_memory)
-    {
-     glViewport(0,
-                0,
-                global_rcx.window.w >> BLOOM_BLUR_TEXTURE_SCALE,
-                global_rcx.window.h >> BLOOM_BLUR_TEXTURE_SCALE);
-     
-     glUseProgram(global_rcx.shaders.bloom_filter);
-     glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
-     glDrawArrays(GL_TRIANGLES, 0, 6);
+     glViewport(0, 0, BLUR_TEXTURE_W, BLUR_TEXTURE_H);
+     glBlitFramebuffer(0, 0, global_rcx.window.w, global_rcx.window.h,
+                       0, 0, BLUR_TEXTURE_W, BLUR_TEXTURE_H,
+                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
     }
     
-    // NOTE(tbt): blur for bloom
+    //-NOTE(tbt): blur for bloom
     glUseProgram(global_rcx.shaders.blur);
     
+    // NOTE(tbt): apply first (horizontal) blur pass
+    glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_2->target);
+    glUniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
+    glBindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     
-    const I32 blur_passes = 2;
-    for (I32 i = 0;
-         i < blur_passes;
-         ++i)
-    {
-     // NOTE(tbt): apply first (horizontal) blur pass
-     glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_2->target);
-     glUniform2f(global_rcx.uniform_locations.blur.direction, 1.0f, 0.0f);
-     glBindTexture(GL_TEXTURE_2D, blur_framebuffer_1->texture);
-     glDrawArrays(GL_TRIANGLES, 0, 6);
-     
-     // NOTE(tbt): apply second (vertical) blur pass
-     glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_1->target);
-     glUniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
-     glBindTexture(GL_TEXTURE_2D, blur_framebuffer_2->texture);
-     glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    // NOTE(tbt): apply second (vertical) blur pass
+    glBindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer_1->target);
+    glUniform2f(global_rcx.uniform_locations.blur.direction, 0.0f, 1.0f);
+    glBindTexture(GL_TEXTURE_2D, blur_framebuffer_2->texture);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     
-    // NOTE(tbt): blend back to screen
+    //-NOTE(tbt): blend back to screen
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     
     glUseProgram(post_shader);
@@ -1745,10 +1680,13 @@ renderer_flush_message_queue()
     glBindTexture(GL_TEXTURE_2D, global_rcx.framebuffers.post_processing.texture);
     glUniform1i(uniforms->screen_texture, 1);
     
-    glViewport(0,
-               0,
-               global_rcx.window.w,
-               global_rcx.window.h);
+    glViewport(0, 0, global_rcx.window.w, global_rcx.window.h);
+    
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(message.mask.x,
+              global_rcx.window.h - message.mask.y - message.mask.h,
+              message.mask.w,
+              message.mask.h);
     
     glDrawArrays(GL_TRIANGLES, 0, 6);
     

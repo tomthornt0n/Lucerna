@@ -1,7 +1,7 @@
 internal void *
 malloc_for_stb(U64 size)
 {
- return arena_allocate(&global_temp_memory, size);
+ return arena_push(&global_temp_memory, size);
 }
 
 internal void *
@@ -9,7 +9,7 @@ realloc_for_stb(void *p,
                 U64 old_size,
                 U64 new_size)
 {
- void *result = arena_allocate(&global_temp_memory, new_size);
+ void *result = arena_push(&global_temp_memory, new_size);
  memcpy(result, p, old_size);
  return result;
 }
@@ -68,7 +68,7 @@ path_from_texture_path(MemoryArena *memory,
 {
  S8List *list = NULL;
  list = push_s8_to_list(&global_frame_memory, list, path);
- list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/textures/"));
+ list = push_s8_to_list(&global_frame_memory, list, s8("../assets/textures/"));
  return join_s8_list(memory, list);
 }
 
@@ -78,7 +78,7 @@ path_from_audio_path(MemoryArena *memory,
 {
  S8List *list = NULL;
  list = push_s8_to_list(&global_frame_memory, list, path);
- list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/audio/"));
+ list = push_s8_to_list(&global_frame_memory, list, s8("../assets/audio/"));
  return join_s8_list(memory, list);
 }
 
@@ -88,9 +88,9 @@ path_from_dialogue_path(MemoryArena *memory,
 {
  S8List *list = NULL;
  list = push_s8_to_list(&global_frame_memory, list, path);
- list = push_s8_to_list(&global_frame_memory, list, s8_literal("/"));
+ list = push_s8_to_list(&global_frame_memory, list, s8("/"));
  list = push_s8_to_list(&global_frame_memory, list, s8_from_locale(&global_frame_memory, global_current_locale_config.locale));
- list = push_s8_to_list(&global_frame_memory, list, s8_literal("../assets/dialogue/"));
+ list = push_s8_to_list(&global_frame_memory, list, s8("../assets/dialogue/"));
  return join_s8_list(memory, list);
 }
 
@@ -134,12 +134,12 @@ load_texture(S8 path,
    result->width = width;
    result->height = height;
    
-   debug_log("successfully loaded texture: '%.*s'\n", (I32)path.size, path.buffer);
+   debug_log("successfully loaded texture: '%.*s'\n", unravel_s8(path));
    success = true;
   }
   else
   {
-   debug_log("error loading texture: '%.*s'\n", (I32)path.size, path.buffer);
+   debug_log("error loading texture: '%.*s'\n", unravel_s8(path));
    success = false;
   }
  }
@@ -193,15 +193,15 @@ load_font(MemoryArena *memory,
 {
  Font *result = NULL;
  
- I32 font_texture_w = 2048 * 4;
- I32 font_texture_h = 2048 * 4;
+ I32 font_texture_w = 8192;
+ I32 font_texture_h = 8192;
  
  arena_temporary_memory(&global_temp_memory)
  {
   S8 file = platform_read_entire_file_p(&global_temp_memory, path);
   if (file.buffer)
   {
-   U8 *bitmap = arena_allocate(&global_temp_memory, font_texture_w * font_texture_h);
+   U8 *bitmap = arena_push(&global_temp_memory, font_texture_w * font_texture_h);
    
    stbtt_pack_context packing_context;
    if (stbtt_PackBegin(&packing_context,
@@ -210,9 +210,9 @@ load_font(MemoryArena *memory,
                        0, 1, NULL))
     
    {
-    result = arena_allocate(memory, sizeof(*result));
+    result = arena_push(memory, sizeof(*result));
     
-    result->char_data = arena_allocate(memory, sizeof(result->char_data[0]) * font_bake_count);
+    result->char_data = arena_push(memory, sizeof(result->char_data[0]) * font_bake_count);
     
     stbtt_PackFontRange(&packing_context,
                         file.buffer,

@@ -36,12 +36,12 @@ set_locale(Locale locale)
   U32 font_bake_end = 255;
   
   global_current_locale_config.normal_font = load_font(&global_static_memory,
-                                                       s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
+                                                       s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
   global_current_locale_config.title_font = load_font(&global_static_memory,
-                                                      s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
+                                                      s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
                                                       font_bake_end - font_bake_begin);
@@ -60,12 +60,12 @@ set_locale(Locale locale)
   U32 font_bake_end = 255;
   
   global_current_locale_config.normal_font = load_font(&global_static_memory,
-                                                       s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
+                                                       s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
   global_current_locale_config.title_font = load_font(&global_static_memory,
-                                                      s8_literal("../assets/fonts/PlayfairDisplay-Regular.ttf"),
+                                                      s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
                                                       font_bake_end - font_bake_begin);
@@ -84,12 +84,12 @@ set_locale(Locale locale)
   U32 font_bake_end = 0x9FFF;
   
   global_current_locale_config.normal_font = load_font(&global_static_memory,
-                                                       s8_literal("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
+                                                       s8("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
   global_current_locale_config.title_font = load_font(&global_static_memory,
-                                                      s8_literal("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
+                                                      s8("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
                                                       font_bake_end - font_bake_begin);
@@ -107,7 +107,7 @@ s8_from_locale(MemoryArena *memory,
                Locale locale)
 {
  S8 string;
-#define locale(_locale) if (locale == LOCALE_ ## _locale) { string = s8_literal(#_locale); }
+#define locale(_locale) if (locale == LOCALE_ ## _locale) { string = s8(#_locale); }
 #include "locales.h"
  
  return copy_s8(memory, string);

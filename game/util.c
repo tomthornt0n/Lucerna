@@ -1,15 +1,28 @@
 #include <immintrin.h>
 
-#define stack_array_size(_arr) (sizeof(_arr) / sizeof(_arr[0]))
+#define array_count(_arr) (sizeof(_arr) / sizeof(_arr[0]))
 
 #define defer_loop(_begin, _end) for (I32 _i = ((_begin), 0); !_i; ((_end), (_i = 1)))
 
-#define rectangle_literal(_x, _y, _w, _h) ((Rect){ (_x), (_y), (_w), (_h) })
 typedef struct
 {
  F32 x, y;
  F32 w, h;
 } Rect;
+
+internal Rect
+rect(F32 x,
+     F32 y,
+     F32 w,
+     F32 h)
+{
+ Rect result;
+ result.x = x;
+ result.y = y;
+ result.w = w;
+ result.h = h;
+ return result;
+}
 
 #define colour_literal(_r, _g, _b, _a) ((Colour){ (_r), (_g), (_b), (_a) })
 #define WHITE colour_literal(1.0f, 1.0f, 1.0f, 1.0f)
@@ -101,26 +114,39 @@ clamp_u(U64 n,
 }
 
 internal inline Rect
-offset_rectangle(Rect rectangle,
-                 F32 offset_x, F32 offset_y)
+offset_rect(Rect rectangle,
+            F32 offset_x, F32 offset_y)
 {
- return rectangle_literal(rectangle.x + offset_x,
-                          rectangle.y + offset_y,
-                          rectangle.w,
-                          rectangle.h);
+ return rect(rectangle.x + offset_x,
+             rectangle.y + offset_y,
+             rectangle.w,
+             rectangle.h);
 }
 
-internal inline Colour
-colour_lerp(Colour a,
-            Colour b,
-            F32 t)
+internal Rect
+rect_at_intersection(Rect a,
+                     Rect b)
 {
- Colour result;
+ Rect result;
  
- result.r = (a.r * t) + (b.r * (1.0f - t));
- result.g = (a.g * t) + (b.g * (1.0f - t));
- result.b = (a.b * t) + (b.b * (1.0f - t));
- result.a = (a.a * t) + (b.a * (1.0f - t));
+ struct AABB
+ {
+  F32 min[2];
+  F32 max[2];
+ };
+ struct AABB _a = { { a.x, a.y }, { a.x + a.w, a.y + a.h} };
+ struct AABB _b = { { b.x, b.y }, { b.x + b.w, b.y + b.h} };
+ 
+ struct AABB _result;
+ _result.min[0] = max_f(_a.min[0], _b.min[0]);
+ _result.min[1] = max_f(_a.min[1], _b.min[1]);
+ _result.max[0] = min_f(_a.max[0], _b.max[0]);
+ _result.max[1] = min_f(_a.max[1], _b.max[1]);
+ 
+ result.x = _result.min[0];
+ result.y = _result.min[1];
+ result.w = max_f(0.0f, _result.max[0] - _result.min[0]);
+ result.h = max_f(0.0f, _result.max[1] - _result.min[1]);
  
  return result;
 }
@@ -140,8 +166,8 @@ rect_match(Rect a,
 }
 
 internal inline B32
-are_rectangles_intersecting(Rect a,
-                            Rect b)
+are_rects_intersecting(Rect a,
+                       Rect b)
 {
  if (a.x + a.w < b.x || a.x > b.x + b.w) { return false; }
  if (a.y + a.h < b.y || a.y > b.y + b.h) { return false; }
@@ -149,39 +175,26 @@ are_rectangles_intersecting(Rect a,
 }
 
 internal inline B32
-is_point_in_region(F32 x, F32 y,
-                   Rect region)
+is_point_in_rect(F32 x, F32 y,
+                 Rect region)
 {
- return !(x < region.x              ||
-          y < region.y              ||
+ return !(x < region.x ||
+          y < region.y ||
           x > (region.x + region.w) ||
           y > (region.y + region.h));
 }
 
-internal void
-matrix_transform_point(F32 x, F32 y,
-                       F32 *matrix, // NOTE(tbt): 4x4 matrix
-                       F32 *result_x,
-                       F32 *result_y)
+internal inline Colour
+colour_lerp(Colour a,
+            Colour b,
+            F32 t)
 {
- F32 vector[4] = { x, y, 0.0f, 0.0f };
+ Colour result;
  
- __m128 vector_column = _mm_load_ps(vector);
- __m128 matrix_row, res;
- F32 mul_results[4];
+ result.r = (a.r * t) + (b.r * (1.0f - t));
+ result.g = (a.g * t) + (b.g * (1.0f - t));
+ result.b = (a.b * t) + (b.b * (1.0f - t));
+ result.a = (a.a * t) + (b.a * (1.0f - t));
  
- matrix_row = _mm_load_ps(matrix);
- res = _mm_mul_ps(matrix_row, vector_column);
- _mm_store_ps(mul_results, res);
- 
- *result_x = mul_results[0] + mul_results[1] + mul_results[2] + mul_results[3];
- 
- //-
- 
- matrix_row = _mm_load_ps(matrix + 4);
- res = _mm_mul_ps(matrix_row, vector_column);
- _mm_store_ps(mul_results, res);
- 
- *result_x = mul_results[0] + mul_results[1] + mul_results[2] + mul_results[3];
+ return result;
 }
-

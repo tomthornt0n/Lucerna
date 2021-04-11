@@ -4,7 +4,7 @@
 
 current_entity_version := 1;
 
-@c_struct @gen_editor_ui
+@c_struct
 @serialisable @version=current_entity_version
 Entity
 {

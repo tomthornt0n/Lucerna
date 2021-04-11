@@ -1,27 +1,44 @@
-#define UI_SORT_DEPTH 128
+//-TODO: 
+//
+//  - window sorting
+//
+//~
 
-#define UI_ANIMATION_SPEED 0.1f
+enum { UI_SORT_DEPTH = 128 };
 
+#define UI_ANIMATION_SPEED (5.0 * frametime_in_s)
+
+//~
 typedef U64 UIWidgetFlags;
 typedef enum UIWidgetFlags_ENUM
 {
- // NOTE(tbt): drawing
- UI_WIDGET_FLAG_draw_outline    = 1 << 0,
- UI_WIDGET_FLAG_draw_background = 1 << 1,
- UI_WIDGET_FLAG_draw_label      = 1 << 2,
- UI_WIDGET_FLAG_hot_effect      = 1 << 3,
- UI_WIDGET_FLAG_active_effect   = 1 << 4,
+ //-NOTE(tbt): drawing
+ UI_WIDGET_FLAG_draw_outline       = 1 <<  0,
+ UI_WIDGET_FLAG_draw_background    = 1 <<  1,
+ UI_WIDGET_FLAG_draw_label         = 1 <<  2,
+ UI_WIDGET_FLAG_blur_background    = 1 <<  3,
+ UI_WIDGET_FLAG_hot_effect         = 1 <<  4,
+ UI_WIDGET_FLAG_active_effect      = 1 <<  5,
+ UI_WIDGET_FLAG_toggled_effect     = 1 <<  6,
+ UI_WIDGET_FLAG_draw_cursor        = 1 <<  7,
  
- // NOTE(tbt): interaction
- UI_WIDGET_FLAG_clickable       = 1 << 5,
- UI_WIDGET_FLAG_draggable_x     = 1 << 6,
- UI_WIDGET_FLAG_draggable_y     = 1 << 7,
+ //-NOTE(tbt): interaction
+ UI_WIDGET_FLAG_no_input           = 1 <<  8,
+ UI_WIDGET_FLAG_clickable          = 1 <<  9,
+ UI_WIDGET_FLAG_draggable_x        = 1 << 10,
+ UI_WIDGET_FLAG_draggable_y        = 1 << 11,
+ UI_WIDGET_FLAG_keyboard_focusable = 1 << 12,
+ 
+ //-NOTE(tbt): convenience
+ UI_WIDGET_FLAG_draggable       = UI_WIDGET_FLAG_draggable_x | UI_WIDGET_FLAG_draggable_y,
 } UIWidgetFlags_ENUM;
+
+//~
 
 typedef enum
 {
- UI_LAYOUT_PLACEMENT_horizontal,
  UI_LAYOUT_PLACEMENT_vertical,
+ UI_LAYOUT_PLACEMENT_horizontal,
 } UILayoutPlacement;
 
 typedef struct
@@ -29,6 +46,8 @@ typedef struct
  F32 dim;
  F32 strictness;
 } UIDimension;
+
+//~
 
 typedef struct UIWidget UIWidget;
 struct UIWidget
@@ -40,16 +59,21 @@ struct UIWidget
  UIWidget *last_child;
  UIWidget *next_sibling;
  UIWidget *parent;
+ U32 child_count;
  
  UIWidget *next_insertion_point;
+ 
+ UIWidget *next_keyboard_focus;
+ UIWidget *prev_keyboard_focus;
  
  // NOTE(tbt): processed when the widget is updated
  B32_s hot;
  B32_s active;
  B32 clicked;
- B32 dragging;
  F32 drag_x, drag_y;
  F32 drag_x_offset, drag_y_offset;
+ B32_s toggled_transition;
+ B32_s keyboard_focused_transition;
  
  // NOTE(tbt): passed in
  UIWidgetFlags flags;
@@ -61,27 +85,37 @@ struct UIWidget
  Colour active_background;
  UIDimension w;
  UIDimension h;
+ F32 indent;
+ Font *font;
  S8 label;
  UILayoutPlacement children_placement;
+ B32 toggled;
+ U32 cursor;
  
  // NOTE(tbt): calculated by the measurement pass
  struct
  {
-  // NOTE(tbt): measure the desired width and height - final size may be reduced
+  // NOTE(tbt): the desired width and height - may be reduced during layouting
   F32 w;
   F32 h;
   
   // NOTE(tbt): the maximum amount the width and height can be reduced by to make the layout work
   F32 w_can_loose;
   F32 h_can_loose;
+  
+  // NOTE(tbt): sum of the children's above (including padding)
+  F32 children_total_w;
+  F32 children_total_h;
+  F32 children_total_w_can_loose;
+  F32 children_total_h_can_loose;
  } measure;
  
  // NOTE(tbt): calculated by the layout pass
  Rect layout;
+ 
+ Rect interactable;
 };
 
-//
-// NOTE(tbt): all UI state
 //~
 
 struct
@@ -111,15 +145,26 @@ struct
  Colour active_background_stack[64];
  U32 active_background_stack_size;
  
+ F32 indent_stack[64];
+ U32 indent_stack_size;
+ 
+ Font *font_stack[64];
+ U32 font_stack_size;
+ 
  F32 padding;
  F32 stroke_width;
  
  UIWidget root;
  UIWidget *insertion_point;
  
+ UIWidget *hot;
+ 
+ UIWidget *first_keyboard_focus;
+ UIWidget *last_keyboard_focus;
+ UIWidget *keyboard_focus;
+ 
  UIWidget widget_dict[4096];
  
- // NOTE(tbt): cheat stuff that is normaly explicitly parameterised
  F64 frametime_in_s;
  PlatformState *input;
 } global_ui_context = {{{0}}};
@@ -134,7 +179,7 @@ internal void
 ui_push_width(F32 w,
               F32 strictness)
 {
- if (global_ui_context.w_stack_size < stack_array_size(global_ui_context.w_stack))
+ if (global_ui_context.w_stack_size < array_count(global_ui_context.w_stack))
  {
   global_ui_context.w_stack_size += 1;
   global_ui_context.w_stack[global_ui_context.w_stack_size].dim = w;
@@ -159,7 +204,7 @@ internal void
 ui_push_height(F32 h,
                F32 strictness)
 {
- if (global_ui_context.h_stack_size < stack_array_size(global_ui_context.h_stack))
+ if (global_ui_context.h_stack_size < array_count(global_ui_context.h_stack))
  {
   global_ui_context.h_stack_size += 1;
   global_ui_context.h_stack[global_ui_context.h_stack_size].dim = h;
@@ -183,7 +228,7 @@ ui_pop_height(void)
 internal void
 ui_push_colour(Colour colour)
 {
- if (global_ui_context.colour_stack_size < stack_array_size(global_ui_context.colour_stack))
+ if (global_ui_context.colour_stack_size < array_count(global_ui_context.colour_stack))
  {
   global_ui_context.colour_stack_size += 1;
   global_ui_context.colour_stack[global_ui_context.colour_stack_size] = colour;
@@ -206,7 +251,7 @@ ui_pop_colour(void)
 internal void
 ui_push_background(Colour colour)
 {
- if (global_ui_context.background_stack_size < stack_array_size(global_ui_context.background_stack))
+ if (global_ui_context.background_stack_size < array_count(global_ui_context.background_stack))
  {
   global_ui_context.background_stack_size += 1;
   global_ui_context.background_stack[global_ui_context.background_stack_size] = colour;
@@ -229,7 +274,7 @@ ui_pop_background(void)
 internal void
 ui_push_active_colour(Colour colour)
 {
- if (global_ui_context.active_colour_stack_size < stack_array_size(global_ui_context.active_colour_stack))
+ if (global_ui_context.active_colour_stack_size < array_count(global_ui_context.active_colour_stack))
  {
   global_ui_context.active_colour_stack_size += 1;
   global_ui_context.active_colour_stack[global_ui_context.active_colour_stack_size] = colour;
@@ -252,7 +297,7 @@ ui_pop_active_colour(void)
 internal void
 ui_push_active_background(Colour colour)
 {
- if (global_ui_context.active_background_stack_size < stack_array_size(global_ui_context.active_background_stack))
+ if (global_ui_context.active_background_stack_size < array_count(global_ui_context.active_background_stack))
  {
   global_ui_context.active_background_stack_size += 1;
   global_ui_context.active_background_stack[global_ui_context.active_background_stack_size] = colour;
@@ -275,7 +320,7 @@ ui_pop_active_background(void)
 internal void
 ui_push_hot_colour(Colour colour)
 {
- if (global_ui_context.hot_colour_stack_size < stack_array_size(global_ui_context.hot_colour_stack))
+ if (global_ui_context.hot_colour_stack_size < array_count(global_ui_context.hot_colour_stack))
  {
   global_ui_context.hot_colour_stack_size += 1;
   global_ui_context.hot_colour_stack[global_ui_context.hot_colour_stack_size] = colour;
@@ -298,7 +343,7 @@ ui_pop_hot_colour(void)
 internal void
 ui_push_hot_background(Colour colour)
 {
- if (global_ui_context.hot_background_stack_size < stack_array_size(global_ui_context.hot_background_stack))
+ if (global_ui_context.hot_background_stack_size < array_count(global_ui_context.hot_background_stack))
  {
   global_ui_context.hot_background_stack_size += 1;
   global_ui_context.hot_background_stack[global_ui_context.hot_background_stack_size] = colour;
@@ -314,8 +359,54 @@ ui_pop_hot_background(void)
  }
 }
 
+//-
+
+#define ui_indent(_indent) defer_loop(ui_push_indent(_indent), ui_pop_indent())
+
+internal void
+ui_push_indent(F32 indent)
+{
+ if (global_ui_context.indent_stack_size < array_count(global_ui_context.indent_stack))
+ {
+  global_ui_context.indent_stack_size += 1;
+  global_ui_context.indent_stack[global_ui_context.indent_stack_size] = indent;
+ }
+}
+
+internal void
+ui_pop_indent(void)
+{
+ if (global_ui_context.indent_stack_size)
+ {
+  global_ui_context.indent_stack_size -= 1;
+ }
+}
+
+//-
+
+#define ui_font(_font) defer_loop(ui_push_font(_font), ui_pop_font())
+
+internal void
+ui_push_font(Font *font)
+{
+ if (global_ui_context.font_stack_size < array_count(global_ui_context.font_stack))
+ {
+  global_ui_context.font_stack_size += 1;
+  global_ui_context.font_stack[global_ui_context.font_stack_size] = font;
+ }
+}
+
+internal void
+ui_pop_font(void)
+{
+ if (global_ui_context.font_stack_size)
+ {
+  global_ui_context.font_stack_size -= 1;
+ }
+}
+
 //
-// NOTE(tbt): common
+// NOTE(tbt): internal
 //~
 
 internal void
@@ -345,6 +436,8 @@ ui_set_styles(UIWidget *widget)
  widget->hot_background = global_ui_context.hot_background_stack[global_ui_context.hot_background_stack_size];
  widget->active_colour = global_ui_context.active_colour_stack[global_ui_context.active_colour_stack_size];
  widget->active_background = global_ui_context.active_background_stack[global_ui_context.active_background_stack_size];
+ widget->indent = global_ui_context.indent_stack[global_ui_context.indent_stack_size];
+ widget->font = global_ui_context.font_stack[global_ui_context.font_stack_size];
 }
 
 internal void
@@ -360,21 +453,12 @@ ui_insert_widget(UIWidget *widget)
   global_ui_context.insertion_point->first_child = widget;
  }
  global_ui_context.insertion_point->last_child = widget;
+ 
+ global_ui_context.insertion_point->child_count += 1;
 }
 
 internal UIWidget *
-ui_create_stateless_widget(void)
-{
- UIWidget *result = arena_allocate(&global_frame_memory, sizeof(*result));
- 
- ui_set_styles(result);
- ui_insert_widget(result);
- 
- return result;
-}
-
-internal UIWidget *
-ui_create_widget(S8 identifier)
+ui_widget_from_string(S8 identifier)
 {
  UIWidget *result = NULL;
  
@@ -384,14 +468,16 @@ ui_create_widget(S8 identifier)
                                    identifier);
  identifier_list = push_s8_to_list(&global_frame_memory,
                                    identifier_list,
+                                   s8("\\"));
+ identifier_list = push_s8_to_list(&global_frame_memory,
+                                   identifier_list,
                                    global_ui_context.insertion_point->key);
- 
  S8 _identifier = join_s8_list(&global_frame_memory, identifier_list);
  
  U32 index = hash_s8(_identifier,
-                     stack_array_size(global_ui_context.widget_dict));
+                     array_count(global_ui_context.widget_dict));
  
- UIWidget *chain= global_ui_context.widget_dict + index;
+ UIWidget *chain = global_ui_context.widget_dict + index;
  
  if (s8_match(chain->key, _identifier))
   // NOTE(tbt): matching widget directly in hash table slot
@@ -421,7 +507,7 @@ ui_create_widget(S8 identifier)
   // NOTE(tbt): push a new widget to the chain if a match is not found
   if (NULL == result)
   {
-   result = arena_allocate(&global_static_memory, sizeof(*result));
+   result = arena_push(&global_static_memory, sizeof(*result));
    result->next_hash = global_ui_context.widget_dict[index].next_hash;
    result->key = copy_s8(&global_static_memory, _identifier);
    global_ui_context.widget_dict[index].next_hash = result;
@@ -436,6 +522,8 @@ ui_create_widget(S8 identifier)
  result->last_child = NULL;
  result->next_sibling = NULL;
  result->next_insertion_point = NULL;
+ result->next_keyboard_focus = NULL;
+ result->child_count = 0;
  
  ui_insert_widget(result);
  
@@ -451,31 +539,57 @@ ui_update_widget(UIWidget *widget)
  if (widget->flags & UI_WIDGET_FLAG_draw_label &&
      NULL == widget->label.buffer)
  {
-  widget->label = s8_literal("ERROR: label was NULL");
+  widget->label = s8("ERROR: label was NULL");
  }
  
  widget->clicked = false;
  
- if (is_point_in_region(input->mouse_x,
-                        input->mouse_y,
-                        widget->layout))
+ if (widget->flags & UI_WIDGET_FLAG_keyboard_focusable)
  {
-  widget->hot = min_f(widget->hot + UI_ANIMATION_SPEED, 1.0f);
+  if (global_ui_context.last_keyboard_focus)
+  {
+   global_ui_context.last_keyboard_focus->next_keyboard_focus = widget;
+  }
+  else
+  {
+   global_ui_context.first_keyboard_focus = widget;
+  }
+  widget->prev_keyboard_focus = global_ui_context.last_keyboard_focus;
+  global_ui_context.last_keyboard_focus = widget;
   
-  if (is_mouse_button_pressed(input,
-                              MOUSE_BUTTON_left,
-                              0))
+  if (widget == global_ui_context.keyboard_focus)
+  {
+   if (widget->flags & UI_WIDGET_FLAG_clickable &&
+       is_key_pressed(input, KEY_enter, 0))
+   {
+    widget->clicked = true;
+   }
+   
+   widget->keyboard_focused_transition = min_f(widget->keyboard_focused_transition + UI_ANIMATION_SPEED, 1.0f);
+  }
+  else
+  {
+   widget->keyboard_focused_transition = max_f(widget->keyboard_focused_transition - UI_ANIMATION_SPEED, 0.0f);
+  }
+ }
+ 
+ if (widget == global_ui_context.hot)
+ {
+  widget->hot += UI_ANIMATION_SPEED;
+  
+  if (is_mouse_button_pressed(input, MOUSE_BUTTON_left, 0))
   {
    if (widget->flags & UI_WIDGET_FLAG_clickable)
    {
     widget->active = true;
     widget->clicked = true;
+    cm_play(global_click_sound);
    }
    
    if (widget->flags & UI_WIDGET_FLAG_draggable_x ||
        widget->flags & UI_WIDGET_FLAG_draggable_y)
    {
-    widget->dragging = true;
+    widget->active = true;
     widget->drag_x_offset = input->mouse_x - widget->layout.x;
     widget->drag_y_offset = input->mouse_y - widget->layout.y;
    }
@@ -484,31 +598,47 @@ ui_update_widget(UIWidget *widget)
   {
    if (widget->flags & UI_WIDGET_FLAG_clickable)
    {
-    widget->active = max_f(widget->active - UI_ANIMATION_SPEED, 0.0f);
+    widget->active -= UI_ANIMATION_SPEED;
    }
   }
  }
  else
  {
-  widget->hot = max_f(widget->hot - UI_ANIMATION_SPEED, 0.0f);
+  widget->hot -= UI_ANIMATION_SPEED;
  }
  
- if (widget->dragging)
+ if (widget->active &&
+     widget->flags & UI_WIDGET_FLAG_draggable)
  {
   if (widget->flags & UI_WIDGET_FLAG_draggable_x)
   {
-   widget->drag_x = input->mouse_x;
+   widget->drag_x = input->mouse_x - widget->drag_x_offset - widget->parent->layout.x;
   }
   if (widget->flags & UI_WIDGET_FLAG_draggable_y)
   {
-   widget->drag_y = input->mouse_y;
+   widget->drag_y = input->mouse_y - widget->drag_y_offset - widget->parent->layout.y;
   }
   
   if (!input->is_mouse_button_down[MOUSE_BUTTON_left])
   {
-   widget->dragging = false;
+   widget->active = false;
   }
  }
+ 
+ if (widget->flags & UI_WIDGET_FLAG_toggled_effect)
+ {
+  if (widget->toggled)
+  {
+   widget->toggled_transition = min_f(widget->toggled_transition + UI_ANIMATION_SPEED, 1.0f);
+  }
+  else
+  {
+   widget->toggled_transition = max_f(widget->toggled_transition - UI_ANIMATION_SPEED, 0.0f);
+  }
+ }
+ 
+ widget->hot = clamp_f(widget->hot, 0.0f, 1.0f);
+ widget->active = clamp_f(widget->active, 0.0f, 1.0f);
 }
 
 internal void
@@ -516,25 +646,10 @@ ui_measurement_pass(UIWidget *root)
 {
  root->measure.w = root->w.dim;
  root->measure.h = root->h.dim;
- 
- if (root->flags & UI_WIDGET_FLAG_draw_label)
- {
-  Rect label_bounds = measure_s32(global_ui_font,
-                                  0.0f, 0.0f,
-                                  root->measure.w,
-                                  s32_from_s8(&global_frame_memory,
-                                              root->label));
-  if (label_bounds.w > root->measure.w)
-  {
-   root->measure.w = label_bounds.w;
-  }
-  
-  if (label_bounds.h > root->measure.h)
-  {
-   root->measure.h = label_bounds.h;
-  }
- }
- 
+ root->measure.children_total_w = 0.0f;
+ root->measure.children_total_h = 0.0f;
+ root->measure.children_total_w_can_loose = 0.0f;
+ root->measure.children_total_h_can_loose = 0.0f;
  root->measure.w_can_loose = (1.0f - root->w.strictness) * root->measure.w;
  root->measure.h_can_loose = (1.0f - root->h.strictness) * root->measure.h;
  
@@ -543,111 +658,88 @@ ui_measurement_pass(UIWidget *root)
       child = child->next_sibling)
  {
   ui_measurement_pass(child);
+  root->measure.children_total_w += child->measure.w + global_ui_context.padding + child->indent;
+  root->measure.children_total_h += child->measure.h + global_ui_context.padding;
+  root->measure.children_total_w_can_loose += child->measure.w_can_loose;
+  root->measure.children_total_h_can_loose += child->measure.h_can_loose;
  }
 }
 
-// TODO(tbt): un-bork
 internal void
 ui_layout_pass(UIWidget *root,
-               F32 solved_w, F32 solved_h,
-               F32 curr_x, F32 curr_y)
+               F32 x, F32 y)
 {
+ x += root->indent;
+ 
  if (root->flags & UI_WIDGET_FLAG_draggable_x)
  {
-  curr_x = root->drag_x - root->drag_x_offset;
+  x = root->parent->layout.x + root->drag_x;
  }
  if (root->flags & UI_WIDGET_FLAG_draggable_y)
  {
-  curr_y = root->drag_y - root->drag_y_offset;
- }
- F32 x = curr_x;
- F32 y = curr_y;
- 
- F32 total_w = 0.0f;
- F32 total_h = 0.0f;
- F32 total_w_can_loose = 0.0f;
- F32 total_h_can_loose = 0.0f;
- 
- for (UIWidget *child = root->first_child;
-      NULL != child;
-      child = child->next_sibling)
- {
-  ui_layout_pass(child,
-                 child->measure.w,
-                 child->measure.h,
-                 curr_x, curr_y);
-  
-  if (child->flags & UI_WIDGET_FLAG_draggable_x ||
-      child->flags & UI_WIDGET_FLAG_draggable_y)
-  {
-   continue;
-  }
-  
-  if (root->children_placement == UI_LAYOUT_PLACEMENT_vertical)
-  {
-   F32 advance = child->layout.h + global_ui_context.padding;
-   curr_y += advance;
-   total_h += advance;
-   total_w = max_f(total_w, child->layout.w);
-  }
-  else if (root->children_placement == UI_LAYOUT_PLACEMENT_horizontal)
-  {
-   F32 advance = child->layout.w + global_ui_context.padding;
-   curr_x += advance;
-   total_w += advance;
-   total_h = max_f(total_h, child->layout.h);
-  }
-  
-  total_w_can_loose += child->measure.w_can_loose;
-  total_h_can_loose += child->measure.h_can_loose;
+  y = root->parent->layout.y + root->drag_y;
  }
  
- if (total_w > solved_w ||
-     total_h > solved_h)
+ root->layout = rect(x, y, root->measure.w, root->measure.h);
+ 
+ if (root->parent)
  {
-  // NOTE(tbt): calculate how much needs to be lost
-  F32 w_to_loose = total_w - solved_w;
-  F32 h_to_loose = total_h - solved_h;
+  root->interactable = rect_at_intersection(root->layout,
+                                            root->parent->interactable);
+ }
+ else
+ {
+  root->interactable = root->layout;
+ }
+ 
+ if (root->children_placement == UI_LAYOUT_PLACEMENT_vertical)
+ {
+  F32 to_loose = root->measure.children_total_h - root->measure.h;
   
-  // NOTE(tbt): calculate the proportion of what can be lost to actually loose
-  F32 w_proportion = min_f(1.0f, w_to_loose / total_w_can_loose);
-  F32 h_proportion = min_f(1.0f, h_to_loose / total_h_can_loose);
+  F32 proportion = 0.0f;
+  if (root->measure.children_total_h_can_loose > 0.0f &&
+      to_loose > 0.0f)
+  {
+   proportion = clamp_f(to_loose / root->measure.children_total_h_can_loose, 0.0f, 1.0f);
+  }
   
-  // NOTE(tbt): distribute the amount to loose between children, redoing layout to accomodate
-  F32 _curr_x = x, _curr_y = y;
   for (UIWidget *child = root->first_child;
        NULL != child;
        child = child->next_sibling)
   {
-   ui_layout_pass(child,
-                  child->measure.w - child->measure.w_can_loose * w_proportion,
-                  child->measure.h - child->measure.h_can_loose * h_proportion,
-                  _curr_x, _curr_y);
-   
-   if (child->flags & UI_WIDGET_FLAG_draggable_x ||
-       child->flags & UI_WIDGET_FLAG_draggable_y)
+   child->measure.h -= child->measure.h_can_loose * proportion;
+   if (child->measure.w > root->measure.w)
    {
-    continue;
+    child->measure.w -= min_f(child->measure.w - root->measure.w, child->measure.w_can_loose);
    }
-   
-   if (root->children_placement == UI_LAYOUT_PLACEMENT_vertical)
-   {
-    F32 advance = child->layout.h + global_ui_context.padding;
-    _curr_y += advance;
-    total_h += advance;
-    total_w = max_f(total_w, child->layout.w);
-   }
-   else if (root->children_placement == UI_LAYOUT_PLACEMENT_horizontal)
-   {
-    F32 advance = child->layout.w + global_ui_context.padding;
-    _curr_x += advance;
-    total_w += advance;
-    total_h = max_f(total_h, child->layout.h);
-   }
+   ui_layout_pass(child, x, y);
+   y += child->layout.h + global_ui_context.padding;
   }
  }
- 
- root->layout = rectangle_literal(x, y, solved_w, solved_h);
+ else if (root->children_placement == UI_LAYOUT_PLACEMENT_horizontal)
+ {
+  F32 to_loose = root->measure.children_total_w - root->measure.w;
+  
+  F32 proportion = 0.0f;
+  if (root->measure.children_total_w_can_loose > 0.0f &&
+      to_loose > 0.0f)
+  {
+   proportion = clamp_f(to_loose / root->measure.children_total_w_can_loose, 0.0f, 1.0f);
+  }
+  
+  for (UIWidget *child = root->first_child;
+       NULL != child;
+       child = child->next_sibling)
+  {
+   child->measure.w -= child->measure.w_can_loose * proportion;
+   if (child->measure.h > root->measure.h)
+   {
+    child->measure.h -= min_f(child->measure.h - root->measure.h, child->measure.h_can_loose);
+   }
+   ui_layout_pass(child, x, y);
+   x += child->layout.w + global_ui_context.padding;
+  }
+ }
 }
 
 internal void
@@ -655,69 +747,178 @@ ui_render_pass(UIWidget *root)
 {
  Colour foreground = root->colour;
  Colour background = root->background;
+ 
+ if (root->flags & UI_WIDGET_FLAG_toggled_effect)
+ {
+  foreground = colour_lerp(foreground, root->hot_colour, (F32)(1 - root->toggled_transition));
+  background = colour_lerp(background, root->hot_background, (F32)(1 - root->toggled_transition));
+ }
+ if (root->flags & UI_WIDGET_FLAG_keyboard_focusable)
+ {
+  foreground = colour_lerp(foreground, root->active_colour, 1.0f - root->keyboard_focused_transition);
+  background = colour_lerp(background, root->active_background, 1.0f - root->keyboard_focused_transition);
+ }
  if (root->flags & UI_WIDGET_FLAG_hot_effect)
  {
-  foreground = colour_lerp(foreground, root->hot_colour, 1 - root->hot);
-  background = colour_lerp(background, root->hot_background, 1 - root->hot);
+  foreground = colour_lerp(foreground, root->hot_colour, 1.0f - (root->hot * root->hot));
+  background = colour_lerp(background, root->hot_background, 1.0f - (root->hot * root->hot));
  }
  if (root->flags & UI_WIDGET_FLAG_active_effect)
  {
-  foreground = colour_lerp(foreground, root->active_colour, 1 - root->active);
-  background = colour_lerp(background, root->active_background, 1 - root->active);
+  foreground = colour_lerp(foreground, root->active_colour, 1.0f - root->active);
+  background = colour_lerp(background, root->active_background, 1.0f - root->active);
  }
  
- F32 hot_offset_amount = 0.5f;
- Rect rect = offset_rectangle(root->layout,
-                              (root->flags & UI_WIDGET_FLAG_hot_effect) * hot_offset_amount *
-                              root->hot,
-                              0.0f);
+ F32 offset_scale = 5.0f;
+ F32 x_offset = 0;
+ x_offset += !!(root->flags & UI_WIDGET_FLAG_hot_effect) * root->hot * root->hot;
+ x_offset += !!(root->flags & UI_WIDGET_FLAG_toggled_effect) * root->toggled_transition;
+ x_offset += !!(root->flags & UI_WIDGET_FLAG_keyboard_focusable) * root->keyboard_focused_transition;
  
- //-
+ Rect final_rectangle = offset_rect(root->layout,
+                                    x_offset * offset_scale,
+                                    0.0f);
+ 
+ Rect mask  = rect_at_intersection(offset_rect(root->interactable,
+                                               x_offset * offset_scale,
+                                               0.0f),
+                                   renderer_current_mask());
+ 
+ if (root->flags & UI_WIDGET_FLAG_blur_background)
+ {
+  blur_screen_region(final_rectangle, 1, UI_SORT_DEPTH);
+ }
  
  if (root->flags & UI_WIDGET_FLAG_draw_background)
  {
-  // TODO(tbt): proper sorting
-  blur_screen_region(rect, 1, UI_SORT_DEPTH);
-  fill_rectangle(rect, background, UI_SORT_DEPTH, global_ui_projection_matrix);
+  fill_rectangle(final_rectangle, background, UI_SORT_DEPTH, global_ui_projection_matrix);
  }
- 
- //-
  
  if (root->flags & UI_WIDGET_FLAG_draw_label)
  {
-  // TODO(tbt): proper sorting
-  mask_rectangle(rect)
-   draw_s8(global_ui_font,
-           rect.x + global_ui_context.padding,
-           rect.y + global_ui_font->vertical_advance,
-           rect.w,
-           foreground,
-           root->label,
-           UI_SORT_DEPTH,
-           global_ui_projection_matrix);
+  mask_rectangle(mask) draw_s8(root->font,
+                               final_rectangle.x + global_ui_context.padding,
+                               final_rectangle.y + root->font->vertical_advance,
+                               -1.0f,
+                               foreground,
+                               root->label,
+                               UI_SORT_DEPTH,
+                               global_ui_projection_matrix);
  }
  
- //-
+ if (root->flags & UI_WIDGET_FLAG_draw_cursor)
+ {
+  F32 cursor_width = 2.0f;
+  
+  S8 text = root->label;
+  text.size = root->cursor;
+  Rect text_bounds = measure_s32(root->font,
+                                 final_rectangle.x + global_ui_context.padding,
+                                 final_rectangle.y + root->font->vertical_advance,
+                                 -1.0f,
+                                 s32_from_s8(&global_frame_memory, text));
+  fill_rectangle(rect(text_bounds.x + text_bounds.w,
+                      final_rectangle.y + global_ui_context.padding,
+                      cursor_width,
+                      final_rectangle.h - global_ui_context.padding * 2),
+                 foreground,
+                 UI_SORT_DEPTH,
+                 global_ui_projection_matrix);
+ }
  
  if (root->flags & UI_WIDGET_FLAG_draw_outline)
  {
-  // TODO(tbt): proper sorting
-  stroke_rectangle(rect,
+  stroke_rectangle(final_rectangle,
                    foreground,
                    global_ui_context.stroke_width,
                    UI_SORT_DEPTH,
                    global_ui_projection_matrix);
  }
  
- //-
- 
- mask_rectangle(rect)
+ mask_rectangle(mask)
  {
   for (UIWidget *child = root->first_child;
        NULL != child;
        child = child->next_sibling)
   {
    ui_render_pass(child);
+  }
+ }
+}
+
+internal void
+ui_recursively_find_hot_widget(PlatformState *input,
+                               UIWidget *root)
+{
+ if (is_point_in_rect(input->mouse_x,
+                      input->mouse_y,
+                      root->interactable) &&
+     !(root->flags & UI_WIDGET_FLAG_no_input))
+ {
+  global_ui_context.hot = root;
+ }
+ 
+ for (UIWidget *child = root->first_child;
+      NULL != child;
+      child = child->next_sibling)
+ {
+  ui_recursively_find_hot_widget(input, child);
+ }
+}
+
+internal void
+ui_deffered_input(PlatformState *input)
+{
+ ui_recursively_find_hot_widget(global_ui_context.input,
+                                &global_ui_context.root);
+ 
+ for (PlatformEvent *e = input->events;
+      NULL != e;
+      e = e->next)
+ {
+  if (e->kind == PLATFORM_EVENT_key_press)
+  {
+   if (e->key == KEY_tab)
+   {
+    if (global_ui_context.keyboard_focus)
+    {
+     if (e->modifiers & INPUT_MODIFIER_shift)
+     {
+      global_ui_context.keyboard_focus = global_ui_context.keyboard_focus->prev_keyboard_focus;
+     }
+     else
+     {
+      global_ui_context.keyboard_focus = global_ui_context.keyboard_focus->next_keyboard_focus;
+     }
+    }
+    else
+    {
+     if (e->modifiers & INPUT_MODIFIER_shift)
+     {
+      global_ui_context.keyboard_focus = global_ui_context.last_keyboard_focus;
+     }
+     else
+     {
+      global_ui_context.keyboard_focus = global_ui_context.first_keyboard_focus;
+     }
+    }
+   }
+   else if (e->key == KEY_esc)
+   {
+    global_ui_context.keyboard_focus = NULL;
+   }
+  }
+ }
+ if (global_ui_context.input->is_mouse_button_down[MOUSE_BUTTON_left])
+ {
+  if (!global_ui_context.hot ||
+      !(global_ui_context.hot->flags & UI_WIDGET_FLAG_keyboard_focusable))
+  {
+   global_ui_context.keyboard_focus = NULL;
+  }
+  else if (global_ui_context.keyboard_focus)
+  {
+   global_ui_context.keyboard_focus = global_ui_context.hot;
   }
  }
 }
@@ -730,6 +931,7 @@ internal void
 ui_initialise(void)
 {
  // NOTE(tbt): fill bottoms of style stacks with default values
+ 
  global_ui_context.w_stack[0] = (UIDimension){ 999999999.0f, 0.0f };
  global_ui_context.h_stack[0] = (UIDimension){ 999999999.0f, 0.0f };
  global_ui_context.colour_stack[0] = colour_literal(1.0f, 0.967f, 0.982f, 1.0f);
@@ -737,8 +939,9 @@ ui_initialise(void)
  global_ui_context.hot_colour_stack[0] = colour_literal(0.0f, 0.0f, 0.0f, 0.5f);
  global_ui_context.hot_background_stack[0] = colour_literal(1.0f, 0.967f, 0.982f, 1.0f);
  global_ui_context.active_colour_stack[0] = colour_literal(1.0f, 0.967f, 0.982f, 1.0f);
- global_ui_context.active_background_stack[0] = colour_literal(0.0f, 0.033f, 0.018f, 0.5f);
- 
+ global_ui_context.active_background_stack[0] = colour_literal(0.01f, 0.033f, 0.018f, 0.8f);
+ global_ui_context.indent_stack[0] = 0.0f;
+ global_ui_context.font_stack[0] = global_ui_font;
  global_ui_context.padding = 8.0f;
  global_ui_context.stroke_width = 2.0f;
 }
@@ -747,81 +950,109 @@ internal void
 ui_prepare(PlatformState *input,
            F64 frametime_in_s)
 {
- memset(&global_ui_context.root, 0, sizeof(global_ui_context.root));
- global_ui_context.root.children_placement = UI_LAYOUT_PLACEMENT_vertical;
  global_ui_context.insertion_point = &global_ui_context.root;
  global_ui_context.input = input;
  global_ui_context.frametime_in_s = frametime_in_s;
+ global_ui_context.first_keyboard_focus = NULL;
+ global_ui_context.last_keyboard_focus = NULL;
+ memset(&global_ui_context.root, 0, sizeof(global_ui_context.root));
 }
 
 internal void
-ui_finish(PlatformState *input)
+ui_finish(void)
 {
+ PlatformState *input = global_ui_context.input;
+ 
+ global_ui_context.hot = NULL;
+ global_ui_context.root.layout = rect(0.0f, 0.0f, global_rcx.window.w, global_rcx.window.h);
+ global_ui_context.root.w = (UIDimension){ input->window_w, 1.0f };
+ global_ui_context.root.h = (UIDimension){ input->window_h, 1.0f };
+ ui_deffered_input(input);
  ui_measurement_pass(&global_ui_context.root);
- ui_layout_pass(&global_ui_context.root,
-                input->window_w, input->window_h,
-                0.0f, 0.0f);
+ ui_layout_pass(&global_ui_context.root, 0.0f, 0.0f);
  ui_render_pass(&global_ui_context.root);
 }
 
-//-
+//~
 
 internal void
-ui_label(S8 string)
+ui_label(S8 text)
 {
- UIWidget *widget = ui_create_stateless_widget();
+ UIWidget *widget = ui_widget_from_string(text);
  
  widget->flags |= UI_WIDGET_FLAG_draw_label;
- widget->label = string;
+ widget->flags |= UI_WIDGET_FLAG_no_input;
+ widget->label = text;
  
  ui_update_widget(widget);
 }
 
-//-
+//~
 
-#define ui_row() defer_loop(ui_begin_row(), ui_pop_insertion_point())
+#define ui_row() defer_loop(ui_push_layout(UI_LAYOUT_PLACEMENT_horizontal), ui_pop_insertion_point())
+
+#define ui_column() defer_loop(ui_push_layout(UI_LAYOUT_PLACEMENT_vertical), ui_pop_insertion_point())
 
 internal void
-ui_begin_row(void)
+ui_push_layout(UILayoutPlacement advancement_direction)
 {
- UIWidget *widget = ui_create_stateless_widget();
- widget->children_placement = UI_LAYOUT_PLACEMENT_horizontal;
+ UIWidget *widget = ui_widget_from_string(s8_from_format_string(&global_frame_memory,
+                                                                "__child_%u",
+                                                                global_ui_context.insertion_point->child_count));
+ widget->flags |= UI_WIDGET_FLAG_no_input;
+ widget->children_placement = advancement_direction;
+ ui_update_widget(widget);
  ui_push_insertion_point(widget);
 }
 
-//-
+
+//~
 
 internal B32
 ui_button(S8 text)
 {
- UIWidget *widget = ui_create_widget(text);
- widget->flags |= UI_WIDGET_FLAG_draw_background;
- widget->flags |= UI_WIDGET_FLAG_draw_label;
- widget->flags |= UI_WIDGET_FLAG_draw_outline;
- widget->flags |= UI_WIDGET_FLAG_clickable;
- widget->flags |= UI_WIDGET_FLAG_hot_effect;
- widget->flags |= UI_WIDGET_FLAG_active_effect;
- widget->label = text;
- ui_update_widget(widget);
+ UIWidget *widget;
  
+ ui_background(colour_literal(0.0f, 0.0f, 0.0f, 0.0f))
+ {
+  widget = ui_widget_from_string(text);
+  widget->flags |= UI_WIDGET_FLAG_draw_background;
+  widget->flags |= UI_WIDGET_FLAG_draw_label;
+  widget->flags |= UI_WIDGET_FLAG_draw_outline;
+  widget->flags |= UI_WIDGET_FLAG_hot_effect;
+  widget->flags |= UI_WIDGET_FLAG_active_effect;
+  widget->flags |= UI_WIDGET_FLAG_clickable;
+  widget->flags |= UI_WIDGET_FLAG_keyboard_focusable;
+  widget->label = text;
+  ui_update_widget(widget);
+ }
  return widget->clicked;
 }
 
-//-
+//~
 
 internal void
 ui_toggle_button(S8 text,
                  B32 *toggled)
 {
- UIWidget *widget = ui_create_widget(text);
- widget->flags |= UI_WIDGET_FLAG_draw_background;
- widget->flags |= UI_WIDGET_FLAG_draw_label;
- widget->flags |= UI_WIDGET_FLAG_draw_outline;
- widget->flags |= UI_WIDGET_FLAG_clickable;
- widget->flags |= UI_WIDGET_FLAG_hot_effect;
- widget->flags |= UI_WIDGET_FLAG_active_effect;
- widget->label = text;
- ui_update_widget(widget);
+ F64 frametime_in_s = global_ui_context.frametime_in_s;
+ 
+ UIWidget *widget;
+ ui_background(colour_literal(0.0f, 0.0f, 0.0f, 0.0f))
+ {
+  widget = ui_widget_from_string(text);
+  widget->flags |= UI_WIDGET_FLAG_draw_background;
+  widget->flags |= UI_WIDGET_FLAG_draw_label;
+  widget->flags |= UI_WIDGET_FLAG_draw_outline;
+  widget->flags |= UI_WIDGET_FLAG_hot_effect;
+  widget->flags |= UI_WIDGET_FLAG_active_effect;
+  widget->flags |= UI_WIDGET_FLAG_toggled_effect;
+  widget->flags |= UI_WIDGET_FLAG_clickable;
+  widget->flags |= UI_WIDGET_FLAG_keyboard_focusable;
+  widget->label = text;
+  widget->toggled = *toggled;
+  ui_update_widget(widget);
+ }
  
  if (widget->clicked)
  {
@@ -829,40 +1060,217 @@ ui_toggle_button(S8 text,
  }
 }
 
-//-
+//~
 
-#define ui_window(_title) defer_loop(ui_push_window(_title), (ui_pop_insertion_point(), ui_pop_insertion_point()))
+#define ui_window(_title) defer_loop(ui_push_window(_title), (ui_pop_indent(), ui_pop_insertion_point(), ui_pop_insertion_point()))
 
 internal void
-ui_push_window(S8 string)
+ui_push_window(S8 identifier)
 {
- UIWidget *window = ui_create_widget(string);
+ PlatformState *input = global_ui_context.input;
+ 
+ UIWidget *window = ui_widget_from_string(identifier);
  window->flags |= UI_WIDGET_FLAG_draw_background;
- window->flags |= UI_WIDGET_FLAG_draggable_x;
- window->flags |= UI_WIDGET_FLAG_draggable_y;
- window->children_placement = UI_LAYOUT_PLACEMENT_vertical;
+ window->flags |= UI_WIDGET_FLAG_blur_background;
+ window->flags |= UI_WIDGET_FLAG_draggable;
  ui_update_widget(window);
  
  ui_push_insertion_point(window);
  {
-  // NOTE(tbt): title bar
-  ui_height(32.0f, 1.0f)
+  ui_height(32.0f, 1.0f) ui_indent(0.0f)
   {
-   UIWidget *title = ui_create_widget(s8_from_format_string(&global_frame_memory,
-                                                            "_%.*s_title",
-                                                            (I32)string.size,
-                                                            string.buffer));
+   UIWidget *title = ui_widget_from_string(s8("__title"));
    title->flags |= UI_WIDGET_FLAG_draw_background;
    title->flags |= UI_WIDGET_FLAG_draw_label;
-   title->label = string;
+   title->flags |= UI_WIDGET_FLAG_no_input;
+   title->label = identifier;
    ui_update_widget(title);
   }
   
-  // NOTE(tbt): main body
-  UIWidget *body = ui_create_stateless_widget();
-  body->children_placement = UI_LAYOUT_PLACEMENT_vertical;
-  ui_update_widget(body);
-  
-  ui_push_insertion_point(body);
+  ui_indent(global_ui_context.padding)
+  {
+   UIWidget *body = ui_widget_from_string(s8("__body"));
+   body->flags |= UI_WIDGET_FLAG_no_input;
+   ui_update_widget(body);
+   ui_push_insertion_point(body);
+  }
  }
+}
+
+//~
+
+internal void
+ui_slider_f32(S8 identifier,
+              F32 *value,
+              F32 min, F32 max)
+{
+ F32 slider_thickness = 16.0f, slider_thumb_size = 24.0f;
+ 
+ UIWidget *track, *thumb;
+ 
+ ui_height(slider_thickness, 1.0f)
+ {
+  track = ui_widget_from_string(identifier);
+  track->flags |= UI_WIDGET_FLAG_draw_outline;
+  track->label = identifier;
+  ui_update_widget(track);
+  ui_push_insertion_point(track);
+  {
+   ui_width(slider_thumb_size, 1.0f)
+   {
+    thumb = ui_widget_from_string(s8("__thumb"));
+    thumb->flags |= UI_WIDGET_FLAG_draw_outline;
+    thumb->flags |= UI_WIDGET_FLAG_draw_background;
+    thumb->flags |= UI_WIDGET_FLAG_hot_effect;
+    thumb->flags |= UI_WIDGET_FLAG_active_effect;
+    thumb->flags |= UI_WIDGET_FLAG_draggable_x;
+    ui_update_widget(thumb);
+   }
+  } ui_pop_insertion_point();
+ }
+ 
+ if (thumb->active)
+ {
+  // NOTE(tbt): calculate value from drag position
+  *value = ((thumb->layout.x - track->layout.x) / (track->layout.w - thumb->layout.w)) * (max - min) + min;
+ }
+ else
+ {
+  // NOTE(tbt): calculate drag position from value
+  thumb->drag_x = ((*value - min) / (max - min)) * (track->layout.w - thumb->layout.w);
+ }
+ 
+ thumb->drag_x = clamp_f(thumb->drag_x, 0.0f, track->layout.w - thumb->layout.w);
+}
+
+//~
+
+internal S8
+ui_line_edit(S8 identifier)
+{
+ U64 capacity = 256;
+ 
+ PlatformState *input = global_ui_context.input;
+ 
+ UIWidget *widget = ui_widget_from_string(identifier);
+ 
+ if (widget->clicked)
+ {
+  if (widget == global_ui_context.keyboard_focus)
+  {
+   global_ui_context.keyboard_focus = NULL;
+  }
+  else
+  {
+   global_ui_context.keyboard_focus = widget;
+  }
+ }
+ 
+ if (NULL == widget->label.buffer)
+ {
+  widget->label.buffer = arena_push(&global_static_memory, capacity);
+  widget->label.size = 0;
+ }
+ 
+ widget->flags &= ~UI_WIDGET_FLAG_draw_cursor;
+ 
+ if (global_ui_context.keyboard_focus == widget)
+ {
+  widget->flags |= UI_WIDGET_FLAG_draw_cursor;
+  for (PlatformEvent *e = input->events;
+       NULL != e;
+       e = e->next)
+  {
+   if (e->kind == PLATFORM_EVENT_key_typed)
+   {
+    U8 utf8_buffer[4];
+    U32 size_to_insert = utf8_from_codepoint(utf8_buffer, e->character);
+    
+    if (widget->cursor + size_to_insert + (widget->label.size - widget->cursor) <= capacity)
+    {
+     {
+      U32 index_to_copy_to = widget->cursor + size_to_insert;
+      memcpy(widget->label.buffer + index_to_copy_to,
+             widget->label.buffer + widget->cursor,
+             capacity - index_to_copy_to);
+     }
+     memcpy(widget->label.buffer + widget->cursor,
+            utf8_buffer,
+            size_to_insert);
+     widget->cursor += size_to_insert;
+     widget->label.size += size_to_insert;
+    }
+   }
+   else if (e->kind == PLATFORM_EVENT_key_press)
+   {
+    if (e->key == KEY_backspace &&
+        widget->cursor > 0)
+    {
+     U32 size = 1;
+     while (widget->label.buffer[widget->cursor - size] & (1 << 7) &&
+            !(widget->label.buffer[widget->cursor - size] & (1 << 6)))
+     {
+      size += 1;
+     }
+     
+     memcpy(widget->label.buffer + widget->cursor - size,
+            widget->label.buffer + widget->cursor,
+            capacity - widget->cursor);
+     
+     widget->cursor -= size;
+     widget->label.size -= size;
+    }
+    else if (e->key == KEY_delete &&
+             widget->cursor < widget->label.size)
+    {
+     U32 size_to_delete = 1;
+     while (widget->label.buffer[widget->cursor + size_to_delete] & (1 << 7) &&
+            widget->cursor + size_to_delete < capacity)
+     {
+      size_to_delete += 1;
+     }
+     
+     memcpy(widget->label.buffer + widget->cursor,
+            widget->label.buffer + widget->cursor + size_to_delete,
+            widget->label.size - (widget->cursor + size_to_delete));
+     
+     widget->label.size -= size_to_delete;
+    }
+    else if (e->key == KEY_left &&
+             widget->cursor > 0)
+    {
+     U32 size = 1;
+     while (widget->label.buffer[widget->cursor - size] & (1 << 7) &&
+            !(widget->label.buffer[widget->cursor - size] & (1 << 6)))
+     {
+      size += 1;
+     }
+     widget->cursor -= size;
+    }
+    else if (e->key == KEY_right &&
+             widget->cursor < widget->label.size)
+    {
+     U32 size = 1;
+     while (widget->label.buffer[widget->cursor + size] & (1 << 7) &&
+            widget->cursor + size < capacity)
+     {
+      size += 1;
+     }
+     widget->cursor += size;
+    }
+   }
+  }
+ }
+ recalculate_s8_length(&widget->label);
+ 
+ widget->flags |= UI_WIDGET_FLAG_draw_background;
+ widget->flags |= UI_WIDGET_FLAG_draw_label;
+ widget->flags |= UI_WIDGET_FLAG_draw_outline;
+ widget->flags |= UI_WIDGET_FLAG_hot_effect;
+ widget->flags |= UI_WIDGET_FLAG_active_effect;
+ widget->flags |= UI_WIDGET_FLAG_clickable;
+ widget->flags |= UI_WIDGET_FLAG_keyboard_focusable;
+ ui_update_widget(widget);
+ 
+ return widget->label;
 }

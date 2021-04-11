@@ -34,7 +34,7 @@ load_player_art(void)
 {
  Texture texture;
  
- global_player_art.texture_path = s8_literal("../assets/textures/player.png");
+ global_player_art.texture_path = s8("../assets/textures/player.png");
  
  if (load_texture(global_player_art.texture_path, &texture))
  {
@@ -125,10 +125,10 @@ internal Level global_current_level = {0};
 
 internal Entity *global_editor_selected_entity = NULL;
 
-#define PLAYER_COLLISION_X    0.0f
-#define PLAYER_COLLISION_Y -155.0f
-#define PLAYER_COLLISION_W  175.0f
-#define PLAYER_COLLISION_H  605.0f
+internal F32 PLAYER_COLLISION_X =  000.0f;
+internal F32 PLAYER_COLLISION_Y = -155.0f;
+internal F32 PLAYER_COLLISION_W =  175.0f;
+internal F32 PLAYER_COLLISION_H =  605.0f;
 
 internal void
 do_player(PlatformState *input,
@@ -150,7 +150,7 @@ do_player(PlatformState *input,
  player->x += player->x_velocity;
  player->y += player->y_velocity;
  
- F32 scale = global_current_level.player_scale / (global_rcx.window.h - player->y);
+ F32 scale = global_current_level.player_scale / (SCREEN_H_IN_WORLD_UNITS - player->y);
  
  //
  // NOTE(tbt): walk right animation
@@ -158,43 +158,43 @@ do_player(PlatformState *input,
  
  if (player->x_velocity >  0.01f)
  {
-  draw_sub_texture(rectangle_literal(player->x + 31.0f * scale,
-                                     player->y + (-153.0f + animation_y_offset) * scale,
-                                     113.0f * scale, 203.0f * scale),
+  draw_sub_texture(rect(player->x + 31.0f * scale,
+                        player->y + (-153.0f + animation_y_offset) * scale,
+                        113.0f * scale, 203.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.right_head,
                    0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                             player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
-                                             71.0f * scale, 246.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 40.0f * scale,
+                                player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
+                                71.0f * scale, 246.0f * scale),
                            (sin(global_time * 3.0f + 2.0f) * 0.1f + 0.03f) * scale,
                            colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
                            &global_player_art.texture,
                            global_player_art.right_leg,
                            0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                             player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
-                                             71.0f * scale, 246.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 40.0f * scale,
+                                player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
+                                71.0f * scale, 246.0f * scale),
                            (sin(global_time * 3.0f) * 0.1f + 0.03f) * scale,
                            WHITE,
                            &global_player_art.texture,
                            global_player_art.right_leg,
                            0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x,
-                                     player->y + animation_y_offset * scale,
-                                     110.0f * scale, 312.0f * scale),
+  draw_sub_texture(rect(player->x,
+                        player->y + animation_y_offset * scale,
+                        110.0f * scale, 312.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.right_jacket,
                    0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 40.0f * scale,
-                                             player->y + (28.0f + animation_y_offset) * scale,
-                                             42.0f * scale, 213.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 40.0f * scale,
+                                player->y + (28.0f + animation_y_offset) * scale,
+                                42.0f * scale, 213.0f * scale),
                            (sin(global_time * 2.8f) * 0.12f) * scale,
                            WHITE,
                            &global_player_art.texture,
@@ -208,43 +208,43 @@ do_player(PlatformState *input,
  
  else if (player->x_velocity < -0.01f)
  {
-  draw_sub_texture(rectangle_literal(player->x + 31 * scale,
-                                     player->y + (-153.0f + animation_y_offset) * scale,
-                                     113.0f * scale, 203.0f * scale),
+  draw_sub_texture(rect(player->x + 31 * scale,
+                        player->y + (-153.0f + animation_y_offset) * scale,
+                        113.0f * scale, 203.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.left_head,
                    0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
-                                             player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
-                                             71.0f * scale, 246.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 76.0f * scale,
+                                player->y + (205.0f + sin(global_time * 3.0f + 2.0f) * 7.0f + animation_y_offset) * scale,
+                                71.0f * scale, 246.0f * scale),
                            (sin(global_time * 3.0f + 2.0f) * 0.1f - 0.03f) * scale,
                            colour_literal(0.5f, 0.5f, 0.5f, 1.0f),
                            &global_player_art.texture,
                            global_player_art.left_leg,
                            0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 76.0f * scale,
-                                             player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
-                                             71.0f * scale, 246.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 76.0f * scale,
+                                player->y + (205.0f + sin(global_time * 3.0f) * 7.0f + animation_y_offset) * scale,
+                                71.0f * scale, 246.0f * scale),
                            (sin(global_time * 3.0f) * 0.1f - 0.03f) * scale,
                            WHITE,
                            &global_player_art.texture,
                            global_player_art.left_leg,
                            0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x + 64 * scale,
-                                     player->y + animation_y_offset * scale,
-                                     110.0f * scale, 312.0f * scale),
+  draw_sub_texture(rect(player->x + 64 * scale,
+                        player->y + animation_y_offset * scale,
+                        110.0f * scale, 312.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.left_jacket,
                    0, global_projection_matrix);
   
-  draw_rotated_sub_texture(rectangle_literal(player->x + 86.0f * scale,
-                                             player->y + (28.0f + animation_y_offset) * scale,
-                                             42.0f * scale, 213.0f * scale),
+  draw_rotated_sub_texture(rect(player->x + 86.0f * scale,
+                                player->y + (28.0f + animation_y_offset) * scale,
+                                42.0f * scale, 213.0f * scale),
                            (sin(global_time * 2.8f) * 0.12f) * scale,
                            WHITE,
                            &global_player_art.texture,
@@ -258,53 +258,53 @@ do_player(PlatformState *input,
  
  else
  {
-  draw_sub_texture(rectangle_literal(player->x + 22.0f * scale,
-                                     player->y + 128.0f * scale,
-                                     131.0f * scale, 320.0f * scale),
+  draw_sub_texture(rect(player->x + 22.0f * scale,
+                        player->y + 128.0f * scale,
+                        131.0f * scale, 320.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.forward_lower_body,
                    0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x + 41.0f * scale,
-                                     player->y - 155.0f * scale,
-                                     88.0f * scale, 175.0f * scale),
+  draw_sub_texture(rect(player->x + 41.0f * scale,
+                        player->y - 155.0f * scale,
+                        88.0f * scale, 175.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.forward_head,
                    0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x + 135.0f * scale,
-                                     player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
-                                     29.0f * scale, 216.0f * scale),
+  draw_sub_texture(rect(player->x + 135.0f * scale,
+                        player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
+                        29.0f * scale, 216.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.forward_right_arm,
                    0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x,
-                                     player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
-                                     43.0f * scale, 212.0f * scale),
+  draw_sub_texture(rect(player->x,
+                        player->y + (25.0f + sin(global_time + 2.0f) * 7.0f) * scale,
+                        43.0f * scale, 212.0f * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.forward_left_arm,
                    0, global_projection_matrix);
   
-  draw_sub_texture(rectangle_literal(player->x,
-                                     player->y + (sin(global_time + 2.0f) * 3.0f) * scale,
-                                     175.0f * scale, 310.0 * scale),
+  draw_sub_texture(rect(player->x,
+                        player->y + (sin(global_time + 2.0f) * 3.0f) * scale,
+                        175.0f * scale, 310.0 * scale),
                    WHITE,
                    &global_player_art.texture,
                    global_player_art.forward_torso,
                    0, global_projection_matrix);
  }
  
- player->collision_bounds = rectangle_literal(player->x + PLAYER_COLLISION_X * scale,
-                                              player->y + PLAYER_COLLISION_Y * scale,
-                                              PLAYER_COLLISION_W * scale, PLAYER_COLLISION_H * scale);
+ player->collision_bounds = rect(player->x + PLAYER_COLLISION_X * scale,
+                                 player->y + PLAYER_COLLISION_Y * scale,
+                                 PLAYER_COLLISION_W * scale, PLAYER_COLLISION_H * scale);
 }
 
-#define MAX_ENTITIES 120
+enum { MAX_ENTITIES = 120 };
 internal U32 global_entity_next_index = 0;
 internal Entity global_dummy_entity = {0};
 internal Entity global_entity_pool[MAX_ENTITIES] = {{0}};
@@ -358,7 +358,7 @@ level_descriptor_from_level(LevelDescriptor *level_descriptor,
 internal void
 serialise_level(Level *level)
 {
- debug_log("serialising level %.*s\n", (I32)level->path.size, level->path.buffer);
+ debug_log("serialising level %.*s\n", unravel_s8(level->path));
  
  PlatformFile *file = platform_open_file_ex(level->path,
                                             PLATFORM_OPEN_FILE_read | PLATFORM_OPEN_FILE_write | PLATFORM_OPEN_FILE_always_create);
@@ -396,11 +396,11 @@ level_from_level_descriptor(MemoryArena *memory,
  // NOTE(tbt): background
  {
   S8 path = path_from_texture_path(&global_frame_memory,
-                                   s8_literal(level_descriptor->bg_path));
+                                   s8(level_descriptor->bg_path));
   
   if (load_texture(path, &level->bg))
   {
-   level->bg_path = copy_s8(memory, s8_literal(level_descriptor->bg_path));
+   level->bg_path = copy_s8(memory, s8(level_descriptor->bg_path));
    level->bg_last_modified = platform_get_file_modified_time_p(path);
   }
   else
@@ -417,11 +417,11 @@ level_from_level_descriptor(MemoryArena *memory,
  // NOTE(tbt): foreground
  {
   S8 path = path_from_texture_path(&global_frame_memory,
-                                   s8_literal(level_descriptor->fg_path));
+                                   s8(level_descriptor->fg_path));
   
   if (load_texture(path, &level->fg))
   {
-   level->fg_path = copy_s8(memory, s8_literal(level_descriptor->fg_path));
+   level->fg_path = copy_s8(memory, s8(level_descriptor->fg_path));
    level->fg_last_modified = platform_get_file_modified_time_p(path);
   }
   else
@@ -438,11 +438,11 @@ level_from_level_descriptor(MemoryArena *memory,
  // NOTE(tbt): music
  {
   S8 music_path = path_from_audio_path(&global_frame_memory,
-                                       s8_literal(level_descriptor->music_path));
+                                       s8(level_descriptor->music_path));
   if (level->music =
       cm_new_source_from_file(cstring_from_s8(&global_frame_memory, music_path)))
   {
-   level->music_path = copy_s8(memory, s8_literal(level_descriptor->music_path));
+   level->music_path = copy_s8(memory, s8(level_descriptor->music_path));
   }
   else
   {
@@ -539,7 +539,7 @@ set_current_level(S8 path,
   else
   {
    debug_log("failure loading level '%.*s' - could not read level file\n",
-             (I32)path.size, path.buffer);
+             unravel_s8(path));
    success = false;
   }
  }
@@ -552,7 +552,7 @@ set_current_level_as_new_level(S8 path)
 {
  LevelDescriptor level_descriptor = {0};
  
- debug_log("creating level %.*s\n", (I32)path.size, path.buffer);
+ debug_log("creating level %.*s\n", unravel_s8(path));
  
  // NOTE(tbt): save path temporarily
  S8 temp_path = copy_s8(&global_frame_memory, path);
@@ -587,7 +587,7 @@ do_entities(F64 frametime_in_s,
   // NOTE(tbt): process triggers
   //~
   
-  if (are_rectangles_intersecting(e->bounds, player->collision_bounds))
+  if (are_rects_intersecting(e->bounds, player->collision_bounds))
   {
    if (e->triggers & (1 << ENTITY_TRIGGER_player_intersecting))
    {
@@ -662,10 +662,10 @@ do_entities(F64 frametime_in_s,
    S8List *level_path = NULL;
    level_path = push_s8_to_list(&global_frame_memory,
                                 level_path,
-                                s8_literal(e->teleport_to_level));
+                                s8(e->teleport_to_level));
    level_path = push_s8_to_list(&global_frame_memory,
                                 level_path,
-                                s8_literal("../assets/levels/"));
+                                s8("../assets/levels/"));
    
    if (!set_current_level(join_s8_list(&global_frame_memory, level_path), !e->teleport_do_not_persist_exposure,
                           !e->teleport_to_non_default_spawn,
@@ -687,7 +687,7 @@ do_entities(F64 frametime_in_s,
     play_dialogue(&dialogue_state,
                   load_dialogue(&global_level_memory,
                                 path_from_dialogue_path(&global_frame_memory,
-                                                        s8_literal(e->dialogue_path))),
+                                                        s8(e->dialogue_path))),
                   e->dialogue_x, e->dialogue_y,
                   WHITE);
     
@@ -769,35 +769,41 @@ internal void
 do_current_level(PlatformState *input,
                  F64 frametime_in_s)
 {
- F32 aspect;
+ Rect mask;
+ {
+  F32 desired_aspect = (F32)SCREEN_H_IN_WORLD_UNITS / (F32)SCREEN_W_IN_WORLD_UNITS;
+  F32 mask_h = desired_aspect * global_rcx.window.w;
+  F32 mask_y = (global_rcx.window.h - mask_h) / 2.0f;
+  if (mask_y < 0.0f)
+  {
+   mask_h += global_rcx.window.h;
+   mask_y = 0.0f;
+  }
+  mask = rect(0.0f, mask_y, global_rcx.window.w, mask_h);
+ }
  
- aspect =
-  (F32)global_current_level.bg.height /
-  (F32)global_current_level.bg.width;
- 
- draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                    SCREEN_WIDTH_IN_WORLD_UNITS,
-                                    SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
-                  WHITE,
-                  &global_current_level.bg,
-                  ENTIRE_TEXTURE,
-                  0, global_projection_matrix);
- 
- do_entities(frametime_in_s, global_current_level.entities, &global_current_level.player);
- 
- do_player(input, frametime_in_s, &global_current_level.player);
- 
- aspect =
-  (F32)global_current_level.fg.height /
-  (F32)global_current_level.fg.width;
- 
- draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                    SCREEN_WIDTH_IN_WORLD_UNITS,
-                                    SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
-                  WHITE,
-                  &global_current_level.fg,
-                  ENTIRE_TEXTURE,
-                  0, global_projection_matrix);
+ mask_rectangle(mask)
+ {
+  draw_sub_texture(rect(0.0f, 0.0f,
+                        SCREEN_W_IN_WORLD_UNITS,
+                        SCREEN_H_IN_WORLD_UNITS),
+                   WHITE,
+                   &global_current_level.bg,
+                   ENTIRE_TEXTURE,
+                   0, global_projection_matrix);
+  
+  do_entities(frametime_in_s, global_current_level.entities, &global_current_level.player);
+  
+  do_player(input, frametime_in_s, &global_current_level.player);
+  
+  draw_sub_texture(rect(0.0f, 0.0f,
+                        SCREEN_W_IN_WORLD_UNITS,
+                        SCREEN_H_IN_WORLD_UNITS),
+                   WHITE,
+                   &global_current_level.fg,
+                   ENTIRE_TEXTURE,
+                   0, global_projection_matrix);
+ }
  
  do_post_processing(global_exposure,
                     global_current_level.kind,

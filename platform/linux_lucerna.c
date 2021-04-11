@@ -429,7 +429,7 @@ platform_write_entire_file(S8 path,
  
  temporary_memory_begin(&global_platform_static_memory);
  
- I8 *temp_path = arena_allocate(&global_platform_static_memory, path.len + 2);
+ I8 *temp_path = arena_push(&global_platform_static_memory, path.len + 2);
  memcpy(temp_path, path.buffer, path.len);
  strcat(temp_path, "~");
  
@@ -479,7 +479,7 @@ platform_read_entire_file(MemoryArena *memory,
   {
    if (-1 != lseek(fd, 0, SEEK_SET))
    {
-    U8 *buffer = arena_allocate(memory, file_size);
+    U8 *buffer = arena_push(memory, file_size);
     
     ssize_t bytes_read = read(fd, buffer, file_size);
     if (bytes_read == file_size)
@@ -772,8 +772,8 @@ main(int argc,
      if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
      {
       KeyTyped *key_typed;
-      key_typed = arena_allocate(&platform_layer_frame_memory,
-                                 sizeof(*key_typed));
+      key_typed = arena_push(&platform_layer_frame_memory,
+                             sizeof(*key_typed));
       // NOTE(tbt): only want ASCII for now, so only take first byte.
       // NOTE(tbt): this is a massive hack
       // TODO(tbt): proper unicode input
@@ -809,8 +809,8 @@ main(int argc,
       if (XLookupString(&x_key_event, buffer, 16, NULL, NULL))
       {
        KeyTyped *key_typed;
-       key_typed = arena_allocate(&platform_layer_frame_memory,
-                                  sizeof(*key_typed));
+       key_typed = arena_push(&platform_layer_frame_memory,
+                              sizeof(*key_typed));
        /* NOTE(tbt): only want ASCII for now, so only take
                      first byte.
        */

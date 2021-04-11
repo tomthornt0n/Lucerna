@@ -5,10 +5,15 @@
 #include "KHR/khrplatform.h"
 #include "stdint.h"
 
+//
+// NOTE(tbt): typedefs
+//~
+
 #define true  1
 #define false 0
 
 #define internal static
+#define persist  static
 
 typedef uint8_t  U8;
 typedef uint16_t U16;
@@ -28,11 +33,19 @@ typedef float    B32_s;
 
 #include "errno.h"
 
+//
+// NOTE(tbt): logging
+//~
+
 #ifdef LUCERNA_DEBUG
 #define debug_log(_fmt, ...) fprintf(stderr, _fmt, __VA_ARGS__)
 #else
 #define debug_log(_fmt, ...) 
 #endif
+
+//
+// NOTE(tbt): handle DLL on windows
+//~
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #ifdef LUCERNA_GAME
@@ -43,6 +56,19 @@ typedef float    B32_s;
 #else
 #define LC_API 
 #endif
+
+//
+// NOTE(tbt): game code shared with the platform layer
+//~
+
+internal U32 calculate_utf8_cstring_size(U8 *cstring);
+#include "../game/arena.c"
+#include "../game/util.c"
+#include "../game/strings.c"
+
+//
+// NOTE(tbt): keyboard input symbols
+//~
 
 typedef enum
 {
@@ -124,6 +150,10 @@ typedef enum
  KEY_MAX,
 } Key;
 
+//
+// NOTE(tbt): mouse input symobls
+//~
+
 typedef enum
 {
  MOUSE_BUTTON_left     = 0,
@@ -133,13 +163,24 @@ typedef enum
  MOUSE_BUTTON_MAX,
 } MouseButton;
 
-#define PLATFORM_LAYER_FRAME_MEMORY_SIZE 1 * ONE_MB
-#define PLATFORM_LAYER_STATIC_MEMORY_SIZE 1 * ONE_MB
-#define WINDOW_TITLE "Lucerna"
-#define DEFAULT_WINDOW_WIDTH 1920
-#define DEFAULT_WINDOW_HEIGHT 1040
-#define AUDIO_SAMPLERATE 48000
+//
+// NOTE(tbt): platform layer config
+//~
+
+enum
+{
+ PLATFORM_LAYER_FRAME_MEMORY_SIZE = 1 * ONE_MB,
+ PLATFORM_LAYER_STATIC_MEMORY_SIZE = 1 * ONE_MB,
+ DEFAULT_WINDOW_WIDTH = 1920,
+ DEFAULT_WINDOW_HEIGHT = 1040,
+ AUDIO_SAMPLERATE = 48000,
+};
 #define ICON_PATH "../icon.png"
+#define WINDOW_TITLE "Lucerna"
+
+//
+// NOTE(tbt): platform events
+//~
 
 typedef enum
 {
@@ -184,11 +225,11 @@ struct PlatformEvent
  InputModifiers modifiers;
  F32 mouse_x, mouse_y;
  I32 mouse_scroll_h, mouse_scroll_v;
- U64 character;
+ U32 character;
  U32 window_w, window_h;
 };
 
-// NOTE(tbt): input recorded by the platform layer in the main event processing loop
+// NOTE(tbt): passed to the game from the platform layer
 typedef struct
 {
  PlatformEvent *events;
@@ -198,6 +239,10 @@ typedef struct
  I32 mouse_scroll_h, mouse_scroll_v;
  U32 window_w, window_h;
 } PlatformState;
+
+//
+// NOTE(tbt): event handling helpers
+//~
 
 internal B32
 is_key_pressed(PlatformState *input,
@@ -244,14 +289,9 @@ typedef struct
 #include "gl_funcs.h"
 } OpenGLFunctions;
 
-internal U32 calculate_utf8_cstring_size(U8 *cstring);
-#include "../game/arena.c"
-#include "../game/strings.c"
-#include "../game/util.c"
-
 //
 // NOTE(tbt): functions in the game called by the platform layer
-//
+//~
 
 typedef void ( *GameInit) (OpenGLFunctions *gl);                                                       // NOTE(tbt): called after the platform layer has finished setup - last thing before entering the main loop
 typedef void ( *GameUpdateAndRender) (PlatformState *input, F64 frametime_in_s);  // NOTE(tbt): called every frame
@@ -260,7 +300,7 @@ typedef void ( *GameCleanup) (void);                                      // NOT
 
 //
 // NOTE(tbt): functions in the platform layer called by the game
-//
+//?
 
 // NOTE(tbt): signal to the platform layer to exit
 LC_API void platform_quit(void);

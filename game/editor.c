@@ -25,9 +25,9 @@ do_level_editor(PlatformState *input,
   (F32)global_current_level.bg.height /
   (F32)global_current_level.bg.width;
  
- world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS,
-                                          SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
+ world_draw_sub_texture(rect(0.0f, 0.0f,
+                             SCREEN_W_IN_WORLD_UNITS,
+                             SCREEN_W_IN_WORLD_UNITS * aspect),
                         WHITE,
                         &global_current_level.bg,
                         ENTIRE_TEXTURE);
@@ -61,19 +61,19 @@ do_level_editor(PlatformState *input,
  if (error_opening_level)
  {
   ui_do_window(input,
-               s8_literal("editor error opening level window"),
-               s8_literal("error"),
+               s8("editor error opening level window"),
+               s8("error"),
                960.0f, 540.0f, 500.0f)
   {
-   ui_do_label(s8_literal("editor error opening level label"),
-               s8_literal("could not open level"),
+   ui_do_label(s8("editor error opening level label"),
+               s8("could not open level"),
                150.0f);
    
    ui_do_line_break();
    
    if (ui_do_button(input,
-                    s8_literal("editor error opening level ok button"),
-                    s8_literal("ok"),
+                    s8("editor error opening level ok button"),
+                    s8("ok"),
                     15.0f))
    {
     error_opening_level = false;
@@ -91,35 +91,35 @@ do_level_editor(PlatformState *input,
       !creating_level)
   {
    ui_do_window(input,
-                s8_literal("main editor window"),
-                s8_literal("editor"),
+                s8("main editor window"),
+                s8("editor"),
                 900.0f, 256.0f,
                 400.0f)
    {
     ui_do_dropdown(input,
-                   s8_literal("editor file menu"),
-                   s8_literal("file"),
+                   s8("editor file menu"),
+                   s8("file"),
                    150.0f)
     {
      if (ui_do_button(input,
-                      s8_literal("editor open level button"),
-                      s8_literal("open level"),
+                      s8("editor open level button"),
+                      s8("open level"),
                       150.0f))
      {
       opening_level = true;
      }
      
      if (ui_do_button(input,
-                      s8_literal("editor new level button"),
-                      s8_literal("new level"),
+                      s8("editor new level button"),
+                      s8("new level"),
                       150.0f))
      {
       creating_level = true;
      }
      
      if (ui_do_button(input,
-                      s8_literal("editor save level button"),
-                      s8_literal("save level"),
+                      s8("editor save level button"),
+                      s8("save level"),
                       150.0f))
      {
       saving_level = true;
@@ -127,23 +127,23 @@ do_level_editor(PlatformState *input,
     }
     
     ui_do_dropdown(input,
-                   s8_literal("editor edit menu"),
-                   s8_literal("edit"),
+                   s8("editor edit menu"),
+                   s8("edit"),
                    150.0f)
     {
      if (ui_do_button(input,
-                      s8_literal("editor enter entity edit mode"),
-                      s8_literal("edit entities"),
+                      s8("editor enter entity edit mode"),
+                      s8("edit entities"),
                       150.0f))
      {
       editing_entities = true;
       global_editor_selected_entity = NULL;
-      ui_delete_node(s8_literal("gen Entity editor"));
+      ui_delete_node(s8("gen Entity editor"));
      }
      
      if (ui_do_button(input,
-                      s8_literal("edit level meta button"),
-                      s8_literal("edit level metadata"),
+                      s8("edit level meta button"),
+                      s8("edit level metadata"),
                       150.0f))
      {
       if (!editing_level_meta)
@@ -176,12 +176,12 @@ do_level_editor(PlatformState *input,
   if (opening_level || creating_level)
   {
    ui_do_window(input,
-                s8_literal("editor open level window"),
-                s8_literal("open level"),
+                s8("editor open level window"),
+                s8("open level"),
                 960, 540, 500.0f)
    {
     B32 enter_typed = (TEXT_ENTRY_STATE_enter == ui_do_text_entry(input,
-                                                                  s8_literal("editor open level text entry"),
+                                                                  s8("editor open level text entry"),
                                                                   open_level_path_buffer,
                                                                   NULL,
                                                                   sizeof(open_level_path_buffer)));
@@ -189,21 +189,21 @@ do_level_editor(PlatformState *input,
     ui_do_line_break();
     
     B32 open_pressed = ui_do_button(input,
-                                    s8_literal("editor open level open button"),
-                                    s8_literal("open"),
+                                    s8("editor open level open button"),
+                                    s8("open"),
                                     150.0f);
     
     B32 cancel_pressed = ui_do_button(input,
-                                      s8_literal("editor open level cancel button"),
-                                      s8_literal("cancel"),
+                                      s8("editor open level cancel button"),
+                                      s8("cancel"),
                                       150.0f);
     
     if (open_pressed || enter_typed)
     {
      S8List *path_list = NULL;
-     path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal(".level"));
-     path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal(open_level_path_buffer));
-     path_list = push_s8_to_list(&global_frame_memory, path_list, s8_literal("../assets/levels/"));
+     path_list = push_s8_to_list(&global_frame_memory, path_list, s8(".level"));
+     path_list = push_s8_to_list(&global_frame_memory, path_list, s8(open_level_path_buffer));
+     path_list = push_s8_to_list(&global_frame_memory, path_list, s8("../assets/levels/"));
      
      S8 path = expand_s8_list(&global_frame_memory, path_list);
      
@@ -221,7 +221,7 @@ do_level_editor(PlatformState *input,
     
     if (open_pressed || cancel_pressed || enter_typed)
     {
-     ui_delete_node(s8_literal("editor open level window"));
+     ui_delete_node(s8("editor open level window"));
      opening_level = false;
      creating_level = false;
      memset(open_level_path_buffer, 0, sizeof(open_level_path_buffer));
@@ -236,10 +236,10 @@ do_level_editor(PlatformState *input,
   if (editing_level_meta)
   {
    // NOTE(tbt): preview player spawn location and scale
-   world_fill_rectangle(rectangle_literal(level_descriptor.player_spawn_x - 1.0f,
-                                          0.0f,
-                                          2.0f,
-                                          global_renderer_window_h),
+   world_fill_rectangle(rect(level_descriptor.player_spawn_x - 1.0f,
+                             0.0f,
+                             2.0f,
+                             global_renderer_window_h),
                         colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
    
    F32 y_offset = 0.0f;
@@ -249,27 +249,27 @@ do_level_editor(PlatformState *input,
     y_offset = level_descriptor.player_spawn_x * tan(-level_descriptor.floor_gradient);
    }
    
-   world_fill_rotated_rectangle(rectangle_literal(0.0f,
-                                                  level_descriptor.player_spawn_y + y_offset - 1.0f,
-                                                  global_renderer_window_w / cos(level_descriptor.floor_gradient),
-                                                  2.0f),
+   world_fill_rotated_rectangle(rect(0.0f,
+                                     level_descriptor.player_spawn_y + y_offset - 1.0f,
+                                     global_renderer_window_w / cos(level_descriptor.floor_gradient),
+                                     2.0f),
                                 level_descriptor.floor_gradient,
                                 colour_literal(1.0f, 0.0f, 0.0f, 0.4f));
    
    F32 _player_scale = level_descriptor.player_scale / (global_renderer_window_h - level_descriptor.player_spawn_y);
-   world_stroke_rectangle(rectangle_literal(level_descriptor.player_spawn_x + PLAYER_COLLISION_X * _player_scale,
-                                            level_descriptor.player_spawn_y + PLAYER_COLLISION_Y * _player_scale,
-                                            PLAYER_COLLISION_W * _player_scale,
-                                            PLAYER_COLLISION_H * _player_scale),
+   world_stroke_rectangle(rect(level_descriptor.player_spawn_x + PLAYER_COLLISION_X * _player_scale,
+                               level_descriptor.player_spawn_y + PLAYER_COLLISION_Y * _player_scale,
+                               PLAYER_COLLISION_W * _player_scale,
+                               PLAYER_COLLISION_H * _player_scale),
                           colour_literal(1.0f, 0.0f, 0.0f, 0.4f),
                           2.0f);
    
    S8List *metadata_editor_window_title_list = NULL;
    metadata_editor_window_title_list = push_s8_to_list(&global_frame_memory, metadata_editor_window_title_list, global_current_level.path);
-   metadata_editor_window_title_list = push_s8_to_list(&global_frame_memory, metadata_editor_window_title_list, s8_literal("edit level metadata - "));
+   metadata_editor_window_title_list = push_s8_to_list(&global_frame_memory, metadata_editor_window_title_list, s8("edit level metadata - "));
    
    ui_do_window(input,
-                s8_literal("level metadata editor"),
+                s8("level metadata editor"),
                 expand_s8_list(&global_frame_memory, metadata_editor_window_title_list),
                 32.0f, 32.0f, 1200.0f)
    {
@@ -277,22 +277,22 @@ do_level_editor(PlatformState *input,
     ui_do_horizontal_rule();
     
     if (ui_do_button(input,
-                     s8_literal("level metadata editor save button"),
-                     s8_literal("save"),
+                     s8("level metadata editor save button"),
+                     s8("save"),
                      15.0f))
     {
-     ui_delete_node(s8_literal("level metadata editor"));
+     ui_delete_node(s8("level metadata editor"));
      level_from_level_descriptor(&global_level_memory, &global_current_level, &level_descriptor);
      saving_level = true;
      editing_level_meta = false;
     }
     
     if (ui_do_button(input,
-                     s8_literal("level metadata editor cancel button"),
-                     s8_literal("cancel"),
+                     s8("level metadata editor cancel button"),
+                     s8("cancel"),
                      15.0f))
     {
-     ui_delete_node(s8_literal("level metadata editor"));
+     ui_delete_node(s8("level metadata editor"));
      memset(&level_descriptor, 0, sizeof(level_descriptor));
      editing_level_meta = false;
     }
@@ -311,14 +311,14 @@ do_level_editor(PlatformState *input,
    static Entity *resizing = NULL;
    
    ui_do_window(input,
-                s8_literal("entity editor window"),
-                s8_literal("entity editor"),
+                s8("entity editor window"),
+                s8("entity editor"),
                 64.0f, 64.0f,
                 400.0f)
    {
     if (ui_do_button(input,
-                     s8_literal("create entity button"),
-                     s8_literal("create entity"),
+                     s8("create entity button"),
+                     s8("create entity"),
                      150.0f))
     {
      Entity *e = allocate_and_push_entity(&global_current_level.entities);
@@ -332,8 +332,8 @@ do_level_editor(PlatformState *input,
     }
     
     if (ui_do_button(input,
-                     s8_literal("editor exit entity edit mode"),
-                     s8_literal("exit"),
+                     s8("editor exit entity edit mode"),
+                     s8("exit"),
                      150.0f))
     {
      editing_entities = false;
@@ -379,9 +379,9 @@ do_level_editor(PlatformState *input,
     }
     stroke_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.8f), 2.0f, UI_SORT_DEPTH, global_projection_matrix);
     
-    if (is_point_in_region(MOUSE_WORLD_X,
-                           MOUSE_WORLD_Y,
-                           e->bounds) &&
+    if (is_point_in_rect(MOUSE_WORLD_X,
+                         MOUSE_WORLD_Y,
+                         e->bounds) &&
         !global_is_mouse_over_ui)
     {
      fill_rectangle(e->bounds, colour_literal(0.0f, 0.0f, 1.0f, 0.15f), UI_SORT_DEPTH, global_projection_matrix);
@@ -433,8 +433,8 @@ do_level_editor(PlatformState *input,
    if (global_editor_selected_entity)
    {
     ui_do_window(input,
-                 s8_literal("entity editor"),
-                 s8_literal("entity editor"),
+                 s8("entity editor"),
+                 s8("entity editor"),
                  32.0f, 32.0f, 1600.0f)
     {
      do_entity_editor_ui(input, global_editor_selected_entity);
@@ -447,9 +447,9 @@ do_level_editor(PlatformState *input,
    (F32)global_current_level.fg.height /
    (F32)global_current_level.fg.width;
   
-  world_draw_sub_texture(rectangle_literal(0.0f, 0.0f,
-                                           SCREEN_WIDTH_IN_WORLD_UNITS,
-                                           SCREEN_WIDTH_IN_WORLD_UNITS * aspect),
+  world_draw_sub_texture(rect(0.0f, 0.0f,
+                              SCREEN_W_IN_WORLD_UNITS,
+                              SCREEN_W_IN_WORLD_UNITS * aspect),
                          WHITE,
                          &global_current_level.fg,
                          ENTIRE_TEXTURE);

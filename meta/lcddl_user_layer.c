@@ -113,7 +113,7 @@ gen_editor_ui(LcddlNode *node,
     LcddlNode *dropdown_source = find_first_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
-     fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
+     fprintf(file, "_ui_begin_dropdown(input, s8(\"gen %s %d\"), s8(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
      fprintf(file, "\"), -1.0f);\n");
      
@@ -124,7 +124,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "if (ui_do_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), -1.0f)) { x->%s = %s; }\n",
+               "if (ui_do_button(input, s8(\"gen %s %d\"), s8(\"%s\"), -1.0f)) { x->%s = %s; }\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -142,7 +142,7 @@ gen_editor_ui(LcddlNode *node,
     LcddlNode *dropdown_source = find_first_top_level_declaration(dropdown_source_name->literal.value);
     if (dropdown_source)
     {
-     fprintf(file, "_ui_begin_dropdown(input, s8_literal(\"gen %s %d\"), s8_literal(\"", child->declaration.name, rand());
+     fprintf(file, "_ui_begin_dropdown(input, s8(\"gen %s %d\"), s8(\"", child->declaration.name, rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
      fprintf(file, "\"), -1.0f);\n");
      
@@ -153,7 +153,7 @@ gen_editor_ui(LcddlNode *node,
       if (!lcddl_does_node_have_tag(menu_item, "no_ui"))
       {
        fprintf(file,
-               "ui_do_bit_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"%s\"), &x->%s, %s, -1.0f);\n",
+               "ui_do_bit_toggle_button(input, s8(\"gen %s %d\"), s8(\"%s\"), &x->%s, %s, -1.0f);\n",
                menu_item->declaration.name,
                rand(),
                menu_item->declaration.name,
@@ -171,14 +171,14 @@ gen_editor_ui(LcddlNode *node,
    {
     fprintf(file, "");
     fprintf(file,
-            "ui_do_text_entry(input, s8_literal(\"gen %s entry %d\"), x->%s, NULL, %u);\n",
+            "ui_do_text_entry(input, s8(\"gen %s entry %d\"), x->%s, NULL, %u);\n",
             child->declaration.name,
             rand(),
             child->declaration.name,
             child->declaration.type->type.array_count);
     
     fprintf(file,
-            "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
+            "ui_do_label(s8(\"gen %s label %d\"), s8(\"",
             child->declaration.name,
             rand());
     write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
@@ -190,7 +190,7 @@ gen_editor_ui(LcddlNode *node,
     if (0 == strcmp(child->declaration.type->type.type_name, "B32"))
     {
      fprintf(file,
-             "ui_do_toggle_button(input, s8_literal(\"gen %s %d\"), s8_literal(\"",
+             "ui_do_toggle_button(input, s8(\"gen %s %d\"), s8(\"",
              child->declaration.name,
              rand());
      write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
@@ -239,7 +239,7 @@ gen_editor_ui(LcddlNode *node,
       float_from_annotation(child, "width", &width);
       
       fprintf(file,
-              "ui_do_slider_%s(input, s8_literal(\"gen %s slider %d\"), %ff, %ff, %ff, %ff, &x->%s);\n",
+              "ui_do_slider_%s(input, s8(\"gen %s slider %d\"), %ff, %ff, %ff, %ff, &x->%s);\n",
               slider_kind == SLIDER_KIND_int    ? "i"  :
               slider_kind == SLIDER_KIND_long   ? "l"  :
               slider_kind == SLIDER_KIND_float  ? "f"  :
@@ -253,7 +253,7 @@ gen_editor_ui(LcddlNode *node,
               child->declaration.name);
       
       fprintf(file,
-              "ui_do_label(s8_literal(\"gen %s label %d\"), s8_literal(\"",
+              "ui_do_label(s8(\"gen %s label %d\"), s8(\"",
               child->declaration.name,
               rand());
       write_string_as_lowercase_with_spaces_f(file, child->declaration.name);
@@ -423,7 +423,7 @@ gen_serialisation_funcs(LcddlNode *node,
              "x->%s.len = *((U64 *)(*read_pointer));\n"
              "*read_pointer += sizeof(U64);\n"
              "if (x->%s.len)\n{\n"
-             "x->%s.buffer = arena_allocate(&global_static_memory, x->%s.len);\n"
+             "x->%s.buffer = arena_push(&global_static_memory, x->%s.len);\n"
              "memcpy(x->%s.buffer, *read_pointer, x->%s.len);\n"
              "*read_pointer += x->%s.len;\n}\n"
              "else\n{\n"

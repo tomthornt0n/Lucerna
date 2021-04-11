@@ -178,8 +178,8 @@ _ui_new_node_from_string(MemoryArena *memory,
   }
  }
  
- result->next_hash = arena_allocate(&global_static_memory,
-                                    sizeof(*result->next_hash));
+ result->next_hash = arena_push(&global_static_memory,
+                                sizeof(*result->next_hash));
  result = result->next_hash;
  
  new_node:
@@ -730,7 +730,7 @@ ui_do_slider_lf(PlatformState *input,
  if (!node->hidden)
  {
   S8 text_name;
-  text_name.buffer = arena_allocate(&global_frame_memory, name.size + 1);
+  text_name.buffer = arena_push(&global_frame_memory, name.size + 1);
   text_name.size = name.size + 1;
   memcpy(text_name.buffer, name.buffer, name.size);
   text_name.buffer[name.size] = '~';
@@ -859,8 +859,8 @@ _ui_do_line_break(B32 rule)
 {
  UINode *node;
  
- node = arena_allocate(&global_frame_memory,
-                       sizeof(*node));
+ node = arena_push(&global_frame_memory,
+                   sizeof(*node));
  node->draw_horizontal_rule = rule;
  
  _ui_insert_node(node);

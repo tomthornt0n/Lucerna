@@ -34,9 +34,9 @@ global_rcx.window.w / 2.0f,                                                 \
 s32_from_s8(&global_frame_memory, (_text)));                                     \
 static B32 _hovered = false;                                                                                       \
 static F32 _x_offset = 0.0f;                                                                                       \
-if (is_point_in_region(input->mouse_x,                                                                             \
+if (is_point_in_rect(input->mouse_x,                                                                             \
 input->mouse_y,                                                                             \
-rectangle_literal(_button_bounds.x - MAIN_MENU_BUTTON_REGION_TOLERANCE / 2.0f,              \
+rect(_button_bounds.x - MAIN_MENU_BUTTON_REGION_TOLERANCE / 2.0f,              \
 _button_bounds.y - MAIN_MENU_BUTTON_REGION_TOLERANCE / 2.0f,              \
 _button_bounds.w + MAIN_MENU_BUTTON_REGION_TOLERANCE,                     \
 _button_bounds.h + MAIN_MENU_BUTTON_REGION_TOLERANCE)) ||                 \
@@ -96,9 +96,9 @@ do_main_menu(PlatformState *input,
  {
   MAIN_MENU_BUTTON(global_current_locale_config.play, 400.0f, keyboard_selection == MAIN_MENU_BUTTON_play)
   {
-   if (!set_current_level(s8_literal("../assets/levels/office_1.level"), false, true, 0.0f, 0.0f))
+   if (!set_current_level(s8("../assets/levels/office_1.level"), false, true, 0.0f, 0.0f))
    {
-    set_current_level_as_new_level(s8_literal("../assets/levels/office_1.level"));
+    set_current_level_as_new_level(s8("../assets/levels/office_1.level"));
    }
    global_game_state = GAME_STATE_playing;
   }
@@ -110,4 +110,6 @@ do_main_menu(PlatformState *input,
    platform_quit();
   }
  }
+ 
+ do_post_processing(1.0f, POST_PROCESSING_KIND_memory, 1);
 }

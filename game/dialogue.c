@@ -1,4 +1,4 @@
-#define DIALOGUE_FADE_OUT_SPEED 2.0f
+internal F32 DIALOGUE_FADE_OUT_SPEED = 2.0f;
 
 typedef struct
 {

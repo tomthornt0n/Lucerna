@@ -11,13 +11,13 @@
 internal MemoryArena global_platform_layer_frame_memory;
 
 #define STB_IMAGE_IMPLEMENTATION
-#define STBI_MALLOC(sz) arena_allocate(&global_platform_layer_frame_memory, sz)
+#define STBI_MALLOC(sz) arena_push(&global_platform_layer_frame_memory, sz)
 internal void *
 realloc_for_stb(void *p,
                 U64 old_size,
                 U64 new_size)
 {
- void *result = arena_allocate(&global_platform_layer_frame_memory, new_size);
+ void *result = arena_push(&global_platform_layer_frame_memory, new_size);
  memcpy(result, p, old_size);
  return result;
 }
@@ -110,7 +110,7 @@ platform_open_file_ex(S8 path,
    
    if (result->file == INVALID_HANDLE_VALUE)
    {
-    debug_log("failure opening file '%.*s' - ", (I32)path.size, path.buffer);
+    debug_log("failure opening file '%.*s' - ", unravel_s8(path));
     windows_print_error("CreateFileA");
     platform_close_file(&result);
    }
@@ -196,7 +196,7 @@ platform_read_entire_file_f(MemoryArena *memory,
   DWORD bytes_to_read = GetFileSize(file->file, 0);
   if (bytes_to_read)
   {
-   void *read_data = arena_allocate(memory, bytes_to_read);
+   void *read_data = arena_push(memory, bytes_to_read);
    DWORD bytes_read = 0;
    OVERLAPPED overlapped = {0};
    
@@ -513,7 +513,7 @@ platform_quit(void)
 internal void
 windows_push_platform_event(PlatformEvent event)
 {
- PlatformEvent *_event = arena_allocate(&global_platform_layer_frame_memory, sizeof(*_event));
+ PlatformEvent *_event = arena_push(&global_platform_layer_frame_memory, sizeof(*_event));
  *_event = event;
  
  _event->next = global_platform_state.events;
