@@ -35,12 +35,12 @@ set_locale(Locale locale)
   U32 font_bake_begin = 32;
   U32 font_bake_end = 255;
   
-  global_current_locale_config.normal_font = load_font(&global_persist_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(&global_persist_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
@@ -48,9 +48,9 @@ set_locale(Locale locale)
   
   global_current_locale_config.dialogue_seconds_per_character = 0.2;
   
-  global_current_locale_config.title = s8_from_cstring(&global_persist_memory, "Lucerna");
-  global_current_locale_config.play = s8_from_cstring(&global_persist_memory, "Play");
-  global_current_locale_config.exit = s8_from_cstring(&global_persist_memory, "Exit");
+  global_current_locale_config.title = s8_from_cstring(&global_static_memory, "Lucerna");
+  global_current_locale_config.play = s8_from_cstring(&global_static_memory, "Play");
+  global_current_locale_config.exit = s8_from_cstring(&global_static_memory, "Exit");
  }
  else if (locale == LOCALE_fr)
  {
@@ -59,12 +59,12 @@ set_locale(Locale locale)
   U32 font_bake_begin = 32;
   U32 font_bake_end = 255;
   
-  global_current_locale_config.normal_font = load_font(&global_persist_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(&global_persist_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8("../assets/fonts/PlayfairDisplay-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
@@ -72,9 +72,9 @@ set_locale(Locale locale)
   
   global_current_locale_config.dialogue_seconds_per_character = 0.2;
   
-  global_current_locale_config.title = s8_from_cstring(&global_persist_memory, "Lucerna");
-  global_current_locale_config.play = s8_from_cstring(&global_persist_memory, "Jouer");
-  global_current_locale_config.exit = s8_from_cstring(&global_persist_memory, "Sortir");
+  global_current_locale_config.title = s8_from_cstring(&global_static_memory, "Lucerna");
+  global_current_locale_config.play = s8_from_cstring(&global_static_memory, "Jouer");
+  global_current_locale_config.exit = s8_from_cstring(&global_static_memory, "Sortir");
  }
  else if (locale == LOCALE_sc)
  {
@@ -83,12 +83,12 @@ set_locale(Locale locale)
   U32 font_bake_begin = 0x4E00;
   U32 font_bake_end = 0x9FFF;
   
-  global_current_locale_config.normal_font = load_font(&global_persist_memory,
+  global_current_locale_config.normal_font = load_font(&global_static_memory,
                                                        s8("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                        28,
                                                        font_bake_begin,
                                                        font_bake_end - font_bake_begin);
-  global_current_locale_config.title_font = load_font(&global_persist_memory,
+  global_current_locale_config.title_font = load_font(&global_static_memory,
                                                       s8("../assets/fonts/LiuJianMaoCao-Regular.ttf"),
                                                       72,
                                                       font_bake_begin,
@@ -96,9 +96,9 @@ set_locale(Locale locale)
   
   global_current_locale_config.dialogue_seconds_per_character = 0.5;
   
-  global_current_locale_config.title = s8_from_cstring(&global_persist_memory, "光");
-  global_current_locale_config.play = s8_from_cstring(&global_persist_memory, "玩");
-  global_current_locale_config.exit = s8_from_cstring(&global_persist_memory, "出口");
+  global_current_locale_config.title = s8_from_cstring(&global_static_memory, "光");
+  global_current_locale_config.play = s8_from_cstring(&global_static_memory, "玩");
+  global_current_locale_config.exit = s8_from_cstring(&global_static_memory, "出口");
  }
 }
 

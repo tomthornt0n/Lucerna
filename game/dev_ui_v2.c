@@ -490,7 +490,7 @@ ui_widget_from_string(S8 identifier)
   // NOTE(tbt): hash table slot unused
  {
   result = chain;
-  result->key = copy_s8(&global_persist_memory, _identifier);
+  result->key = copy_s8(&global_static_memory, _identifier);
  }
  else
  {
@@ -509,9 +509,9 @@ ui_widget_from_string(S8 identifier)
   // NOTE(tbt): push a new widget to the chain if a match is not found
   if (NULL == result)
   {
-   result = arena_push(&global_persist_memory, sizeof(*result));
+   result = arena_push(&global_static_memory, sizeof(*result));
    result->next_hash = global_ui_context.widget_dict[index].next_hash;
-   result->key = copy_s8(&global_persist_memory, _identifier);
+   result->key = copy_s8(&global_static_memory, _identifier);
    global_ui_context.widget_dict[index].next_hash = result;
   }
  }

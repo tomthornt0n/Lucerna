@@ -373,8 +373,8 @@ generate_rotated_quad(Rect rectangle,
 //~
 
 #define renderer_compile_and_link_fragment_shader(_name, _vertex_shader)                                     \
-shader_src = cstring_from_s8(&global_persist_memory,                                                         \
-platform_read_entire_file_p(&global_persist_memory,                             \
+shader_src = cstring_from_s8(&global_static_memory,                                                         \
+platform_read_entire_file_p(&global_static_memory,                             \
 s8("../assets/shaders/" #_name ".frag"))); \
 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);                                                       \
 glShaderSource(fragment_shader, 1, &shader_src, NULL);                                                      \

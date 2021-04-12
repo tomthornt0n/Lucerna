@@ -27,7 +27,7 @@ internal F32 global_exposure = 1.0;
 
 internal F64 global_audio_master_level = 0.8;
 
-internal MemoryArena global_persist_memory;
+internal MemoryArena global_static_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 internal MemoryArena global_temp_memory;
@@ -247,7 +247,7 @@ game_init(OpenGLFunctions *gl)
 #define gl_func(_type, _func) gl ## _func = gl-> ## _func;
 #include "gl_funcs.h"
  
- initialise_arena_with_new_memory(&global_persist_memory, 4 * ONE_MB);
+ initialise_arena_with_new_memory(&global_static_memory, 4 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
  initialise_arena_with_new_memory(&global_level_memory, 100 * ONE_MB);
  initialise_arena_with_new_memory(&global_temp_memory, 100 * ONE_MB);
@@ -258,7 +258,7 @@ game_init(OpenGLFunctions *gl)
  cm_set_lock(cmixer_lock_handler);
  cm_set_master_gain(global_audio_master_level);
  
- global_ui_font = load_font(&global_persist_memory,
+ global_ui_font = load_font(&global_static_memory,
                             s8("../assets/fonts/mononoki.ttf"),
                             19,
                             32, 255);
