@@ -27,7 +27,7 @@ internal F32 global_exposure = 1.0;
 
 internal F64 global_audio_master_level = 0.8;
 
-internal MemoryArena global_static_memory;
+internal MemoryArena global_persist_memory;
 internal MemoryArena global_frame_memory;
 internal MemoryArena global_level_memory;
 internal MemoryArena global_temp_memory;
@@ -74,14 +74,14 @@ demo_ui(PlatformState *input,
         F64 frametime_in_s,
         S8 title)
 {
- static F32 width  = 656.0f;
- static F32 height = 574.0f;
+ persist F32 width  = 656.0f;
+ persist F32 height = 574.0f;
  
  ui_width(width, 1.0f) ui_height(height, 1.0f) ui_window(title)
  {
   ui_height(36.0f, 0.8f)
   {
-   static B32 toggled;
+   persist B32 toggled;
    
    ui_width(999999.0f, 0.0f) ui_label(s8_from_format_string(&global_frame_memory,
                                                             "window dimensions: %f x %f",
@@ -125,7 +125,7 @@ demo_ui(PlatformState *input,
     }
    }
    
-   static B32 is_memory = false;
+   persist B32 is_memory = false;
    ui_width(200.0f, 0.5f) ui_toggle_button(s8("level is memory"), &is_memory);
    
    if (is_memory)
@@ -141,7 +141,7 @@ demo_ui(PlatformState *input,
    
    ui_width(120.0f, 0.5f) ui_indent(32.0f)
    {
-    static B32 toggleds[5] = {0};
+    persist B32 toggleds[5] = {0};
     for (I32 i = 0;
          i < array_count(toggleds);
          ++i)
@@ -179,7 +179,14 @@ demo_ui(PlatformState *input,
    
    ui_width(500.0f, 1.0f)
    {
-    S8 test = ui_line_edit(s8("test line edit"));
+    persist U8 buffer[128] = {0};
+    persist S8 test = { .buffer = buffer, .size = 0, .len = 0 };
+    if (ui_line_edit(s8("test line edit"), &test, sizeof(buffer)))
+    {
+     snprintf(buffer, sizeof(buffer), "poopy");
+     test = s8(buffer);
+     debug_log("bet you didn't see that coming\n");
+    }
     ui_label(test);
    }
   }
@@ -240,7 +247,7 @@ game_init(OpenGLFunctions *gl)
 #define gl_func(_type, _func) gl ## _func = gl-> ## _func;
 #include "gl_funcs.h"
  
- initialise_arena_with_new_memory(&global_static_memory, 4 * ONE_MB);
+ initialise_arena_with_new_memory(&global_persist_memory, 4 * ONE_MB);
  initialise_arena_with_new_memory(&global_frame_memory, 2 * ONE_MB);
  initialise_arena_with_new_memory(&global_level_memory, 100 * ONE_MB);
  initialise_arena_with_new_memory(&global_temp_memory, 100 * ONE_MB);
@@ -251,7 +258,7 @@ game_init(OpenGLFunctions *gl)
  cm_set_lock(cmixer_lock_handler);
  cm_set_master_gain(global_audio_master_level);
  
- global_ui_font = load_font(&global_static_memory,
+ global_ui_font = load_font(&global_persist_memory,
                             s8("../assets/fonts/mononoki.ttf"),
                             19,
                             32, 255);
@@ -311,7 +318,7 @@ game_update_and_render(PlatformState *input,
                     KEY_v,
                     INPUT_MODIFIER_ctrl))
  {
-  static B32 vsync = true;
+  persist B32 vsync = true;
   platform_set_vsync((vsync = !vsync));
  }
  else if (is_key_pressed(input,

@@ -66,7 +66,7 @@ load_player_art(void)
 internal void
 hot_reload_player_art(F64 frametime_in_s)
 {
- static F64 time = 0.0;
+ persist F64 time = 0.0;
  time += frametime_in_s;
  
  F64 refresh_time = 2.0; // NOTE(tbt): refresh every 2 seconds
@@ -577,7 +577,7 @@ do_entities(F64 frametime_in_s,
             Entity *entities,
             Player *player)
 {
- static DialogueState dialogue_state = {0};
+ persist DialogueState dialogue_state = {0};
  
  for (Entity *e = entities;
       NULL != e;
@@ -702,7 +702,7 @@ do_entities(F64 frametime_in_s,
 internal void
 hot_reload_current_level_art(F64 frametime_in_s)
 {
- static F64 time = 0.0;
+ persist F64 time = 0.0;
  time += frametime_in_s;
  
  F64 refresh_time = 2.0; // NOTE(tbt): refresh every 2 seconds

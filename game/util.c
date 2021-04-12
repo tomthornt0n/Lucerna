@@ -184,6 +184,21 @@ is_point_in_rect(F32 x, F32 y,
           y > (region.y + region.h));
 }
 
+internal inline Rect
+rect_lerp(Rect a,
+          Rect b,
+          F32 t)
+{
+ Rect result;
+ 
+ result.x = (a.x * t) + (b.x * (1.0f - t));
+ result.y = (a.y * t) + (b.y * (1.0f - t));
+ result.w = (a.w * t) + (b.w * (1.0f - t));
+ result.h = (a.h * t) + (b.h * (1.0f - t));
+ 
+ return result;
+}
+
 internal inline Colour
 colour_lerp(Colour a,
             Colour b,

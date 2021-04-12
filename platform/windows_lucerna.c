@@ -530,7 +530,7 @@ window_proc(HWND window_handle,
 {
  LRESULT result = 0;
  
- static B32 mouse_hover_active = false;
+ persist B32 mouse_hover_active = false;
  
  InputModifiers modifiers = 0;
  if(GetKeyState(VK_CONTROL) & 0x8000)

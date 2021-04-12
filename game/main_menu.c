@@ -32,8 +32,8 @@ global_rcx.window.w / 2.0f,                                                 \
 (_y),                                                                            \
 -1.0f,                                                                           \
 s32_from_s8(&global_frame_memory, (_text)));                                     \
-static B32 _hovered = false;                                                                                       \
-static F32 _x_offset = 0.0f;                                                                                       \
+persist B32 _hovered = false;                                                                                       \
+persist F32 _x_offset = 0.0f;                                                                                       \
 if (is_point_in_rect(input->mouse_x,                                                                             \
 input->mouse_y,                                                                             \
 rect(_button_bounds.x - MAIN_MENU_BUTTON_REGION_TOLERANCE / 2.0f,              \
@@ -77,7 +77,7 @@ do_main_menu(PlatformState *input,
   
   MAIN_MENU_BUTTON_MAX,
  } MainMenuButton;
- static MainMenuButton keyboard_selection = MAIN_MENU_BUTTON_NONE;
+ persist MainMenuButton keyboard_selection = MAIN_MENU_BUTTON_NONE;
  
  if (is_key_pressed(input, KEY_tab, 0))
  {

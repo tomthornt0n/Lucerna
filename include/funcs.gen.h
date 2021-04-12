@@ -73,55 +73,6 @@ x->kind = *((I32 *)(*read_pointer));
 }
 
 internal void
-do_entity_editor_ui(PlatformState *input,
-Entity *x)
-{
-_ui_begin_dropdown(input, s8("gen flags 5436"), s8("flags"), -1.0f);
-ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_trigger_dialogue 32391"), s8("ENTITY_FLAG_trigger_dialogue"), &x->flags, ENTITY_FLAG_trigger_dialogue, -1.0f);
-ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_teleport 14604"), s8("ENTITY_FLAG_teleport"), &x->flags, ENTITY_FLAG_teleport, -1.0f);
-ui_do_bit_toggle_button(input, s8("gen ENTITY_FLAG_fade_out 3902"), s8("ENTITY_FLAG_fade_out"), &x->flags, ENTITY_FLAG_fade_out, -1.0f);
-_ui_pop_insertion_point();
-_ui_do_line_break(true);
-ui_do_slider_f(input, s8("gen teleport_to_x slider 153"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->teleport_to_x);
-ui_do_label(s8("gen teleport_to_x label 292"), s8("teleport to x:"), 100.0f);
-_ui_do_line_break(false);
-ui_do_slider_f(input, s8("gen teleport_to_y slider 12382"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->teleport_to_y);
-ui_do_label(s8("gen teleport_to_y label 17421"), s8("teleport to y:"), 100.0f);
-_ui_do_line_break(false);
-_ui_begin_dropdown(input, s8("gen teleport_on_trigger 18716"), s8("teleport on trigger"), -1.0f);
-if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_left 19718"), s8("ENTITY_TRIGGER_player_left"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_left; }
-if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_intersecting 19895"), s8("ENTITY_TRIGGER_player_intersecting"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_intersecting; }
-if (ui_do_button(input, s8("gen ENTITY_TRIGGER_player_entered 5447"), s8("ENTITY_TRIGGER_player_entered"), -1.0f)) { x->teleport_on_trigger = ENTITY_TRIGGER_player_entered; }
-_ui_pop_insertion_point();
-_ui_do_line_break(false);
-ui_do_toggle_button(input, s8("gen teleport_do_not_persist_exposure 21726"), s8("teleport do not persist exposure"), -1.0f, &x->teleport_do_not_persist_exposure);
-_ui_do_line_break(false);
-ui_do_toggle_button(input, s8("gen teleport_to_non_default_spawn 14771"), s8("teleport to non default spawn"), -1.0f, &x->teleport_to_non_default_spawn);
-_ui_do_line_break(false);
-ui_do_text_entry(input, s8("gen teleport_to_level entry 11538"), x->teleport_to_level, NULL, 64);
-ui_do_label(s8("gen teleport_to_level label 1869"), s8("teleport to level:"), 100.0f);
-_ui_do_line_break(true);
-_ui_begin_dropdown(input, s8("gen fade_out_direction 19912"), s8("fade out direction"), -1.0f);
-if (ui_do_button(input, s8("gen FADE_OUT_DIR_w 25667"), s8("FADE_OUT_DIR_w"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_w; }
-if (ui_do_button(input, s8("gen FADE_OUT_DIR_s 26299"), s8("FADE_OUT_DIR_s"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_s; }
-if (ui_do_button(input, s8("gen FADE_OUT_DIR_e 17035"), s8("FADE_OUT_DIR_e"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_e; }
-if (ui_do_button(input, s8("gen FADE_OUT_DIR_n 9894"), s8("FADE_OUT_DIR_n"), -1.0f)) { x->fade_out_direction = FADE_OUT_DIR_n; }
-_ui_pop_insertion_point();
-_ui_do_line_break(true);
-ui_do_text_entry(input, s8("gen dialogue_path entry 28703"), x->dialogue_path, NULL, 64);
-ui_do_label(s8("gen dialogue_path label 23811"), s8("dialogue path:"), 100.0f);
-_ui_do_line_break(false);
-ui_do_slider_f(input, s8("gen dialogue_y slider 31322"), 0.000000f, 1080.000000f, 1.000000f, 515.000000f, &x->dialogue_y);
-ui_do_label(s8("gen dialogue_y label 30333"), s8("dialogue y:"), 100.0f);
-_ui_do_line_break(false);
-ui_do_slider_f(input, s8("gen dialogue_x slider 17673"), 0.000000f, 1920.000000f, 1.000000f, 515.000000f, &x->dialogue_x);
-ui_do_label(s8("gen dialogue_x label 4664"), s8("dialogue x:"), 100.0f);
-_ui_do_line_break(false);
-ui_do_toggle_button(input, s8("gen repeat_dialogue 15141"), s8("repeat dialogue"), -1.0f, &x->repeat_dialogue);
-_ui_do_line_break(false);
-}
-
-internal void
 serialise_entity(Entity *x,
 PlatformFile *file)
 {

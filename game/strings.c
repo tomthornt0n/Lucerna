@@ -134,6 +134,55 @@ copy_s8(MemoryArena *memory,
  return result;
 }
 
+internal inline B32
+is_word_boundry(S8 string,
+                U32 index)
+{
+ if (index > 0 && index < string.size)
+ {
+  return isspace(string.buffer[index - 1]) && !isspace(string.buffer[index]);
+ }
+ else
+ {
+  return true;
+ }
+}
+
+typedef enum
+{
+ CURSOR_ADVANCE_DIRECTION_forwards,
+ CURSOR_ADVANCE_DIRECTION_backwards,
+} CursorAdvanceDirection;
+
+typedef enum
+{
+ CURSOR_ADVANCE_MODE_char,
+ CURSOR_ADVANCE_MODE_word,
+} CursorAdvanceMode;
+
+internal inline is_utf8_continuation_byte(S8 string, U32 index);
+
+internal void
+advance_cursor(S8 string,
+               CursorAdvanceDirection dir,
+               CursorAdvanceMode mode,
+               U32 *cursor)
+{
+ I32 delta_table[] = { +1, -1 };
+ I32 delta = delta_table[dir];
+ 
+ B32 to_continue = true; // NOTE(tbt): always move at least one character
+ while (*cursor + delta >= 0 &&
+        *cursor + delta <= string.size &&
+        to_continue)
+ {
+  *cursor += delta;
+  to_continue =
+   (is_utf8_continuation_byte(string, *cursor) ||
+    (mode == CURSOR_ADVANCE_MODE_word && !is_word_boundry(string, *cursor)));
+ }
+}
+
 //
 // NOTE(tbt): UTF-8 handling and conversions
 //~
@@ -368,9 +417,15 @@ utf8_from_codepoint(U8 *buffer,
   buffer[3] = 0x80 | ((codepoint & 0x3f));
  }
  
- debug_log("%d  %.*s\n", advance, advance, buffer);
- 
  return advance;
+}
+
+internal inline
+is_utf8_continuation_byte(S8 string,
+                          U32 index)
+{
+ return (1 == (string.buffer[index] & (1 << 7)) &&
+         0 == (string.buffer[index] & (1 << 6)));
 }
 
 //

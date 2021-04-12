@@ -8,14 +8,14 @@ do_level_editor(PlatformState *input,
  // NOTE(tbt): editor state
  //~
  
- static B32 editing_entities = false;
- static B32 editing_level_meta = false;
- static B32 error_opening_level = false;
- static B32 opening_level = false;
- static B32 saving_level = false;
- static B32 creating_level = false;
- static U8 open_level_path_buffer[64] = {0};
- static LevelDescriptor level_descriptor = {0};
+ persist B32 editing_entities = false;
+ persist B32 editing_level_meta = false;
+ persist B32 error_opening_level = false;
+ persist B32 opening_level = false;
+ persist B32 saving_level = false;
+ persist B32 creating_level = false;
+ persist U8 open_level_path_buffer[64] = {0};
+ persist LevelDescriptor level_descriptor = {0};
  
  //
  // NOTE(tbt): draw background
@@ -306,9 +306,9 @@ do_level_editor(PlatformState *input,
   if (editing_entities &&
       !editing_level_meta)
   {
-   static Entity *active = NULL;
-   static Entity *dragging = NULL;
-   static Entity *resizing = NULL;
+   persist Entity *active = NULL;
+   persist Entity *dragging = NULL;
+   persist Entity *resizing = NULL;
    
    ui_do_window(input,
                 s8("entity editor window"),

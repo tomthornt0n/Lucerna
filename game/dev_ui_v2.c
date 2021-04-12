@@ -13,21 +13,22 @@ typedef U64 UIWidgetFlags;
 typedef enum UIWidgetFlags_ENUM
 {
  //-NOTE(tbt): drawing
- UI_WIDGET_FLAG_draw_outline       = 1 <<  0,
- UI_WIDGET_FLAG_draw_background    = 1 <<  1,
- UI_WIDGET_FLAG_draw_label         = 1 <<  2,
- UI_WIDGET_FLAG_blur_background    = 1 <<  3,
- UI_WIDGET_FLAG_hot_effect         = 1 <<  4,
- UI_WIDGET_FLAG_active_effect      = 1 <<  5,
- UI_WIDGET_FLAG_toggled_effect     = 1 <<  6,
- UI_WIDGET_FLAG_draw_cursor        = 1 <<  7,
+ UI_WIDGET_FLAG_draw_outline                 = 1 <<  0,
+ UI_WIDGET_FLAG_draw_background              = 1 <<  1,
+ UI_WIDGET_FLAG_draw_label                   = 1 <<  2,
+ UI_WIDGET_FLAG_blur_background              = 1 <<  3,
+ UI_WIDGET_FLAG_hot_effect                   = 1 <<  4,
+ UI_WIDGET_FLAG_active_effect                = 1 <<  5,
+ UI_WIDGET_FLAG_toggled_effect               = 1 <<  6,
+ UI_WIDGET_FLAG_draw_cursor                  = 1 <<  7,
  
  //-NOTE(tbt): interaction
- UI_WIDGET_FLAG_no_input           = 1 <<  8,
- UI_WIDGET_FLAG_clickable          = 1 <<  9,
- UI_WIDGET_FLAG_draggable_x        = 1 << 10,
- UI_WIDGET_FLAG_draggable_y        = 1 << 11,
- UI_WIDGET_FLAG_keyboard_focusable = 1 << 12,
+ UI_WIDGET_FLAG_no_input                     = 1 <<  8,
+ UI_WIDGET_FLAG_clickable                    = 1 <<  9,
+ UI_WIDGET_FLAG_draggable_x                  = 1 << 10,
+ UI_WIDGET_FLAG_draggable_y                  = 1 << 11,
+ UI_WIDGET_FLAG_keyboard_focusable           = 1 << 12,
+ UI_WIDGET_FLAG_click_on_keyboard_focus_lost = 1 << 13,
  
  //-NOTE(tbt): convenience
  UI_WIDGET_FLAG_draggable       = UI_WIDGET_FLAG_draggable_x | UI_WIDGET_FLAG_draggable_y,
@@ -91,6 +92,7 @@ struct UIWidget
  UILayoutPlacement children_placement;
  B32 toggled;
  U32 cursor;
+ U32 mark;
  
  // NOTE(tbt): calculated by the measurement pass
  struct
@@ -488,7 +490,7 @@ ui_widget_from_string(S8 identifier)
   // NOTE(tbt): hash table slot unused
  {
   result = chain;
-  result->key = copy_s8(&global_static_memory, _identifier);
+  result->key = copy_s8(&global_persist_memory, _identifier);
  }
  else
  {
@@ -507,9 +509,9 @@ ui_widget_from_string(S8 identifier)
   // NOTE(tbt): push a new widget to the chain if a match is not found
   if (NULL == result)
   {
-   result = arena_push(&global_static_memory, sizeof(*result));
+   result = arena_push(&global_persist_memory, sizeof(*result));
    result->next_hash = global_ui_context.widget_dict[index].next_hash;
-   result->key = copy_s8(&global_static_memory, _identifier);
+   result->key = copy_s8(&global_persist_memory, _identifier);
    global_ui_context.widget_dict[index].next_hash = result;
   }
  }
@@ -536,7 +538,8 @@ ui_update_widget(UIWidget *widget)
  PlatformState *input = global_ui_context.input;
  F64 frametime_in_s = global_ui_context.frametime_in_s;
  
- if (widget->flags & UI_WIDGET_FLAG_draw_label &&
+ if ((widget->flags & UI_WIDGET_FLAG_draw_label ||
+      widget->flags & UI_WIDGET_FLAG_draw_cursor) &&
      NULL == widget->label.buffer)
  {
   widget->label = s8("ERROR: label was NULL");
@@ -808,16 +811,38 @@ ui_render_pass(UIWidget *root)
  
  if (root->flags & UI_WIDGET_FLAG_draw_cursor)
  {
+  // NOTE(tbt): will not be happy about any newlines
+  // TODO(tbt): do something less stupid
+  
   F32 cursor_width = 2.0f;
   
-  S8 text = root->label;
-  text.size = root->cursor;
-  Rect text_bounds = measure_s32(root->font,
-                                 final_rectangle.x + global_ui_context.padding,
-                                 final_rectangle.y + root->font->vertical_advance,
-                                 -1.0f,
-                                 s32_from_s8(&global_frame_memory, text));
-  fill_rectangle(rect(text_bounds.x + text_bounds.w,
+  S8 to_mark = root->label;
+  to_mark.size = root->mark;
+  Rect to_mark_bounds = measure_s32(root->font,
+                                    final_rectangle.x + global_ui_context.padding,
+                                    final_rectangle.y + root->font->vertical_advance,
+                                    -1.0f,
+                                    s32_from_s8(&global_frame_memory, to_mark));
+  
+  
+  S8 to_cursor = root->label;
+  to_cursor.size = root->cursor;
+  Rect to_cursor_bounds = measure_s32(root->font,
+                                      final_rectangle.x + global_ui_context.padding,
+                                      final_rectangle.y + root->font->vertical_advance,
+                                      -1.0f,
+                                      s32_from_s8(&global_frame_memory, to_cursor));
+  
+  
+  fill_rectangle(rect(to_mark_bounds.x + to_mark_bounds.w,
+                      final_rectangle.y + global_ui_context.padding,
+                      (to_cursor_bounds.x + to_cursor_bounds.w) - (to_mark_bounds.x + to_mark_bounds.w),
+                      final_rectangle.h - global_ui_context.padding * 2),
+                 colour_literal(0.2f, 0.6f, 0.23f, 0.5f),
+                 UI_SORT_DEPTH,
+                 global_ui_projection_matrix);
+  
+  fill_rectangle(rect(to_cursor_bounds.x + to_cursor_bounds.w,
                       final_rectangle.y + global_ui_context.padding,
                       cursor_width,
                       final_rectangle.h - global_ui_context.padding * 2),
@@ -867,7 +892,18 @@ ui_recursively_find_hot_widget(PlatformState *input,
 }
 
 internal void
-ui_deffered_input(PlatformState *input)
+ui_set_keyboard_focus(UIWidget *focus)
+{
+ if (global_ui_context.keyboard_focus &&
+     global_ui_context.keyboard_focus->flags & UI_WIDGET_FLAG_click_on_keyboard_focus_lost)
+ {
+  global_ui_context.keyboard_focus->clicked = true;
+ }
+ global_ui_context.keyboard_focus = focus;
+}
+
+internal void
+ui_defered_input(PlatformState *input)
 {
  ui_recursively_find_hot_widget(global_ui_context.input,
                                 &global_ui_context.root);
@@ -939,7 +975,7 @@ ui_initialise(void)
  global_ui_context.hot_colour_stack[0] = colour_literal(0.0f, 0.0f, 0.0f, 0.5f);
  global_ui_context.hot_background_stack[0] = colour_literal(1.0f, 0.967f, 0.982f, 1.0f);
  global_ui_context.active_colour_stack[0] = colour_literal(1.0f, 0.967f, 0.982f, 1.0f);
- global_ui_context.active_background_stack[0] = colour_literal(0.01f, 0.033f, 0.018f, 0.8f);
+ global_ui_context.active_background_stack[0] = colour_literal(0.018f, 0.018f, 0.018f, 0.8f);
  global_ui_context.indent_stack[0] = 0.0f;
  global_ui_context.font_stack[0] = global_ui_font;
  global_ui_context.padding = 8.0f;
@@ -967,7 +1003,7 @@ ui_finish(void)
  global_ui_context.root.layout = rect(0.0f, 0.0f, global_rcx.window.w, global_rcx.window.h);
  global_ui_context.root.w = (UIDimension){ input->window_w, 1.0f };
  global_ui_context.root.h = (UIDimension){ input->window_h, 1.0f };
- ui_deffered_input(input);
+ ui_defered_input(input);
  ui_measurement_pass(&global_ui_context.root);
  ui_layout_pass(&global_ui_context.root, 0.0f, 0.0f);
  ui_render_pass(&global_ui_context.root);
@@ -1145,20 +1181,22 @@ ui_slider_f32(S8 identifier,
 
 //~
 
-internal S8
-ui_line_edit(S8 identifier)
+internal B32
+ui_line_edit(S8 identifier,
+             S8 *result,
+             U64 capacity)
 {
- U64 capacity = 256;
- 
  PlatformState *input = global_ui_context.input;
  
  UIWidget *widget = ui_widget_from_string(identifier);
  
+ B32 done = false;
  if (widget->clicked)
  {
   if (widget == global_ui_context.keyboard_focus)
   {
    global_ui_context.keyboard_focus = NULL;
+   done = true;
   }
   else
   {
@@ -1166,111 +1204,201 @@ ui_line_edit(S8 identifier)
   }
  }
  
- if (NULL == widget->label.buffer)
- {
-  widget->label.buffer = arena_push(&global_static_memory, capacity);
-  widget->label.size = 0;
- }
+ widget->label = *result;
+ widget->cursor = min_u(widget->label.size, widget->cursor);
+ widget->mark = min_u(widget->label.size, widget->mark);
  
- widget->flags &= ~UI_WIDGET_FLAG_draw_cursor;
+ enum
+ {
+  LINE_EDIT_ACTION_left,
+  LINE_EDIT_ACTION_right,
+  LINE_EDIT_ACTION_backspace,
+  LINE_EDIT_ACTION_delete,
+  LINE_EDIT_ACTION_home,
+  LINE_EDIT_ACTION_end,
+  LINE_EDIT_ACTION_character_entry,
+  LINE_EDIT_ACTION_delete_range,
+ };
+ enum
+ {
+  LINE_EDIT_ACTION_FLAG_move_cursor = 1 << 0,
+  LINE_EDIT_ACTION_FLAG_move_mark   = 1 << 1,
+  LINE_EDIT_ACTION_FLAG_set_cursor  = 1 << 2,
+  LINE_EDIT_ACTION_FLAG_stick_mark  = 1 << 3,
+  LINE_EDIT_ACTION_FLAG_delete = 1 << 4,
+  LINE_EDIT_ACTION_FLAG_insert      = 1 << 5,
+ };
+ struct LineEditAction
+ {
+  U8 flags;
+  CursorAdvanceMode advance_mode;
+  CursorAdvanceDirection advance_direction;
+  U32 set_cursor_to;
+  U8 to_insert[4];
+  U32 to_insert_size;
+ };
+ struct LineEditAction actions[] =
+ {
+  [LINE_EDIT_ACTION_left] =
+  {
+   .flags = LINE_EDIT_ACTION_FLAG_move_cursor,
+   .advance_direction = CURSOR_ADVANCE_DIRECTION_backwards
+  },
+  
+  [LINE_EDIT_ACTION_right] =
+  {
+   .flags = LINE_EDIT_ACTION_FLAG_move_cursor,
+   .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
+  },
+  
+  [LINE_EDIT_ACTION_backspace] =
+  {
+   .flags = (LINE_EDIT_ACTION_FLAG_move_cursor |
+             LINE_EDIT_ACTION_FLAG_stick_mark |
+             LINE_EDIT_ACTION_FLAG_delete),
+   .advance_direction = CURSOR_ADVANCE_DIRECTION_backwards,
+  },
+  
+  [LINE_EDIT_ACTION_delete] =
+  {
+   .flags = (LINE_EDIT_ACTION_FLAG_move_mark |
+             LINE_EDIT_ACTION_FLAG_stick_mark |
+             LINE_EDIT_ACTION_FLAG_delete),
+   .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
+  },
+  
+  [LINE_EDIT_ACTION_home] =
+  {
+   .flags = LINE_EDIT_ACTION_FLAG_set_cursor,
+   .set_cursor_to = 0,
+  },
+  
+  [LINE_EDIT_ACTION_end] =
+  {
+   .flags = LINE_EDIT_ACTION_FLAG_set_cursor,
+   .set_cursor_to = widget->label.size,
+  },
+  
+  [LINE_EDIT_ACTION_character_entry] =
+  {
+   .flags = (LINE_EDIT_ACTION_FLAG_move_cursor |
+             LINE_EDIT_ACTION_FLAG_stick_mark |
+             LINE_EDIT_ACTION_FLAG_insert),
+   .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
+  },
+  
+  [LINE_EDIT_ACTION_delete_range] =
+  {
+   .flags = LINE_EDIT_ACTION_FLAG_delete,
+  },
+ };
+ struct LineEditAction action = {0};
  
  if (global_ui_context.keyboard_focus == widget)
  {
   widget->flags |= UI_WIDGET_FLAG_draw_cursor;
+  
   for (PlatformEvent *e = input->events;
        NULL != e;
        e = e->next)
   {
    if (e->kind == PLATFORM_EVENT_key_typed)
    {
-    U8 utf8_buffer[4];
-    U32 size_to_insert = utf8_from_codepoint(utf8_buffer, e->character);
-    
-    if (widget->cursor + size_to_insert + (widget->label.size - widget->cursor) <= capacity)
+    action.to_insert_size = utf8_from_codepoint(action.to_insert, e->character);
+    if (widget->cursor + action.to_insert_size + (widget->label.size - widget->cursor) <= capacity)
     {
-     {
-      U32 index_to_copy_to = widget->cursor + size_to_insert;
-      memcpy(widget->label.buffer + index_to_copy_to,
-             widget->label.buffer + widget->cursor,
-             capacity - index_to_copy_to);
-     }
-     memcpy(widget->label.buffer + widget->cursor,
-            utf8_buffer,
-            size_to_insert);
-     widget->cursor += size_to_insert;
-     widget->label.size += size_to_insert;
+     action.flags             = actions[6].flags;
+     action.advance_direction = actions[6].advance_direction;
+     action.advance_mode      = actions[6].advance_mode;
     }
    }
    else if (e->kind == PLATFORM_EVENT_key_press)
    {
-    if (e->key == KEY_backspace &&
-        widget->cursor > 0)
-    {
-     U32 size = 1;
-     while (widget->label.buffer[widget->cursor - size] & (1 << 7) &&
-            !(widget->label.buffer[widget->cursor - size] & (1 << 6)))
-     {
-      size += 1;
-     }
-     
-     memcpy(widget->label.buffer + widget->cursor - size,
-            widget->label.buffer + widget->cursor,
-            capacity - widget->cursor);
-     
-     widget->cursor -= size;
-     widget->label.size -= size;
-    }
-    else if (e->key == KEY_delete &&
-             widget->cursor < widget->label.size)
-    {
-     U32 size_to_delete = 1;
-     while (widget->label.buffer[widget->cursor + size_to_delete] & (1 << 7) &&
-            widget->cursor + size_to_delete < capacity)
-     {
-      size_to_delete += 1;
-     }
-     
-     memcpy(widget->label.buffer + widget->cursor,
-            widget->label.buffer + widget->cursor + size_to_delete,
-            widget->label.size - (widget->cursor + size_to_delete));
-     
-     widget->label.size -= size_to_delete;
-    }
-    else if (e->key == KEY_left &&
-             widget->cursor > 0)
-    {
-     U32 size = 1;
-     while (widget->label.buffer[widget->cursor - size] & (1 << 7) &&
-            !(widget->label.buffer[widget->cursor - size] & (1 << 6)))
-     {
-      size += 1;
-     }
-     widget->cursor -= size;
-    }
-    else if (e->key == KEY_right &&
-             widget->cursor < widget->label.size)
-    {
-     U32 size = 1;
-     while (widget->label.buffer[widget->cursor + size] & (1 << 7) &&
-            widget->cursor + size < capacity)
-     {
-      size += 1;
-     }
-     widget->cursor += size;
-    }
+    B32 range_selected = widget->cursor != widget->mark;
+    if (e->key == KEY_left)           { action = actions[0]; }
+    else if (e->key == KEY_right)     { action = actions[1]; }
+    else if (e->key == KEY_backspace) { action = actions[range_selected ? 7 : 2]; }
+    else if (e->key == KEY_delete)    { action = actions[range_selected ? 7 : 3]; }
+    else if (e->key == KEY_home)      { action = actions[4]; }
+    else if (e->key == KEY_end)       { action = actions[5]; }
+    
+    if (e->modifiers & INPUT_MODIFIER_ctrl) { action.advance_mode = CURSOR_ADVANCE_MODE_word; }
+    else                                    { action.advance_mode = CURSOR_ADVANCE_MODE_char; }
+    if (!(e->modifiers & INPUT_MODIFIER_shift)) {action.flags |= LINE_EDIT_ACTION_FLAG_stick_mark; }
    }
   }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_move_mark)
+  {//~
+   advance_cursor(widget->label,
+                  action.advance_direction,
+                  action.advance_mode,
+                  &widget->mark);
+  }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_insert)
+  {//~
+   // NOTE(tbt): shift current contents forwards to make room
+   {
+    U32 index_to_copy_to = widget->cursor + action.to_insert_size;
+    memcpy(widget->label.buffer + index_to_copy_to,
+           widget->label.buffer + widget->cursor,
+           capacity - index_to_copy_to);
+   }
+   // NOTE(tbt): copy from to_insert buffer
+   memcpy(widget->label.buffer + widget->cursor,
+          action.to_insert,
+          action.to_insert_size);
+   widget->label.size += action.to_insert_size;
+  }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_set_cursor)
+  {//~
+   widget->cursor = action.set_cursor_to;
+  }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_move_cursor)
+  {//~
+   advance_cursor(widget->label,
+                  action.advance_direction,
+                  action.advance_mode,
+                  &widget->cursor);
+  }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_delete)
+  {//~
+   U32 start = min_u(widget->cursor, widget->mark);
+   U32 end = max_u(widget->cursor, widget->mark);
+   
+   memcpy(widget->label.buffer + start,
+          widget->label.buffer + end,
+          widget->label.size - end);
+   widget->label.size -= end - start;
+   widget->cursor = start;
+  }
+  
+  if (action.flags & LINE_EDIT_ACTION_FLAG_stick_mark)
+  {//~
+   widget->mark = widget->cursor;
+  }
+  
+  recalculate_s8_length(&widget->label);
  }
- recalculate_s8_length(&widget->label);
+ else
+ {
+  widget->flags &= ~UI_WIDGET_FLAG_draw_cursor;
+ }
  
  widget->flags |= UI_WIDGET_FLAG_draw_background;
  widget->flags |= UI_WIDGET_FLAG_draw_label;
  widget->flags |= UI_WIDGET_FLAG_draw_outline;
- widget->flags |= UI_WIDGET_FLAG_hot_effect;
  widget->flags |= UI_WIDGET_FLAG_active_effect;
  widget->flags |= UI_WIDGET_FLAG_clickable;
  widget->flags |= UI_WIDGET_FLAG_keyboard_focusable;
+ widget->flags |= UI_WIDGET_FLAG_click_on_keyboard_focus_lost;
  ui_update_widget(widget);
  
- return widget->label;
+ *result = widget->label;
+ 
+ return done;
 }

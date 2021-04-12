@@ -418,7 +418,7 @@ platform_toggle_fullscreen(void)
  xcb_map_window(global_connection, global_window);
 }
 
-MemoryArena global_platform_static_memory;
+MemoryArena global_platform_persist_memory;
 
 B32
 platform_write_entire_file(S8 path,
@@ -427,9 +427,9 @@ platform_write_entire_file(S8 path,
 {
  B32 success = false;
  
- temporary_memory_begin(&global_platform_static_memory);
+ temporary_memory_begin(&global_platform_persist_memory);
  
- I8 *temp_path = arena_push(&global_platform_static_memory, path.len + 2);
+ I8 *temp_path = arena_push(&global_platform_persist_memory, path.len + 2);
  memcpy(temp_path, path.buffer, path.len);
  strcat(temp_path, "~");
  
@@ -444,7 +444,7 @@ platform_write_entire_file(S8 path,
   if (bytes_written == buffer_size)
   {
    // TODO(tbt): get rid of stdio.h
-   rename(temp_path, cstring_from_s8(&global_platform_static_memory, path));
+   rename(temp_path, cstring_from_s8(&global_platform_persist_memory, path));
    success = true;
   }
   
@@ -452,7 +452,7 @@ platform_write_entire_file(S8 path,
   success = success & file_closed_successfully;
  }
  
- temporary_memory_end(&global_platform_static_memory);
+ temporary_memory_end(&global_platform_persist_memory);
  
  return success;
 }
@@ -465,11 +465,11 @@ platform_read_entire_file(MemoryArena *memory,
  result.buffer = NULL;
  result.len = 0;
  
- temporary_memory_begin(&global_platform_static_memory);
+ temporary_memory_begin(&global_platform_persist_memory);
  
- I32 fd = open(cstring_from_s8(&global_platform_static_memory, path), O_RDONLY);
+ I32 fd = open(cstring_from_s8(&global_platform_persist_memory, path), O_RDONLY);
  
- temporary_memory_end(&global_platform_static_memory);
+ temporary_memory_end(&global_platform_persist_memory);
  
  if (-1 != fd)
  {
@@ -512,7 +512,7 @@ main(int argc,
  
  MemoryArena platform_layer_frame_memory;
  initialise_arena_with_new_memory(&platform_layer_frame_memory, PLATFORM_LAYER_FRAME_MEMORY_SIZE);
- initialise_arena_with_new_memory(&global_platform_static_memory, PLATFORM_LAYER_STATIC_MEMORY_SIZE);
+ initialise_arena_with_new_memory(&global_platform_persist_memory, PLATFORM_LAYER_STATIC_MEMORY_SIZE);
  
  PlatformState input = {0};
  OpenGLFunctions gl;

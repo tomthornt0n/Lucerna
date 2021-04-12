@@ -373,8 +373,8 @@ generate_rotated_quad(Rect rectangle,
 //~
 
 #define renderer_compile_and_link_fragment_shader(_name, _vertex_shader)                                     \
-shader_src = cstring_from_s8(&global_static_memory,                                                         \
-platform_read_entire_file_p(&global_static_memory,                             \
+shader_src = cstring_from_s8(&global_persist_memory,                                                         \
+platform_read_entire_file_p(&global_persist_memory,                             \
 s8("../assets/shaders/" #_name ".frag"))); \
 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);                                                       \
 glShaderSource(fragment_shader, 1, &shader_src, NULL);                                                      \
@@ -441,7 +441,7 @@ internal void renderer_flush_message_queue(void);
 internal void
 hot_reload_shaders(F64 frametime_in_s)
 {
- static F64 time = 0.0;
+ persist F64 time = 0.0;
  time += frametime_in_s;
  
  I32 status;
@@ -1077,7 +1077,7 @@ do_post_processing(F32 exposure,
 internal void
 renderer_recalculate_world_projection_matrix(void)
 {
- static F32 half_screen_width_in_world_units = (F32)(SCREEN_W_IN_WORLD_UNITS >> 1);
+ persist F32 half_screen_width_in_world_units = (F32)(SCREEN_W_IN_WORLD_UNITS >> 1);
  
  F32 aspect = (F32)global_rcx.window.h / (F32)global_rcx.window.w;
  
