@@ -314,6 +314,10 @@ LC_API void platform_release_audio_lock(void);
 LC_API void platform_set_vsync(B32 enabled);
 LC_API void platform_toggle_fullscreen(void);
 
+// NOTE(tbt): clipboard control
+LC_API void platform_set_clipboard_text(S8 text);
+LC_API S8 platform_get_clipboard_text(MemoryArena *memory);
+
 // NOTE(tbt): basic file IO
 typedef struct PlatformFile PlatformFile;
 

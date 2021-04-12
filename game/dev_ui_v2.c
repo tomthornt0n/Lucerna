@@ -833,22 +833,24 @@ ui_render_pass(UIWidget *root)
                                       -1.0f,
                                       s32_from_s8(&global_frame_memory, to_cursor));
   
-  
-  fill_rectangle(rect(to_mark_bounds.x + to_mark_bounds.w,
-                      final_rectangle.y + global_ui_context.padding,
-                      (to_cursor_bounds.x + to_cursor_bounds.w) - (to_mark_bounds.x + to_mark_bounds.w),
-                      final_rectangle.h - global_ui_context.padding * 2),
-                 colour_literal(0.2f, 0.6f, 0.23f, 0.5f),
-                 UI_SORT_DEPTH,
-                 global_ui_projection_matrix);
-  
-  fill_rectangle(rect(to_cursor_bounds.x + to_cursor_bounds.w,
-                      final_rectangle.y + global_ui_context.padding,
-                      cursor_width,
-                      final_rectangle.h - global_ui_context.padding * 2),
-                 foreground,
-                 UI_SORT_DEPTH,
-                 global_ui_projection_matrix);
+  mask_rectangle(mask)
+  {
+   fill_rectangle(rect(to_mark_bounds.x + to_mark_bounds.w,
+                       final_rectangle.y + global_ui_context.padding,
+                       (to_cursor_bounds.x + to_cursor_bounds.w) - (to_mark_bounds.x + to_mark_bounds.w),
+                       final_rectangle.h - global_ui_context.padding * 2),
+                  colour_literal(0.2f, 0.6f, 0.23f, 0.5f),
+                  UI_SORT_DEPTH,
+                  global_ui_projection_matrix);
+   
+   fill_rectangle(rect(to_cursor_bounds.x + to_cursor_bounds.w,
+                       final_rectangle.y + global_ui_context.padding,
+                       cursor_width,
+                       final_rectangle.h - global_ui_context.padding * 2),
+                  foreground,
+                  UI_SORT_DEPTH,
+                  global_ui_projection_matrix);
+  }
  }
  
  if (root->flags & UI_WIDGET_FLAG_draw_outline)
@@ -1210,23 +1212,27 @@ ui_line_edit(S8 identifier,
  
  enum
  {
-  LINE_EDIT_ACTION_left,
-  LINE_EDIT_ACTION_right,
-  LINE_EDIT_ACTION_backspace,
-  LINE_EDIT_ACTION_delete,
-  LINE_EDIT_ACTION_home,
-  LINE_EDIT_ACTION_end,
-  LINE_EDIT_ACTION_character_entry,
-  LINE_EDIT_ACTION_delete_range,
+  ACTION_left,
+  ACTION_right,
+  ACTION_backspace,
+  ACTION_delete,
+  ACTION_home,
+  ACTION_end,
+  ACTION_character_entry,
+  ACTION_delete_range,
+  ACTION_copy,
+  ACTION_cut,
+  ACTION_MAX,
  };
  enum
  {
-  LINE_EDIT_ACTION_FLAG_move_cursor = 1 << 0,
-  LINE_EDIT_ACTION_FLAG_move_mark   = 1 << 1,
-  LINE_EDIT_ACTION_FLAG_set_cursor  = 1 << 2,
-  LINE_EDIT_ACTION_FLAG_stick_mark  = 1 << 3,
-  LINE_EDIT_ACTION_FLAG_delete = 1 << 4,
-  LINE_EDIT_ACTION_FLAG_insert      = 1 << 5,
+  ACTION_FLAG_move_cursor = 1 << 0,
+  ACTION_FLAG_move_mark   = 1 << 1,
+  ACTION_FLAG_set_cursor  = 1 << 2,
+  ACTION_FLAG_stick_mark  = 1 << 3,
+  ACTION_FLAG_delete      = 1 << 4,
+  ACTION_FLAG_insert      = 1 << 5,
+  ACTION_FLAG_copy        = 1 << 6,
  };
  struct LineEditAction
  {
@@ -1237,59 +1243,70 @@ ui_line_edit(S8 identifier,
   U8 to_insert[4];
   U32 to_insert_size;
  };
- struct LineEditAction actions[] =
+ struct LineEditAction actions[ACTION_MAX] =
  {
-  [LINE_EDIT_ACTION_left] =
+  [ACTION_left] =
   {
-   .flags = LINE_EDIT_ACTION_FLAG_move_cursor,
+   .flags = ACTION_FLAG_move_cursor,
    .advance_direction = CURSOR_ADVANCE_DIRECTION_backwards
   },
   
-  [LINE_EDIT_ACTION_right] =
+  [ACTION_right] =
   {
-   .flags = LINE_EDIT_ACTION_FLAG_move_cursor,
+   .flags = ACTION_FLAG_move_cursor,
    .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
   },
   
-  [LINE_EDIT_ACTION_backspace] =
+  [ACTION_backspace] =
   {
-   .flags = (LINE_EDIT_ACTION_FLAG_move_cursor |
-             LINE_EDIT_ACTION_FLAG_stick_mark |
-             LINE_EDIT_ACTION_FLAG_delete),
+   .flags = (ACTION_FLAG_move_cursor |
+             ACTION_FLAG_stick_mark |
+             ACTION_FLAG_delete),
    .advance_direction = CURSOR_ADVANCE_DIRECTION_backwards,
   },
   
-  [LINE_EDIT_ACTION_delete] =
+  [ACTION_delete] =
   {
-   .flags = (LINE_EDIT_ACTION_FLAG_move_mark |
-             LINE_EDIT_ACTION_FLAG_stick_mark |
-             LINE_EDIT_ACTION_FLAG_delete),
+   .flags = (ACTION_FLAG_move_mark |
+             ACTION_FLAG_stick_mark |
+             ACTION_FLAG_delete),
    .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
   },
   
-  [LINE_EDIT_ACTION_home] =
+  [ACTION_home] =
   {
-   .flags = LINE_EDIT_ACTION_FLAG_set_cursor,
+   .flags = ACTION_FLAG_set_cursor,
    .set_cursor_to = 0,
   },
   
-  [LINE_EDIT_ACTION_end] =
+  [ACTION_end] =
   {
-   .flags = LINE_EDIT_ACTION_FLAG_set_cursor,
+   .flags = ACTION_FLAG_set_cursor,
    .set_cursor_to = widget->label.size,
   },
   
-  [LINE_EDIT_ACTION_character_entry] =
+  [ACTION_character_entry] =
   {
-   .flags = (LINE_EDIT_ACTION_FLAG_move_cursor |
-             LINE_EDIT_ACTION_FLAG_stick_mark |
-             LINE_EDIT_ACTION_FLAG_insert),
+   .flags = (ACTION_FLAG_move_cursor |
+             ACTION_FLAG_stick_mark |
+             ACTION_FLAG_insert),
    .advance_direction = CURSOR_ADVANCE_DIRECTION_forwards,
   },
   
-  [LINE_EDIT_ACTION_delete_range] =
+  [ACTION_delete_range] =
   {
-   .flags = LINE_EDIT_ACTION_FLAG_delete,
+   .flags = ACTION_FLAG_delete,
+  },
+  
+  [ACTION_copy] =
+  {
+   .flags = ACTION_FLAG_copy,
+  },
+  
+  [ACTION_cut] =
+  {
+   .flags = (ACTION_FLAG_copy |
+             ACTION_FLAG_delete),
   },
  };
  struct LineEditAction action = {0};
@@ -1310,63 +1327,102 @@ ui_line_edit(S8 identifier,
      action.flags             = actions[6].flags;
      action.advance_direction = actions[6].advance_direction;
      action.advance_mode      = actions[6].advance_mode;
+     if (widget->cursor != widget->mark)
+     {
+      // TODO(tbt): ideally this wouldn't be a hard coded special case
+      U32 start = min_u(widget->cursor, widget->mark);
+      U32 end = max_u(widget->cursor, widget->mark);
+      
+      memcpy(widget->label.buffer + start,
+             widget->label.buffer + end,
+             widget->label.size - end);
+      widget->label.size -= end - start;
+      widget->cursor = start;
+     }
     }
    }
    else if (e->kind == PLATFORM_EVENT_key_press)
    {
     B32 range_selected = widget->cursor != widget->mark;
-    if (e->key == KEY_left)           { action = actions[0]; }
-    else if (e->key == KEY_right)     { action = actions[1]; }
-    else if (e->key == KEY_backspace) { action = actions[range_selected ? 7 : 2]; }
-    else if (e->key == KEY_delete)    { action = actions[range_selected ? 7 : 3]; }
-    else if (e->key == KEY_home)      { action = actions[4]; }
-    else if (e->key == KEY_end)       { action = actions[5]; }
+    if (e->key == KEY_left)           { action = actions[ACTION_left]; }
+    else if (e->key == KEY_right)     { action = actions[ACTION_right]; }
+    else if (e->key == KEY_backspace) { action = actions[range_selected ? ACTION_delete_range : ACTION_backspace]; }
+    else if (e->key == KEY_delete)    { action = actions[range_selected ? ACTION_delete_range : ACTION_delete]; }
+    else if (e->key == KEY_home)      { action = actions[ACTION_home]; }
+    else if (e->key == KEY_end)       { action = actions[ACTION_end]; }
+    else if (e->key == KEY_c && (e->modifiers & INPUT_MODIFIER_ctrl)) { action = actions[ACTION_copy]; }
+    else if (e->key == KEY_x && (e->modifiers & INPUT_MODIFIER_ctrl)) { action = actions[ACTION_cut]; }
+    else if (e->key == KEY_v && (e->modifiers & INPUT_MODIFIER_ctrl))
+    {
+     S8 to_paste = platform_get_clipboard_text(&global_frame_memory);
+     {
+      U32 index_to_copy_to = widget->cursor + to_paste.size;
+      memcpy(widget->label.buffer + index_to_copy_to,
+             widget->label.buffer + widget->cursor,
+             capacity - index_to_copy_to);
+     }
+     memcpy(widget->label.buffer + widget->cursor,
+            to_paste.buffer,
+            to_paste.size);
+     widget->label.size += to_paste.size;
+     widget->cursor += to_paste.size;
+    }
+    else { goto skip_action; }
     
     if (e->modifiers & INPUT_MODIFIER_ctrl) { action.advance_mode = CURSOR_ADVANCE_MODE_word; }
     else                                    { action.advance_mode = CURSOR_ADVANCE_MODE_char; }
-    if (!(e->modifiers & INPUT_MODIFIER_shift)) {action.flags |= LINE_EDIT_ACTION_FLAG_stick_mark; }
+    if (!(e->modifiers & INPUT_MODIFIER_shift)) {action.flags |= ACTION_FLAG_stick_mark; }
    }
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_move_mark)
-  {//~
+  if (action.flags & ACTION_FLAG_move_mark)
+  {
    advance_cursor(widget->label,
                   action.advance_direction,
                   action.advance_mode,
                   &widget->mark);
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_insert)
-  {//~
-   // NOTE(tbt): shift current contents forwards to make room
+  if (action.flags & ACTION_FLAG_copy)
+  {
+   U32 start = min_u(widget->cursor, widget->mark);
+   U32 end = max_u(widget->cursor, widget->mark);
+   
+   S8 to_copy = widget->label;
+   to_copy.buffer += start;
+   to_copy.size = end - start;
+   platform_set_clipboard_text(to_copy);
+  }
+  
+  if (action.flags & ACTION_FLAG_insert)
+  {
    {
     U32 index_to_copy_to = widget->cursor + action.to_insert_size;
     memcpy(widget->label.buffer + index_to_copy_to,
            widget->label.buffer + widget->cursor,
            capacity - index_to_copy_to);
    }
-   // NOTE(tbt): copy from to_insert buffer
    memcpy(widget->label.buffer + widget->cursor,
           action.to_insert,
           action.to_insert_size);
    widget->label.size += action.to_insert_size;
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_set_cursor)
-  {//~
+  if (action.flags & ACTION_FLAG_set_cursor)
+  {
    widget->cursor = action.set_cursor_to;
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_move_cursor)
-  {//~
+  if (action.flags & ACTION_FLAG_move_cursor)
+  {
    advance_cursor(widget->label,
                   action.advance_direction,
                   action.advance_mode,
                   &widget->cursor);
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_delete)
-  {//~
+  if (action.flags & ACTION_FLAG_delete)
+  {
    U32 start = min_u(widget->cursor, widget->mark);
    U32 end = max_u(widget->cursor, widget->mark);
    
@@ -1377,10 +1433,12 @@ ui_line_edit(S8 identifier,
    widget->cursor = start;
   }
   
-  if (action.flags & LINE_EDIT_ACTION_FLAG_stick_mark)
-  {//~
+  if (action.flags & ACTION_FLAG_stick_mark)
+  {
    widget->mark = widget->cursor;
   }
+  
+  skip_action:
   
   recalculate_s8_length(&widget->label);
  }

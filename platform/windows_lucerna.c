@@ -49,7 +49,7 @@ windows_print_error(U8 *function)
 }
 
 //
-// NOTE(tbt): File IO
+// NOTE(tbt): file IO
 //~
 
 struct PlatformFile
@@ -449,6 +449,57 @@ internal volatile B32 global_running = true;
 
 internal B32 global_dummy_context = true;
 internal HWND global_window_handle;
+//
+// NOTE(tbt): clipboard
+//~
+
+void
+platform_set_clipboard_text(S8 text)
+{
+ if (OpenClipboard(global_window_handle))
+ {
+  if (EmptyClipboard())
+  {
+   HGLOBAL buffer_handle = GlobalAlloc(GMEM_MOVEABLE, text.size + 1);
+   if (NULL != buffer_handle)
+   {
+    LPSTR buffer = GlobalLock(buffer_handle);
+    memcpy(buffer, text.buffer, text.size);
+    buffer[text.size] = 0; // NOTE(tbt): NULL terminate string
+    GlobalUnlock(buffer_handle);
+    
+    SetClipboardData(CF_TEXT, buffer_handle);
+   }
+  }
+  CloseClipboard();
+ }
+}
+
+S8
+platform_get_clipboard_text(MemoryArena *memory)
+{
+ S8 result = {0};
+ 
+ if (OpenClipboard(global_window_handle))
+ {
+  HGLOBAL buffer_handle = GetClipboardData(CF_TEXT);
+  if (NULL != buffer_handle)
+  {
+   LPSTR buffer = GlobalLock(buffer_handle);
+   if (NULL != buffer)
+   {
+    result.size = calculate_utf8_cstring_size(buffer);
+    result.buffer = arena_push(memory, result.size);
+    memcpy(result.buffer, buffer, result.size);
+    recalculate_s8_length(&result);
+   }
+   GlobalUnlock(buffer_handle);
+  }
+  CloseClipboard();
+ }
+ 
+ return result;
+}
 
 //
 // NOTE(tbt): platform layer utilities
