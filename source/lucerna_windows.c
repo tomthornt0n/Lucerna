@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "lucerna.h"
+#include "lucerna_common.c"
+
 #include "wglext.h"
 
 internal MemoryArena global_platform_layer_frame_memory;
@@ -449,6 +450,12 @@ internal volatile B32 global_running = true;
 
 internal B32 global_dummy_context = true;
 internal HWND global_window_handle;
+
+internal GameInit game_init;
+internal GameUpdateAndRender game_update_and_render;
+internal GameAudioCallback game_audio_callback;
+internal GameCleanup game_cleanup;
+
 //
 // NOTE(tbt): clipboard
 //~
@@ -491,7 +498,6 @@ platform_get_clipboard_text(MemoryArena *memory)
     result.size = calculate_utf8_cstring_size(buffer);
     result.buffer = arena_push(memory, result.size);
     memcpy(result.buffer, buffer, result.size);
-    recalculate_s8_length(&result);
    }
    GlobalUnlock(buffer_handle);
   }
@@ -812,10 +818,19 @@ window_proc(HWND window_handle,
   }
   case WM_MOUSEWHEEL:
   {
-   global_platform_state.mouse_scroll_h = GET_X_LPARAM(l_param) / 120;
-   global_platform_state.mouse_scroll_v = GET_Y_LPARAM(l_param) / 120;
-   windows_push_platform_event(platform_mouse_scroll_event(global_platform_state.mouse_scroll_h,
+   global_platform_state.mouse_scroll_v = GET_WHEEL_DELTA_WPARAM(w_param) / 120;
+   windows_push_platform_event(platform_mouse_scroll_event(0,
                                                            global_platform_state.mouse_scroll_v,
+                                                           global_platform_state.mouse_x,
+                                                           global_platform_state.mouse_y,
+                                                           modifiers));
+   break;
+  }
+  case WM_MOUSEHWHEEL:
+  {
+   global_platform_state.mouse_scroll_h = GET_WHEEL_DELTA_WPARAM(w_param) / 120;
+   windows_push_platform_event(platform_mouse_scroll_event(global_platform_state.mouse_scroll_h,
+                                                           0,
                                                            global_platform_state.mouse_x,
                                                            global_platform_state.mouse_y,
                                                            modifiers));
@@ -853,11 +868,10 @@ window_proc(HWND window_handle,
   }
   case WM_SETCURSOR:
   {
-   // TODO(tbt): fix resize cursor at borders
    if (global_platform_state.mouse_x > 1 &&
-       global_platform_state.mouse_y > 1 &&
-       global_platform_state.mouse_x < global_platform_state.window_w &&
-       global_platform_state.mouse_y < global_platform_state.window_h &&
+       global_platform_state.mouse_x <= global_platform_state.window_w - 1 &&
+       global_platform_state.mouse_y >= 1 &&
+       global_platform_state.mouse_x <= global_platform_state.window_w - 1 &&
        mouse_hover_active)
    {
     SetCursor(LoadCursorA(0, IDC_ARROW));
@@ -866,7 +880,6 @@ window_proc(HWND window_handle,
    {
     result = DefWindowProc(window_handle, message, l_param, w_param);
    }
-   
    break;
   }
   case WM_SIZE:
@@ -878,7 +891,9 @@ window_proc(HWND window_handle,
    global_platform_state.window_h = client_rect.bottom - client_rect.top;
    break;
   }
+  case WM_CLOSE:
   case WM_DESTROY:
+  case WM_QUIT:
   {
    if (global_dummy_context)
    {
@@ -886,11 +901,7 @@ window_proc(HWND window_handle,
    }
    else
    {
-    platform_audio_critical_section
-    {
-     global_running = false;
-     PostQuitMessage(0);
-    }
+    platform_audio_critical_section global_running = false;
    }
    break;
   }
@@ -941,8 +952,6 @@ windows_audio_thread_main(LPVOID arg)
  LPDIRECTSOUND direct_sound;
  U32 secondary_buffer_size = 88200;
  LPDIRECTSOUNDBUFFER secondary_buffer;
- 
- GameAudioCallback _game_audio_callback = (GameAudioCallback)arg;
  
  platform_get_audio_lock();
  
@@ -1079,8 +1088,8 @@ windows_audio_thread_main(LPVOID arg)
                                                 &region_two_size,
                                                 0)))
    {
-    _game_audio_callback(region_one, region_one_size);
-    _game_audio_callback(region_two, region_two_size);
+    game_audio_callback(region_one, region_one_size);
+    game_audio_callback(region_two, region_two_size);
     
     secondary_buffer->lpVtbl->Unlock(secondary_buffer,
                                      region_one,
@@ -1126,15 +1135,15 @@ WinMain(HINSTANCE hInstance,
  
  HMODULE game = LoadLibraryA("lucerna.dll");
  
- GameInit _game_init = (GameInit)GetProcAddress(game, "game_init");
- GameUpdateAndRender _game_update_and_render = (GameUpdateAndRender)GetProcAddress(game, "game_update_and_render");
- GameAudioCallback _game_audio_callback = (GameAudioCallback)GetProcAddress(game, "game_audio_callback");
- GameCleanup _game_cleanup = (GameCleanup)GetProcAddress(game, "game_cleanup");
+ game_init = (GameInit)GetProcAddress(game, "game_init");
+ game_update_and_render = (GameUpdateAndRender)GetProcAddress(game, "game_update_and_render");
+ game_audio_callback = (GameAudioCallback)GetProcAddress(game, "game_audio_callback");
+ game_cleanup = (GameCleanup)GetProcAddress(game, "game_cleanup");
  
- assert(_game_init);
- assert(_game_update_and_render);
- assert(_game_audio_callback);
- assert(_game_cleanup);
+ assert(game_init);
+ assert(game_update_and_render);
+ assert(game_audio_callback);
+ assert(game_cleanup);
  
  //
  // NOTE(tbt): icons ugggh..
@@ -1348,14 +1357,14 @@ WinMain(HINSTANCE hInstance,
  
  platform_set_vsync(true);
  
- _game_init(&gl);
+ game_init(&gl);
  
  //
  // NOTE(tbt): setup audio thread
  //~
  
  InitializeCriticalSection(&global_audio_lock);
- CreateThread(NULL, 0, windows_audio_thread_main, _game_audio_callback, 0, NULL);
+ CreateThread(NULL, 0, windows_audio_thread_main, NULL, 0, NULL);
  
  //
  // NOTE(tbt): main loop
@@ -1385,7 +1394,7 @@ WinMain(HINSTANCE hInstance,
   
   SwapBuffers(device_context);
   
-  _game_update_and_render(&global_platform_state, frametime_in_s);
+  game_update_and_render(&global_platform_state, frametime_in_s);
   
   arena_free_all(&global_platform_layer_frame_memory);
   
@@ -1393,7 +1402,7 @@ WinMain(HINSTANCE hInstance,
   frametime_in_s = (F64)(end_time.QuadPart - start_time.QuadPart) / (F64)clock_frequency.QuadPart;
  }
  
- _game_cleanup();
+ game_cleanup();
  
  FreeModule(game);
 }

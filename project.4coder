@@ -38,7 +38,7 @@ command_list = {
 		},
 	},
 	
-{
+	{
 		.name = "release_build",
 		.out = "*compilation*",
 		.footer_panel = true,
@@ -70,8 +70,20 @@ command_list = {
 			{ ".\windows_build.bat debug && .\run.bat", .os = "win" },
 		},
 	},
+
+	{
+		.name = "debug",
+		.out = "*compilation*",
+		.foot_panel = true,
+		.save_dirty_file = false,
+		.cursor_at_end = false,
+		.cmd = {
+			{ "devenv bin\platform_windows.exe source\lucerna_windows.c source\lucerna_common.c source\lucerna_game.c", .os = "win" },
+		},
+	},
 };
 
 fkey_command[1] = "build";
 fkey_command[2] = "run";
 fkey_command[5] = "build_and_run";
+fkey_command[12] = "debug";
